@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { listTools, readRpcReply, readTool } from "../src/client.ts";
 
-type Sent = { headers: Record<string, string>; body: Record<string, unknown> };
+type Sent = { url: string; redirect: RequestRedirect | undefined; headers: Record<string, string>; body: Record<string, unknown> };
 function fakeServer(...responses: Array<Response | Error>) {
   const sent: Sent[] = [];
-  const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-    sent.push({ headers: { ...(init?.headers as Record<string, string>) }, body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+  const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
+    sent.push({ url: String(url), redirect: init?.redirect, headers: { ...(init?.headers as Record<string, string>) }, body: JSON.parse(String(init?.body)) as Record<string, unknown> });
     const next = responses.shift();
     if (!next) throw new Error("no response prepared");
     if (next instanceof Error) throw next;
@@ -90,4 +90,36 @@ test("only fields the protocol defines are kept, and only with the right shape",
   assert.equal(readTool("tool"), null);
   assert.equal(readRpcReply("application/json", "not json"), null);
   assert.equal(readRpcReply("text/event-stream", "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/message\"}\n\n"), null);
+});
+
+test("a token is sent only when given, on every request, and never comes back in the result", async () => {
+  const token = "made-up-token-for-this-test";
+  const { fetchImpl, sent } = fakeServer(hello(), accepted(), tools([{ name: "list_repositories" }]));
+  const result = await listTools("https://example.test/mcp", { fetchImpl, bearerToken: token });
+  assert.equal(result.outcome, "listed");
+  assert.deepEqual(sent.map((request) => request.headers.Authorization), [`Bearer ${token}`, `Bearer ${token}`, `Bearer ${token}`]);
+  // Every request goes to the address given, and none may be redirected: a redirect would carry the token along.
+  assert.deepEqual(sent.map((request) => request.url), Array(3).fill("https://example.test/mcp"));
+  assert.deepEqual(sent.map((request) => request.redirect), ["error", "error", "error"]);
+  assert.ok(!JSON.stringify(result).includes(token));
+});
+
+test("a token is never sent over anything but https", async () => {
+  for (const url of ["http://example.test/mcp", "ws://example.test/mcp", "example.test/mcp"]) {
+    const { fetchImpl, sent } = fakeServer(hello(), accepted(), tools([]));
+    assert.deepEqual(await listTools(url, { fetchImpl, bearerToken: "made-up" }), { outcome: "not-usable", detail: "a token is only sent over https" });
+    assert.equal(sent.length, 0);
+  }
+});
+
+test("a refused token is reported as a sign-in problem, and the token is not in the report", async () => {
+  const { fetchImpl } = fakeServer(new Response("bad credentials", { status: 401 }));
+  const result = await listTools("https://example.test/mcp", { fetchImpl, bearerToken: "made-up-and-refused" });
+  assert.deepEqual(result, { outcome: "sign-in-required", status: 401 });
+});
+
+test("a failed connection with a token reports the kind of failure and nothing else", async () => {
+  const { fetchImpl } = fakeServer(new TypeError("fetch failed: Bearer made-up-secret"));
+  const result = await listTools("https://example.test/mcp", { fetchImpl, bearerToken: "made-up-secret" });
+  assert.deepEqual(result, { outcome: "unreachable", detail: "TypeError" });
 });

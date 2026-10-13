@@ -3,17 +3,21 @@ import path from "node:path";
 import { listTools } from "./client.ts";
 import { diffSnapshots } from "./diff.ts";
 import { describeDiff, describeSnapshot } from "./report.ts";
+import { scanSignedIn, signedInServers } from "./signed-in.ts";
 import { takeSnapshot } from "./snapshot.ts";
 import { snapshotFromRepository } from "./sources/github-snapshots.ts";
 import type { Snapshot } from "./types.ts";
 
 const usage = `Usage:
   npm run scan -- scan <https-url> [--save]         List a server's tools, label them, and check their text.
+  npm run scan -- signed-in <name> [--save]         The same, for a server that wants a sign-in (${Object.keys(signedInServers).join(", ")}).
   npm run scan -- diff <before.json> <after.json>   Compare two saved snapshots.
   npm run scan -- history <owner/repo> <from> <to>  Compare tool definitions a repository publishes at two tags.
 
-Nothing here calls a tool, and no credential is ever sent to an MCP server. --save writes the snapshot
-under data/snapshots/<source>/. history sends GITHUB_TOKEN, if set, to api.github.com only.`;
+Nothing here calls a tool. scan sends no credential. signed-in reads a token from an environment
+variable and sends it only to that server's fixed address; the token is never printed or saved.
+--save writes the snapshot under data/snapshots/<source>/. history sends GITHUB_TOKEN, if set, to
+api.github.com only.`;
 
 async function save(snapshot: Snapshot): Promise<string> {
   const name = snapshot.source.replace(/^https?:\/\//, "").replace(/[^a-zA-Z0-9.@-]+/g, "_").slice(0, 120);
@@ -37,6 +41,27 @@ async function main(argv: string[]): Promise<number> {
     if (result.outcome !== "listed") { console.log(`${url} could not be scanned: ${result.outcome} (${result.detail}).`); return 4; }
     const snapshot = takeSnapshot(url, result.tools, result.server);
     console.log(describeSnapshot(snapshot));
+    if (flags.has("--save")) console.log(`\nSaved to ${await save(snapshot)}`);
+    return 0;
+  }
+
+  if (command === "signed-in" && args[0]) {
+    const scan = await scanSignedIn(args[0], process.env);
+    if (scan.outcome === "unknown-server") { console.error(`No signed-in server is set up under that name. Known: ${Object.keys(signedInServers).join(", ")}.`); return 2; }
+    if (scan.outcome === "no-token") {
+      console.error(scan.reason === "missing"
+        ? `Set ${scan.tokenVariable} to a token for this server. It is read from the environment only, never from an argument.`
+        : `${scan.tokenVariable} does not hold something that can be sent as a token. Nothing was sent.`);
+      return 2;
+    }
+    if (scan.outcome === "unsafe-connection") { console.error(`Certificate checking is switched off here (NODE_TLS_REJECT_UNAUTHORIZED=0), so the token in ${scan.tokenVariable} was not sent.`); return 2; }
+    if (scan.outcome === "token-echoed") { console.error(`${scan.url} sent the token back in its reply. Nothing it returned was printed or saved. Treat that token as exposed and replace it.`); return 5; }
+    const { url, result } = scan;
+    if (result.outcome === "sign-in-required") { console.log(`${url} refused the token in ${scan.tokenVariable} (HTTP ${result.status}).`); return 3; }
+    if (result.outcome !== "listed") { console.log(`${url} could not be scanned: ${result.outcome} (${result.detail}).`); return 4; }
+    const snapshot = takeSnapshot(url, result.tools, result.server);
+    console.log(describeSnapshot(snapshot));
+    console.log("\nThis is the list this token is allowed to see. Another account, or a token with other permissions, may be shown more or fewer tools.");
     if (flags.has("--save")) console.log(`\nSaved to ${await save(snapshot)}`);
     return 0;
   }

@@ -4,11 +4,12 @@ import type { ToolDefinition } from "./types.ts";
  * The smallest MCP client that can answer one question: what tools does this server offer?
  *
  * It speaks the Streamable HTTP transport, performs the handshake and asks for the tool list.
- * It never calls a tool, sends no credentials, and treats everything it receives as data.
+ * It never calls a tool and treats everything it receives as data. It sends a credential only
+ * when the caller hands it one, only over https, and only to the address it was given.
  */
 export type ListToolsResult =
   | { outcome: "listed"; server: { name?: string; version?: string }; tools: ToolDefinition[] }
-  /** The server wants a login before it will say anything (401 or 403). */
+  /** The server wants a login before it will say anything, or refused the one it was sent (401 or 403). */
   | { outcome: "sign-in-required"; status: number }
   /** An answer arrived, but not one this client can use. */
   | { outcome: "not-usable"; detail: string }
@@ -20,6 +21,8 @@ export interface ListToolsOptions {
   timeoutMs?: number;
   /** Stop after this many pages of tools, so a misbehaving server cannot hold the scan open. */
   maxPages?: number;
+  /** Sent as `Authorization: Bearer`. The list that comes back is what this token is allowed to see. */
+  bearerToken?: string;
 }
 
 const protocolVersion = "2025-06-18";
@@ -76,8 +79,9 @@ export function readTool(value: unknown): ToolDefinition | null {
   return tool;
 }
 
-export async function listTools(url: string, { fetchImpl = fetch, timeoutMs = 15_000, maxPages = 50 }: ListToolsOptions = {}): Promise<ListToolsResult> {
+export async function listTools(url: string, { fetchImpl = fetch, timeoutMs = 15_000, maxPages = 50, bearerToken }: ListToolsOptions = {}): Promise<ListToolsResult> {
   let sessionId: string | null = null;
+  if (bearerToken !== undefined && !/^https:\/\//i.test(url)) return { outcome: "not-usable", detail: "a token is only sent over https" };
 
   async function send(body: Record<string, unknown>): Promise<{ status: number; contentType: string; text: string }> {
     const headers: Record<string, string> = {
@@ -87,6 +91,7 @@ export async function listTools(url: string, { fetchImpl = fetch, timeoutMs = 15
       "MCP-Protocol-Version": protocolVersion,
     };
     if (sessionId) headers["Mcp-Session-Id"] = sessionId;
+    if (bearerToken !== undefined) headers.Authorization = `Bearer ${bearerToken}`;
     const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs), redirect: "error" });
     sessionId = response.headers.get("Mcp-Session-Id") ?? sessionId;
     const text = await readCapped(response, maxBodyBytes);
