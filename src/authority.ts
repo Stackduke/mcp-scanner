@@ -87,9 +87,11 @@ function confined(text: unknown, notAllowed: RegExp, longest: number): string {
 // No colon or slash, and no "www." in front, so a name cannot be printed as something a terminal makes into a link.
 const ordinaryName = /^(?!(?:www|ftp)\.)[A-Za-z0-9_.-]{1,60}$/i;
 const unlinked = (text: string) => (/^(?:www|ftp)\./i.test(text) ? text.replace(/\./g, "?") : text);
+// A dot is written "[.]", so a name such as "bit.ly" is not made into a link by a terminal or a mail reader.
+const defanged = (text: string) => text.replace(/\./g, "[.]");
 const shownName = (tool: { name: unknown; variant?: unknown }) => {
-  const name = unlinked(confined(tool.name, /[^A-Za-z0-9_.-]+/g, 60)) || "(no name)";
-  const variant = confined(tool.variant, /[^A-Za-z0-9_.-]+/g, 30);
+  const name = defanged(confined(tool.name, /[^A-Za-z0-9_.-]+/g, 60)) || "(no name)";
+  const variant = defanged(confined(tool.variant, /[^A-Za-z0-9_.-]+/g, 30));
   return variant ? `${name}#${variant}` : name;
 };
 const reassures = (text: string) => words(text).some((word) => reassurance.has(word));
@@ -163,6 +165,39 @@ function reachOf(tool: SnapshotTool): Reach {
   };
 }
 
+export interface ToolAssessment {
+  tool: AuthorityTool;
+  /** Why a person should look at it. Aethis's words. */
+  reasons: string[];
+  urgent: boolean;
+  /** How much the reasons weigh: 0 for an overruled label or planted text, 1 for a lesser text finding, 2 for a note. */
+  weight: 0 | 1 | 2;
+  minorNotes: number;
+}
+
+/** One tool as the report sees it: where it is placed, and anything about it a person should look at. */
+export function assessTool(tool: SnapshotTool): ToolAssessment {
+  const reach = reachOf(tool);
+  const kind = seriousFirst.find((candidate) => candidate !== "unclear" && reach.does.includes(candidate)) ?? "unclear";
+  const reasons = new Set<string>([...reach.urgent, ...reach.notes]);
+  let minorNotes = 0;
+  let weight: 0 | 1 | 2 = reach.urgent.length ? 0 : 2;
+  for (const finding of findInTool(tool)) {
+    // The disagreement between label and name is already stated, in this report's own terms.
+    if (finding.rule === "annotation-mismatch") continue;
+    if (finding.severity === "low") { minorNotes += 1; continue; }
+    reasons.add(finding.reason);
+    weight = finding.severity === "high" ? 0 : weight === 2 ? 1 : weight;
+  }
+  return {
+    tool: { name: shownName(tool), kind, does: reach.does, broad: reach.broad, basis: reach.basis, disputed: reach.urgent.length > 0, undoUnstated: reach.undoUnstated, onTrust: reach.onTrust },
+    reasons: [...reasons],
+    urgent: reach.urgent.length > 0,
+    weight,
+    minorNotes,
+  };
+}
+
 export function authorityOf(snapshot: Snapshot): AuthorityReport {
   const grouped = new Map<AuthorityKind, AuthorityTool[]>();
   const basis: Record<AuthorityBasis, number> = { server: 0, name: 0, description: 0, none: 0 };
@@ -170,28 +205,19 @@ export function authorityOf(snapshot: Snapshot): AuthorityReport {
   let minorNotes = 0;
 
   for (const tool of snapshot.tools) {
-    const reach = reachOf(tool);
-    basis[reach.basis] += 1;
-    const name = shownName(tool);
-    const kind = seriousFirst.find((candidate) => candidate !== "unclear" && reach.does.includes(candidate)) ?? "unclear";
-    grouped.set(kind, [...(grouped.get(kind) ?? []), { name, kind, does: reach.does, broad: reach.broad, basis: reach.basis, disputed: reach.urgent.length > 0, undoUnstated: reach.undoUnstated, onTrust: reach.onTrust }]);
-
-    const reasons = new Set<string>([...reach.urgent, ...reach.notes]);
-    for (const finding of findInTool(tool)) {
-      // The disagreement between label and name is already stated, in this report's own terms.
-      if (finding.rule === "annotation-mismatch") continue;
-      if (finding.severity === "low") minorNotes += 1;
-      else reasons.add(finding.reason);
-    }
+    const assessed = assessTool(tool);
+    basis[assessed.tool.basis] += 1;
+    grouped.set(assessed.tool.kind, [...(grouped.get(assessed.tool.kind) ?? []), assessed.tool]);
+    minorNotes += assessed.minorNotes;
     // One entry per tool in the list, so two tools whose shown names collide cannot hide one another.
-    if (reasons.size) concerns.push({ tool: name, urgent: reach.urgent.length > 0, reasons: [...reasons] });
+    if (assessed.reasons.length) concerns.push({ tool: assessed.tool.name, urgent: assessed.urgent || assessed.weight === 0, reasons: assessed.reasons });
   }
 
   // The tools a reader most needs to see come first, so a long list cannot bury them.
   const rank = (tool: AuthorityTool) => (tool.disputed ? 0 : tool.broad ? 1 : tool.onTrust ? 2 : 3);
   const declared = typeof snapshot.server?.name === "string" ? snapshot.server.name : "";
   return {
-    source: unlinked(confined(String(snapshot.source ?? "").replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, ""), /[^A-Za-z0-9._/@-]+/g, 80)) || "an unnamed source",
+    source: shownSource(snapshot.source),
     declaredName: boasts(declared) ? "" : confined(declared, /[^A-Za-z0-9 _-]+/g, 40),
     nameWithheld: boasts(declared),
     takenAt: typeof snapshot.takenAt === "string" ? snapshot.takenAt : "",
@@ -207,26 +233,31 @@ export function authorityOf(snapshot: Snapshot): AuthorityReport {
   };
 }
 
+/** Where a list came from, with nothing a terminal would turn into a link. */
+export function shownSource(source: unknown): string {
+  return unlinked(confined(String(source ?? "").replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, ""), /[^A-Za-z0-9._/@-]+/g, 80)).replace(/@/g, "[at]") || "an unnamed source";
+}
+
 /** Far more than any real server lists. Past it the report says how many it left out. */
-const mostListed = 500;
+export const mostListed = 500;
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-function day(takenAt: string): string {
+export function day(takenAt: string): string {
   const date = new Date(takenAt);
   return Number.isNaN(date.getTime()) ? "an unknown date" : `${date.getUTCDate()} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-function listed(items: string[], most: number): string {
+export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+export function listed(items: string[], most: number): string {
   const shown = items.slice(0, most);
   return items.length > most ? `${shown.join(", ")} and ${items.length - most} more` : shown.join(", ");
 }
-function sentenceList(items: string[]): string {
+export function sentenceList(items: string[]): string {
   const unique = [...new Set(items)];
   if (unique.length < 3) return unique.join(" and ");
   return `${unique.slice(0, -1).join(", ")}, and ${unique.at(-1)}`;
 }
 
-const canDo: Record<Exclude<AuthorityKind, "unclear">, string> = {
+export const canDo: Record<Exclude<AuthorityKind, "unclear">, string> = {
   money: "move or spend money",
   destructive: "make changes that cannot be undone",
   send: "send messages or publish to other people",
@@ -250,7 +281,8 @@ const broadIn = (report: AuthorityReport) => all(report).filter((tool) => tool.b
 const carriesOut = (report: AuthorityReport) => (["write", "send", "money"] as const).some((kind) => doingIt(report, kind).length > 0);
 const mayCarryOut = (report: AuthorityReport) => unclearIn(report).length > 0 || broadIn(report).length > 0;
 
-function opening(report: AuthorityReport): string[] {
+/** The few sentences that say where a server stands. */
+export function opening(report: AuthorityReport): string[] {
   const can = (["read", "write", "destructive", "send", "money"] as const).filter((kind) => doingIt(report, kind).length);
   const unclear = unclearIn(report).length, broad = broadIn(report).length, undoUnstated = all(report).filter((tool) => tool.undoUnstated).length;
   const sentences: string[] = [];

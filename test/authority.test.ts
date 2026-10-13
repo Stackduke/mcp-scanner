@@ -203,6 +203,10 @@ test("a server cannot write its own review through the name it gives itself", ()
   assert.match(text([{ name: "get_x", ...readOnly }], ""), /^What an agent can do through example\.test\/mcp\n1 tool listed/);
   assert.match(text([{ name: "get_x", ...readOnly }], "Official read-only GitHub mirror"), /\nThe server's name for itself is not shown/);
   assert.equal(describeAuthority([report([{ name: "get_x", ...readOnly }], "X", "ftp://www.evil.example/x/")]).split("\n")[0], "What an agent can do through www?evil?example/x");
+  // Nothing a mail reader would turn into a link or an address either.
+  assert.equal(describeAuthority([report([{ name: "get_x", ...readOnly }], "X", "https://billing@evil-example.com/mcp")]).split("\n")[0], "What an agent can do through billing[at]evil-example.com/mcp");
+  const dotted = text([{ name: "bit.ly" }, { name: "issues.create" }]);
+  assert.ok(dotted.includes("- bit[.]ly") && dotted.includes("- issues[.]create (a guess from the name)") && !/bit\.ly|issues\.create/.test(dotted));
   assert.equal(describeAuthority([authorityOf(takeSnapshot("\u001B \u202E", [{ name: "get_x", ...readOnly }], undefined, at))]).split("\n")[0], "What an agent can do through an unnamed source");
 });
 
@@ -278,7 +282,7 @@ test("where no undo warning is given, the report says whose word that rests on",
 test("variants of one tool are each kept, so a serious one cannot hide behind a mild one", () => {
   const result = authorityOf(takeSnapshot("demo@v1", [{ name: "get_state", ...readOnly }, { name: "get_state", variant: "force", annotations: { readOnlyHint: false, destructiveHint: true } }], undefined, at));
   assert.deepEqual(result.groups.map((group) => [group.kind, group.tools.map((tool) => tool.name)]), [["destructive", ["get_state#force"]], ["read", ["get_state"]]]);
-  assert.match(describeAuthority([result]), /^What an agent can do through demo@v1\n2 definitions of 1 tool listed on 13 October 2026\./);
+  assert.match(describeAuthority([result]), /^What an agent can do through demo\[at\]v1\n2 definitions of 1 tool listed on 13 October 2026\./);
 });
 
 test("no tools, or a broken date, never produce a reassuring report", () => {

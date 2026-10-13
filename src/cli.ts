@@ -1,8 +1,9 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { authorityOf, describeAuthority } from "./authority.ts";
+import { authorityOf, describeAuthority, shownSource } from "./authority.ts";
 import { listTools, readTool } from "./client.ts";
 import { diffSnapshots } from "./diff.ts";
+import { describeDigest, periodOf } from "./digest.ts";
 import { describeDiff, describeSnapshot } from "./report.ts";
 import { scanSignedIn, signedInServers } from "./signed-in.ts";
 import { takeSnapshot } from "./snapshot.ts";
@@ -13,6 +14,8 @@ const usage = `Usage:
   npm run scan -- scan <https-url> [--save]         List a server's tools, label them, and check their text.
   npm run scan -- signed-in <name> [--save]         The same, for a server that wants a sign-in (${Object.keys(signedInServers).join(", ")}).
   npm run scan -- authority <snapshot.json>...      What an agent can do through these servers, in plain words.
+  npm run scan -- digest <snapshot-folder>...       The week's changes on the servers saved there, as an email's text.
+                                                    --days=7 and --until=YYYY-MM-DD set the period, in UTC.
   npm run scan -- diff <before.json> <after.json>   Compare two saved snapshots.
   npm run scan -- history <owner/repo> <from> <to>  Compare tool definitions a repository publishes at two tags.
 
@@ -97,6 +100,54 @@ async function main(argv: string[]): Promise<number> {
     const snapshots = await Promise.all(args.map(readSnapshot));
     if (snapshots.some((snapshot) => snapshot === null)) { console.error("One of those files is not a saved snapshot."); return 2; }
     console.log(describeAuthority((snapshots as Snapshot[]).map(authorityOf)));
+    return 0;
+  }
+
+  if (command === "digest" && args[0]) {
+    // Flags are read strictly: a misspelt or half-given one would otherwise quietly report the wrong period.
+    const options = new Map<string, string>();
+    for (const flag of flags) {
+      const match = /^--(days|until)=(.+)$/.exec(flag);
+      if (!match || options.has(match[1] as string)) { console.error("digest takes --days=N and --until=YYYY-MM-DD, each at most once."); return 2; }
+      options.set(match[1] as string, match[2] as string);
+    }
+    const daysText = options.get("days") ?? "7", untilText = options.get("until");
+    const days = /^\d{1,2}$/.test(daysText) ? Number(daysText) : 0;
+    const endOfDay = untilText === undefined ? null : new Date(`${untilText}T23:59:59.999Z`);
+    const dateIsReal = endOfDay === null || (/^\d{4}-\d{2}-\d{2}$/.test(untilText ?? "") && !Number.isNaN(endOfDay.getTime()) && endOfDay.toISOString().slice(0, 10) === untilText);
+    if (days < 1 || days > 92 || !dateIsReal) { console.error("--days takes a whole number from 1 to 92, and --until a real date written YYYY-MM-DD."); return 2; }
+    // With --until the period is whole days, in UTC, ending with that day. Without it, the days up to now.
+    const until = endOfDay ?? new Date();
+    const period = { from: new Date(endOfDay ? endOfDay.getTime() + 1 - days * 86_400_000 : until.getTime() - days * 86_400_000), until };
+
+    // Every saved scan in the folders given, grouped by the server it came from.
+    const byServer = new Map<string, { snapshots: Snapshot[]; unreadable: number }>();
+    const seenFiles = new Set<string>();
+    let stray = 0;
+    for (const folder of args) {
+      let files: string[];
+      try { files = (await readdir(folder)).filter((file) => file.endsWith(".json")).sort(); } catch { console.error("One of those folders could not be read."); return 2; }
+      const here = new Set<string>();
+      let unreadable = 0;
+      for (const file of files) {
+        const full = path.resolve(folder, file);
+        if (seenFiles.has(full)) continue;
+        seenFiles.add(full);
+        const snapshot = await readSnapshot(full);
+        if (!snapshot || Number.isNaN(new Date(snapshot.takenAt).getTime())) { unreadable += 1; continue; }
+        const key = shownSource(snapshot.source).toLowerCase();
+        here.add(key);
+        const server = byServer.get(key) ?? { snapshots: [], unreadable: 0 };
+        server.snapshots.push(snapshot);
+        byServer.set(key, server);
+      }
+      // A scan that cannot be read belongs to the server whose folder it sits in, and makes that server's period incomplete.
+      if (here.size) for (const key of here) (byServer.get(key) as { unreadable: number }).unreadable += unreadable;
+      else stray += unreadable;
+    }
+    const servers = [...byServer.values()].flatMap(({ snapshots, unreadable }) => { const server = periodOf(snapshots, period, unreadable); return server ? [server] : []; });
+    const digest = describeDigest(servers, period, stray);
+    console.log(`Subject: ${digest.subject}\n\n${digest.text}`);
     return 0;
   }
 
