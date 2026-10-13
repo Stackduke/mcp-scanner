@@ -1,4 +1,4 @@
-import { assessTool, authorityOf, canDo, day, opening, plural, sentenceList, shownSource } from "./authority.ts";
+import { assessTool, authorityOf, canDo, day, defanged, opening, plural, sentenceList, shownSource } from "./authority.ts";
 import type { AuthorityKind, ToolAssessment } from "./authority.ts";
 import { canonical, toolKey } from "./snapshot.ts";
 import type { Snapshot, SnapshotTool } from "./types.ts";
@@ -34,7 +34,7 @@ export interface ServerPeriod {
   between: number;
   latest: string;
   /** The longest stretch of the period with no scan in it. */
-  gap: { hours: number; from: string; to: string };
+  gap: { hours: number; from: string; to: string; long: boolean };
   /** Two scans or more to compare, no long stretch without one, and none unreadable. */
   covered: boolean;
   added: ToolNote[];
@@ -43,9 +43,9 @@ export interface ServerPeriod {
   widened: ToolNote[];
   /** Counted as doing less at the end than at the start, with nothing more in between. */
   narrowed: ToolNote[];
-  /** Wording rewritten, with no change at any scan in what the tool is counted as doing. */
+  /** Wording rewritten at some scan, with no change at any scan in what the tool is counted as doing. */
   reworded: string[];
-  /** The server's labels changed, with no change in what the tool is counted as doing. */
+  /** The server's labels changed at some scan, with no change in what the tool is counted as doing. */
   relabelled: string[];
   /** Inputs or outputs changed and nothing else. */
   otherChanged: string[];
@@ -55,6 +55,8 @@ export interface ServerPeriod {
   changedAndBack: ToolNote[];
   /** Reasons to look at a tool that were not there at the start, from any scan in the period. */
   newConcerns: Array<{ tool: string; lasting: string[]; passing: string[]; weight: number }>;
+  /** Tools that already carried a reason to look at the start of the period, and still do. Named, not explained again. */
+  standingConcerns: string[];
   /** Where the server stands at the latest scan, as the authority report puts it. */
   standing: string[];
   tools: number;
@@ -75,6 +77,8 @@ const placed: Record<AuthorityKind, string> = {
   read: "said to only read",
 };
 const freeForm = "take free-form input such as SQL or a shell command";
+/** Marks a tool whose wording or labels were changed at some scan and are now as they were at the start. */
+const putBack = " (since put back)";
 /** A tool's place, in a few words: the most serious thing first, then the rest. */
 function standingOf(assessed: ToolAssessment): string {
   const also = acting.filter((kind) => kind !== assessed.tool.kind && kind !== "write" && assessed.tool.does.includes(kind)).map((kind) => canDo[kind]);
@@ -84,7 +88,8 @@ const rankOf = (assessed: ToolAssessment) => seriousFirst.indexOf(assessed.tool.
 const wording = (tool: SnapshotTool) => canonical([tool.title ?? null, tool.description ?? null, tool.annotations?.title ?? null]);
 const labels = (tool: SnapshotTool) => { const { title: _title, ...rest } = tool.annotations ?? {}; return canonical(rest); };
 
-const longGapHours = 36;
+/** A stretch this long with no scan is a hole in the period: 36 hours, or half the period when that is shorter. */
+const longGap = (period: Period) => Math.min(36, (period.until.getTime() - period.from.getTime()) / 3_600_000 / 2);
 
 /** One server's period, from its saved scans in any order. Null when it has no scan up to the end of the period. */
 export function periodOf(snapshots: Snapshot[], period: Period, unreadable = 0): ServerPeriod | null {
@@ -102,18 +107,19 @@ export function periodOf(snapshots: Snapshot[], period: Period, unreadable = 0):
 
   // The longest stretch of the period in which nothing was looked at.
   const marks = [period.from.getTime(), ...inside.map(({ at }) => at), period.until.getTime()];
-  let gap = { hours: 0, from: period.from.toISOString(), to: period.until.toISOString() };
+  let gap = { hours: 0, from: period.from.toISOString(), to: period.until.toISOString(), long: false };
   for (let index = 1; index < marks.length; index += 1) {
     const hours = ((marks[index] as number) - (marks[index - 1] as number)) / 3_600_000;
-    if (hours > gap.hours) gap = { hours, from: new Date(marks[index - 1] as number).toISOString(), to: new Date(marks[index] as number).toISOString() };
+    if (hours > gap.hours) gap = { hours, from: new Date(marks[index - 1] as number).toISOString(), to: new Date(marks[index] as number).toISOString(), long: hours > longGap(period) };
   }
 
   const result: ServerPeriod = {
-    source: shownSource(latest.snapshot.source),
+    // An address in an email is made into a link by most mail readers. Dots written "[.]" are not.
+    source: defanged(shownSource(latest.snapshot.source)),
     scans: inside.length, unreadable,
     from: null, to: null, between: 0, latest: latest.snapshot.takenAt, gap,
     covered: false,
-    added: [], removed: [], widened: [], narrowed: [], reworded: [], relabelled: [], otherChanged: [], cameAndWent: [], changedAndBack: [], newConcerns: [],
+    added: [], removed: [], widened: [], narrowed: [], reworded: [], relabelled: [], otherChanged: [], cameAndWent: [], changedAndBack: [], newConcerns: [], standingConcerns: [],
     standing: opening(authorityOf(latest.snapshot)),
     tools: latest.snapshot.tools.length,
   };
@@ -121,59 +127,93 @@ export function periodOf(snapshots: Snapshot[], period: Period, unreadable = 0):
   result.from = (series[0] as (typeof series)[number]).snapshot.takenAt;
   result.to = latest.snapshot.takenAt;
   result.between = series.length - 2;
-  result.covered = gap.hours <= longGapHours && unreadable === 0;
+  result.covered = gap.hours <= longGap(period) && unreadable === 0;
 
   const states = series.map(({ snapshot }) => new Map(snapshot.tools.map((tool) => [toolKey(tool), tool] as const)));
   const assessed = new Map<string, ToolAssessment>();
-  const assess = (tool: SnapshotTool) => { const known = assessed.get(tool.hash) ?? assessTool(tool); assessed.set(tool.hash, known); return known; };
+  // Keyed by name and variant as well as content: two variants with one definition are still two tools to name.
+  const assess = (tool: SnapshotTool) => { const key = `${toolKey(tool)}\n${tool.hash}`; const known = assessed.get(key) ?? assessTool(tool); assessed.set(key, known); return known; };
+  const reach = (state: ToolAssessment) => canonical([state.tool.kind, state.tool.does, state.tool.broad, state.tool.undoUnstated]);
+  /** The server plainly said the tool's changes can be undone. */
+  const saidReversible = (state: ToolAssessment) => acts(state) && !state.tool.undoUnstated && !state.tool.does.includes("destructive");
+  const could = (kinds: readonly Acting[]) => sentenceList(kinds.filter((kind) => !(kind === "write" && kinds.includes("destructive"))).map((kind) => canDo[kind]));
+  const sometime = "at some point in the period, though not at the latest scan";
 
   for (const key of new Set(states.flatMap((state) => [...state.keys()]))) {
     const timeline = states.map((state) => state.get(key));
     const startTool = timeline[0], endTool = timeline.at(-1);
     if (startTool && timeline.every((tool) => tool?.hash === startTool.hash)) continue;
     const start = startTool ? assess(startTool) : null, end = endTool ? assess(endTool) : null;
-    // Every state the tool was in after the start. What it could do at its most is what counts.
-    const later = timeline.slice(1).flatMap((tool) => (tool ? [assess(tool)] : []));
+    // Every state the tool was in after the start. What it could do at its most is what counts,
+    // and so does anything about it that was true at any scan, whatever the two ends look like.
+    const laterTools = timeline.slice(1).flatMap((tool) => (tool ? [tool] : []));
+    const later = laterTools.map(assess);
     const name = (end ?? later.at(-1) ?? start)?.tool.name ?? "(no name)";
-    const reached = acting.filter((kind) => later.some((state) => has(state, kind)) && !(start && has(start, kind)));
-    const lasting = reached.filter((kind) => end && has(end, kind)), passing = reached.filter((kind) => !(end && has(end, kind)));
-    const could = (kinds: readonly Acting[]) => sentenceList(kinds.filter((kind) => !(kind === "write" && kinds.includes("destructive"))).map((kind) => canDo[kind]));
+    const ever = (test: (state: ToolAssessment) => boolean) => later.some(test);
 
-    // New reasons to look, from any scan. One that has gone by the latest scan is still reported.
-    const known = new Set(start?.reasons ?? []);
-    const fresh = [...new Set(later.flatMap((state) => state.reasons))].filter((reason) => !known.has(reason));
-    if (fresh.length) result.newConcerns.push({ tool: name, lasting: fresh.filter((reason) => end?.reasons.includes(reason)), passing: fresh.filter((reason) => !end?.reasons.includes(reason)), weight: Math.min(...later.filter((state) => state.reasons.some((reason) => !known.has(reason))).map((state) => state.weight)) });
+    // New reasons to look, from any scan, told apart by where each was found. One gone by the latest scan is still reported.
+    const known = new Set(start?.points.map((point) => point.key) ?? []);
+    const atEnd = new Set(end?.points.map((point) => point.key) ?? []);
+    const fresh = later.flatMap((state) => state.points).filter((point) => !known.has(point.key));
+    if (fresh.length) {
+      const reasons = (points: typeof fresh) => [...new Set(points.map((point) => point.reason))];
+      const lastingReasons = reasons(fresh.filter((point) => atEnd.has(point.key)));
+      result.newConcerns.push({
+        tool: name, lasting: lastingReasons, passing: reasons(fresh.filter((point) => !atEnd.has(point.key))).filter((reason) => !lastingReasons.includes(reason)),
+        weight: Math.min(...later.filter((state) => state.points.some((point) => !known.has(point.key))).map((state) => state.weight)),
+      });
+    }
+
+    // What the tool could do, or was, at some scan that it could not or was not at the reference state.
+    const beyond = (from: ToolAssessment | null, now: ToolAssessment | null): string[] => {
+      const reached = acting.filter((kind) => ever((state) => has(state, kind)) && !(from && has(from, kind)));
+      const lasting = reached.filter((kind) => now && has(now, kind)), passing = reached.filter((kind) => !(now && has(now, kind)));
+      const parts: string[] = [];
+      if (lasting.length) parts.push(`can now ${could(lasting)}`);
+      if (passing.length) parts.push(`could ${could(passing)} ${now ? sometime : "before it went"}`);
+      if (!from?.tool.broad && ever((state) => state.tool.broad)) parts.push(now?.tool.broad ? `now takes ${freeForm.replace(/^take /, "")}` : `took ${freeForm.replace(/^take /, "")} ${now ? sometime : "before it went"}`);
+      if (from?.tool.kind !== "unclear" && ever((state) => state.tool.kind === "unclear")) parts.push(now?.tool.kind === "unclear" ? (from ? `was listed as "${placed[from.tool.kind]}", and it is now not clear what it does` : "") : `was a tool whose purpose was not clear ${now ? sometime : "before it went"}`);
+      if (from && saidReversible(from) && ever((state) => acts(state) && state.tool.undoUnstated)) parts.push(now && acts(now) && now.tool.undoUnstated ? "is no longer said by its server to make changes that can be undone" : `was not said by its server to make changes that can be undone ${now ? sometime : "before it went"}`);
+      return parts.filter(Boolean);
+    };
 
     if (!start && end) {
-      result.added.push({ name, note: `${standingOf(end)}${passing.length ? `. During the period it could also ${could(passing)}` : ""}`, pressing: end.tool.kind !== "read" || end.tool.broad || end.tool.onTrust || passing.length > 0, rank: rankOf(end) });
+      // Added. What it is now, then anything more it was at an earlier scan.
+      const earlier = beyond(end, end);
+      result.added.push({ name, note: [standingOf(end), ...earlier].join("; "), pressing: end.tool.kind !== "read" || end.tool.broad || end.tool.onTrust || earlier.length > 0, rank: rankOf(end) });
     } else if (!start && !end) {
       const most = [...later].sort((a, b) => rankOf(a) - rankOf(b))[0];
-      if (most) result.cameAndWent.push({ name, note: standingOf(most), pressing: true, rank: rankOf(most) });
+      if (most) result.cameAndWent.push({ name, note: [`while it was listed: ${standingOf(most)}`, ...beyond(most, null)].join("; "), pressing: true, rank: rankOf(most) });
     } else if (start && !end) {
-      result.removed.push({ name, note: reached.length ? `before it went, it could ${could(reached)}, which it could not at the start` : "", pressing: reached.length > 0, rank: rankOf(start) });
+      const before = beyond(start, null);
+      result.removed.push({ name, note: before.join("; "), pressing: before.length > 0, rank: rankOf(start) });
     } else if (start && end && startTool && endTool) {
-      const more: string[] = [];
-      if (lasting.length) more.push(`can now ${could(lasting)}`);
-      if (passing.length) more.push(`could ${could(passing)} during the period, which the latest scan no longer shows`);
-      if (!start.tool.broad && later.some((state) => state.tool.broad)) more.push(end.tool.broad ? `can now ${freeForm}` : `could ${freeForm} during the period`);
-      if (start.tool.kind !== "unclear" && later.some((state) => state.tool.kind === "unclear")) more.push(end.tool.kind === "unclear" ? `was listed as "${placed[start.tool.kind]}", and it is now not clear what it does` : "was, for part of the period, a tool whose purpose was not clear");
-      if (acts(start) && !start.tool.undoUnstated && end.tool.undoUnstated) more.push("is no longer said by its server to make changes that can be undone");
-      const rewritten = wording(startTool) !== wording(endTool);
+      const more = beyond(start, end);
+      const away = timeline.filter((tool) => !tool).length;
+      const rewrittenNow = wording(startTool) !== wording(endTool), rewrittenEver = laterTools.some((tool) => wording(tool) !== wording(startTool));
+      const relabelledEver = laterTools.some((tool) => labels(tool) !== labels(startTool));
       const lost = acting.filter((kind) => has(start, kind) && !has(end, kind));
       const less = lost.length ? `is no longer counted as able to ${could(lost)}`
-        : start.tool.kind !== end.tool.kind && end.tool.kind !== "unclear" && !lasting.length ? `was listed as "${placed[start.tool.kind]}" and is now "${placed[end.tool.kind]}"`
+        : start.tool.kind !== end.tool.kind && end.tool.kind !== "unclear" && !more.length ? `was listed as "${placed[start.tool.kind]}" and is now "${placed[end.tool.kind]}"`
         : start.tool.broad && !end.tool.broad ? "no longer appears to take free-form input" : "";
-      const also = rewritten ? " Its wording was rewritten too." : "";
-      if (more.length) result.widened.push({ name, note: `${sentenceList(more)}.${less ? ` It ${less}.` : ""}${also}`, pressing: true, rank: Math.min(rankOf(end), ...later.map(rankOf)) });
+      // True only if the tool was listed at every scan and counted as doing the same thing at each.
+      const steady = !away && later.every((state) => reach(state) === reach(start));
+      const extras = [away ? `was missing from ${plural(away, "scan")}` : "", rewrittenEver ? (rewrittenNow ? "its wording was rewritten" : "its wording was rewritten and has been put back") : ""].filter(Boolean);
+      if (more.length) result.widened.push({ name, note: [...more, less, ...extras].filter(Boolean).join("; "), pressing: true, rank: Math.min(rankOf(end), ...later.map(rankOf)) });
       else if (endTool.hash === startTool.hash) {
-        const away = timeline.filter((tool) => !tool).length, differing = timeline.filter((tool) => tool && tool.hash !== startTool.hash).length;
+        const differing = timeline.filter((tool) => tool && tool.hash !== startTool.hash).length;
         result.changedAndBack.push({ name, note: [away ? `missing from ${plural(away, "scan")}` : "", differing ? `different in ${plural(differing, "scan")}` : ""].filter(Boolean).join(" and "), pressing: true, rank: rankOf(end) });
-      } else if (less) result.narrowed.push({ name, note: `${less}, going by its label, name and description.${also}`, pressing: false, rank: rankOf(start) });
-      else if (rewritten) result.reworded.push(name);
-      else if (labels(startTool) !== labels(endTool)) result.relabelled.push(name);
+      } else if (less) result.narrowed.push({ name, note: [`${less}, going by its label, name and description`, ...extras].join("; "), pressing: false, rank: rankOf(start) });
+      else if (!steady) result.narrowed.push({ name, note: [away ? "" : "was counted as doing less at some point in the period, and is back to what it was", ...extras].filter(Boolean).join("; "), pressing: away > 0, rank: rankOf(start) });
+      else if (rewrittenEver) result.reworded.push(rewrittenNow ? name : `${name}${putBack}`);
+      else if (relabelledEver) result.relabelled.push(labels(startTool) !== labels(endTool) ? name : `${name}${putBack}`);
       else result.otherChanged.push(name);
     }
   }
+  // Reasons to look that were already there at the start and still are. They are not news, and they are not gone.
+  const raised = new Set(result.newConcerns.map((concern) => concern.tool));
+  result.standingConcerns = latest.snapshot.tools.map(assess).filter((state) => state.points.length > 0 && !raised.has(state.tool.name)).sort((a, b) => a.weight - b.weight).map((state) => state.tool.name);
+
   // The tools a reader most needs to see come first in every list, so a long one cannot bury them.
   const order = (a: ToolNote, b: ToolNote) => Number(b.pressing) - Number(a.pressing) || a.rank - b.rank || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   for (const list of [result.added, result.removed, result.widened, result.narrowed, result.cameAndWent, result.changedAndBack]) list.sort(order);
@@ -185,13 +225,13 @@ export function periodOf(snapshots: Snapshot[], period: Period, unreadable = 0):
 
 const quiet = (server: ServerPeriod) => !server.added.length && !server.removed.length && !server.widened.length && !server.narrowed.length && !server.reworded.length && !server.relabelled.length && !server.otherChanged.length && !server.cameAndWent.length && !server.changedAndBack.length;
 /** Something a person should read before the rest. */
-const pressing = (server: ServerPeriod) => server.newConcerns.length > 0 || [server.added, server.removed, server.widened, server.cameAndWent, server.changedAndBack].some((list) => list.some((tool) => tool.pressing));
+const pressing = (server: ServerPeriod) => server.newConcerns.length > 0 || [...server.reworded, ...server.relabelled].some((name) => name.endsWith(putBack)) || [server.added, server.removed, server.widened, server.narrowed, server.cameAndWent, server.changedAndBack].some((list) => list.some((tool) => tool.pressing));
 const compared = (server: ServerPeriod) => server.from !== null && server.to !== null;
 
 const mostShown = 500;
 const leastImportantShown = 12;
 const cut = (items: string[], most: number) => (items.length > most ? `${items.slice(0, most).join(", ")} and ${items.length - most} more` : items.join(", "));
-const stretch = (hours: number) => (hours < 48 ? `${Math.round(hours)} hours` : `${Math.round(hours / 24)} days`);
+const stretch = (hours: number) => (hours < 48 ? `about ${Math.round(hours)} hours` : `about ${Math.round(hours / 24)} days`);
 const clock = (moment: string) => `${day(moment)} at ${new Date(moment).toISOString().slice(11, 16)}`;
 /** Two moments as a reader would say them: the days, with the time of day only when both fall on one day. */
 const pair = (from: string, to: string): [string, string] => (day(from) !== day(to) ? [day(from), day(to)] : [clock(from), clock(to)]);
@@ -209,13 +249,13 @@ function describeServer(server: ServerPeriod): string[] {
     lines.push(`  ${scans}${server.scans ? ", and no earlier one to compare with" : ""}, so nothing can be said about what changed.`);
   } else {
     const [from, to] = pair(server.from, server.to);
-    lines.push(`  ${scans}. Compared: the scan on ${from} with the scan on ${to}${server.between ? `, and the ${plural(server.between, "scan")} between them` : ""}.`);
+    lines.push(`  ${scans}. Compared: the scan on ${from} with the scan on ${to}${server.between ? `, and the ${server.between === 1 ? "one scan" : `${server.between} scans`} between them` : ""}.`);
     if (quiet(server)) lines.push(`  No difference between ${server.between ? "any of those scans" : "those two scans"}.`);
     else {
       const group = (title: string, tools: ToolNote[]) => {
         if (!tools.length) return;
         lines.push(`  ${title}`);
-        for (const tool of tools.slice(0, mostShown)) lines.push(`    - ${tool.name}${tool.note ? `: ${tool.note}` : ""}`);
+        for (const tool of tools.slice(0, mostShown)) lines.push(`    - ${tool.name}${tool.note ? `: ${tool.note}.` : ""}`);
         if (tools.length > mostShown) lines.push(`    … and ${tools.length - mostShown} more`);
       };
       const one = (count: number, single: string, several: string) => (count === 1 ? single : several);
@@ -224,28 +264,33 @@ function describeServer(server: ServerPeriod): string[] {
       group(`${plural(server.changedAndBack.length, "tool")} ${one(server.changedAndBack.length, "was", "were")} changed or removed during the period and put back by the end:`, server.changedAndBack);
       group(`${plural(server.added.length, "tool")} added:`, server.added);
       group(`${plural(server.removed.length, "tool")} removed:`, server.removed);
-      if (server.reworded.length) lines.push(`  The words an AI model reads were rewritten in ${plural(server.reworded.length, "tool")}: ${cut(server.reworded, mostShown)}`, `    What ${one(server.reworded.length, "it is", "each is")} counted as doing did not change at any scan. The new wording is not shown here; compare it in the technical report.`);
-      if (server.relabelled.length) lines.push(`  The server's own labels changed on ${plural(server.relabelled.length, "tool")}, without changing what ${one(server.relabelled.length, "it is", "each is")} counted as doing: ${cut(server.relabelled, mostShown)}`);
+      if (server.reworded.length) lines.push(`  The words an AI model reads were rewritten in ${plural(server.reworded.length, "tool")}: ${cut(server.reworded, mostShown)}`, `    ${one(server.reworded.length, "It was", "Each was")} listed at every scan and counted as doing the same thing at each. The wording is not shown here; compare it in the technical report.`);
+      if (server.relabelled.length) lines.push(`  The server's own labels changed on ${plural(server.relabelled.length, "tool")}, without changing at any scan what ${one(server.relabelled.length, "it is", "each is")} counted as doing: ${cut(server.relabelled, mostShown)}`);
       group(`${plural(server.narrowed.length, "tool")} ${one(server.narrowed.length, "is", "are")} counted as doing less than at the start:`, server.narrowed);
       if (server.otherChanged.length) lines.push(`  ${plural(server.otherChanged.length, "tool")} changed in inputs or outputs only, which includes the notes on them that a model reads: ${cut(server.otherChanged, leastImportantShown)}`);
     }
     if (server.newConcerns.length) {
       lines.push("  New in this period, worth a person's look:");
-      for (const concern of server.newConcerns.slice(0, mostShown)) {
+      // Planted text and overruled labels are all shown. Only the lesser notes are cut short.
+      const heavy = server.newConcerns.filter((concern) => concern.weight === 0);
+      const shown = [...heavy, ...server.newConcerns.filter((concern) => concern.weight !== 0).slice(0, Math.max(0, mostShown - heavy.length))];
+      for (const concern of shown) {
         lines.push(`    - ${concern.tool}: ${[concern.lasting.join(" "), concern.passing.length ? `Seen during the period and gone by the latest scan: ${concern.passing.join(" ")}` : ""].filter(Boolean).join(" ")}`);
       }
-      if (server.newConcerns.length > mostShown) lines.push(`    … and ${plural(server.newConcerns.length - mostShown, "more tool")}`);
+      if (server.newConcerns.length > shown.length) lines.push(`    … and ${plural(server.newConcerns.length - shown.length, "more tool")} with lesser notes`);
     }
   }
+  if (server.standingConcerns.length) lines.push(`  ${plural(server.standingConcerns.length, "tool")} ${server.standingConcerns.length === 1 ? "was" : "were"} already worth a person's look before this period and still ${server.standingConcerns.length === 1 ? "is" : "are"}: ${cut(server.standingConcerns, mostShown)}`);
   // What the statements above do not cover.
   if (server.unreadable) lines.push(`  ${plural(server.unreadable, "saved scan")} for this server could not be read. Nothing above covers ${server.unreadable === 1 ? "it" : "them"}.`);
-  if (server.gap.hours > longGapHours) lines.push(`  No scan for ${stretch(server.gap.hours)}, from ${clock(server.gap.from)} to ${clock(server.gap.to)}. A change made and undone in that time would not be seen.`);
-  lines.push(`  Where it stands at the latest scan, with ${plural(server.tools, "tool")} listed: ${server.standing.join(" ") || "no tools were listed, so nothing can be said."}`);
+  if (server.gap.long) lines.push(`  No scan for ${stretch(server.gap.hours)}, from ${clock(server.gap.from)} to ${clock(server.gap.to)}. A change made and undone in that time would not be seen.`);
+  lines.push(server.tools ? `  Where it stands at the latest scan, with ${plural(server.tools, "tool")} listed: ${server.standing.join(" ")}` : "  At the latest scan no tools were listed, so nothing can be said about where it stands.");
   return lines;
 }
 
 /** The digest as an email's subject and plain-text body. `stray` counts unreadable scans that belong to no known server. */
-export function describeDigest(servers: ServerPeriod[], period: Period, stray = 0): { subject: string; text: string } {
+export function describeDigest(servers: ServerPeriod[], period: Period, missing: { strayScans?: number; emptyFolders?: number } = {}): { subject: string; text: string } {
+  const stray = missing.strayScans ?? 0, empty = missing.emptyFolders ?? 0;
   const when = span(period);
   const changed = servers.filter((server) => compared(server) && !quiet(server));
   const look = servers.filter(pressing), uncovered = servers.filter((server) => !server.covered);
@@ -256,7 +301,9 @@ export function describeDigest(servers: ServerPeriod[], period: Period, stray = 
     : changed.length ? `${changed.length} of ${all} changed`
     : uncovered.length ? "" : `no change seen on ${all}`;
   const gaps = !uncovered.length ? "" : main ? `${uncovered.length} not fully covered` : `${uncovered.length} of ${all} not fully covered`;
-  const subject = `Aethis weekly digest: ${[main, gaps].filter(Boolean).join(", ")} (${when})`;
+  // A folder that was meant to hold a server's scans and gave none is a server that was not watched.
+  const lost = empty || stray ? [empty ? `${plural(empty, "folder")} with no scans` : "", stray ? `${plural(stray, "scan")} unreadable` : ""].filter(Boolean).join(", ") : "";
+  const subject = `Aethis weekly digest: ${[main, gaps, lost].filter(Boolean).join(", ")} (${when})`;
 
   const lines: string[] = [`Aethis weekly digest, ${when}`, ""];
   if (!servers.length) lines.push("There were no scans to report on.");
@@ -265,17 +312,19 @@ export function describeDigest(servers: ServerPeriod[], period: Period, stray = 
     lines.push([
       `${all} watched.`,
       !anyCompared ? "Nothing could be compared." : changed.length ? `${changed.length} changed${look.length ? `, and ${look.length} ${verb(look.length, "needs", "need")} a look` : ""}.` : look.length ? `${look.length} ${verb(look.length, "needs", "need")} a look.` : "No change seen in the scans that were compared.",
-      uncovered.length ? `${uncovered.length} ${verb(uncovered.length, "was", "were")} not fully covered, so a quiet result there means less.` : "",
+      uncovered.length ? `${uncovered.length} ${verb(uncovered.length, "was", "were")} not fully covered; the details are beside ${verb(uncovered.length, "it", "each")} below.` : "",
     ].filter(Boolean).join(" "));
     // The servers a reader most needs to see come first.
     const order = (server: ServerPeriod) => (pressing(server) ? 0 : compared(server) && !quiet(server) ? 1 : !server.covered ? 2 : 3);
     for (const server of [...servers].sort((a, b) => order(a) - order(b))) lines.push("", ...describeServer(server));
   }
+  if (empty) lines.push("", `${plural(empty, "folder")} given had no scans for this period. Whatever ${empty === 1 ? "it was" : "they were"} meant to watch is not in this digest.`);
   if (stray) lines.push("", `${plural(stray, "saved scan")} could not be read or matched to a server, and ${stray === 1 ? "was" : "were"} left out.`);
   lines.push(
     "",
     "About this digest:",
     "  - A scan sees a server's list of tools at one moment. A change made and undone between two scans is not seen.",
+    "  - It reports what is new in the period. A tool that was already worth a look is named, and explained in the full report, not here.",
     "  - It compares what servers offer. It does not say a server is safe, and it is not what your policy allows.",
     "  - Each tool is read the more serious way across its label, its name and its description, at every scan. Labels are the server's own and have not been tested.",
     "  - Only the first sentence of a description is read for what a tool does. The rest, and the notes on a tool's inputs, are checked for planted instructions and not for actions.",

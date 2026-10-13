@@ -88,7 +88,7 @@ function confined(text: unknown, notAllowed: RegExp, longest: number): string {
 const ordinaryName = /^(?!(?:www|ftp)\.)[A-Za-z0-9_.-]{1,60}$/i;
 const unlinked = (text: string) => (/^(?:www|ftp)\./i.test(text) ? text.replace(/\./g, "?") : text);
 // A dot is written "[.]", so a name such as "bit.ly" is not made into a link by a terminal or a mail reader.
-const defanged = (text: string) => text.replace(/\./g, "[.]");
+export const defanged = (text: string) => text.replace(/\./g, "[.]");
 const shownName = (tool: { name: unknown; variant?: unknown }) => {
   const name = defanged(confined(tool.name, /[^A-Za-z0-9_.-]+/g, 60)) || "(no name)";
   const variant = defanged(confined(tool.variant, /[^A-Za-z0-9_.-]+/g, 30));
@@ -169,6 +169,8 @@ export interface ToolAssessment {
   tool: AuthorityTool;
   /** Why a person should look at it. Aethis's words. */
   reasons: string[];
+  /** The same reasons, each with where it was found, so that a second planted text of the same kind counts as new. */
+  points: Array<{ key: string; reason: string }>;
   urgent: boolean;
   /** How much the reasons weigh: 0 for an overruled label or planted text, 1 for a lesser text finding, 2 for a note. */
   weight: 0 | 1 | 2;
@@ -179,19 +181,20 @@ export interface ToolAssessment {
 export function assessTool(tool: SnapshotTool): ToolAssessment {
   const reach = reachOf(tool);
   const kind = seriousFirst.find((candidate) => candidate !== "unclear" && reach.does.includes(candidate)) ?? "unclear";
-  const reasons = new Set<string>([...reach.urgent, ...reach.notes]);
+  const points = [...reach.urgent, ...reach.notes].map((reason) => ({ key: reason, reason }));
   let minorNotes = 0;
   let weight: 0 | 1 | 2 = reach.urgent.length ? 0 : 2;
   for (const finding of findInTool(tool)) {
     // The disagreement between label and name is already stated, in this report's own terms.
     if (finding.rule === "annotation-mismatch") continue;
     if (finding.severity === "low") { minorNotes += 1; continue; }
-    reasons.add(finding.reason);
+    points.push({ key: `${finding.rule}@${finding.where}`, reason: finding.reason });
     weight = finding.severity === "high" ? 0 : weight === 2 ? 1 : weight;
   }
   return {
     tool: { name: shownName(tool), kind, does: reach.does, broad: reach.broad, basis: reach.basis, disputed: reach.urgent.length > 0, undoUnstated: reach.undoUnstated, onTrust: reach.onTrust },
-    reasons: [...reasons],
+    reasons: [...new Set(points.map((point) => point.reason))],
+    points,
     urgent: reach.urgent.length > 0,
     weight,
     minorNotes,

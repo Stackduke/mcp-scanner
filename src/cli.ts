@@ -123,8 +123,8 @@ async function main(argv: string[]): Promise<number> {
     // Every saved scan in the folders given, grouped by the server it came from.
     const byServer = new Map<string, { snapshots: Snapshot[]; unreadable: number }>();
     const seenFiles = new Set<string>();
-    let stray = 0;
-    for (const folder of args) {
+    let stray = 0, emptyFolders = 0;
+    for (const folder of new Set(args.map((folder) => path.resolve(folder)))) {
       let files: string[];
       try { files = (await readdir(folder)).filter((file) => file.endsWith(".json")).sort(); } catch { console.error("One of those folders could not be read."); return 2; }
       const here = new Set<string>();
@@ -143,10 +143,15 @@ async function main(argv: string[]): Promise<number> {
       }
       // A scan that cannot be read belongs to the server whose folder it sits in, and makes that server's period incomplete.
       if (here.size) for (const key of here) (byServer.get(key) as { unreadable: number }).unreadable += unreadable;
-      else stray += unreadable;
+      else { stray += unreadable; emptyFolders += 1; }
     }
-    const servers = [...byServer.values()].flatMap(({ snapshots, unreadable }) => { const server = periodOf(snapshots, period, unreadable); return server ? [server] : []; });
-    const digest = describeDigest(servers, period, stray);
+    const servers = [...byServer.values()].flatMap(({ snapshots, unreadable }) => {
+      const server = periodOf(snapshots, period, unreadable);
+      // A folder whose scans all fall after the period gave nothing for it either.
+      if (!server) emptyFolders += 1;
+      return server ? [server] : [];
+    });
+    const digest = describeDigest(servers, period, { strayScans: stray, emptyFolders });
     console.log(`Subject: ${digest.subject}\n\n${digest.text}`);
     return 0;
   }

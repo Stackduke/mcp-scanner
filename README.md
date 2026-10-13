@@ -82,32 +82,37 @@ Review: three independent reviews, the third on a stronger model because the fir
 
 ## The weekly digest
 
-Added on 2026-10-13. `digest` takes folders of saved scans and writes the period's changes as an email's subject and plain text. It does not send anything: who it goes to, from which address and on what schedule are not decided.
+Added on 2026-10-13. `digest` takes folders of saved scans and writes the period's changes as an email's subject and plain text. The command sends nothing. One trial digest was sent by hand on 2026-10-13 to the owner's own address; the schedule and any other recipient are not decided.
 
 It is built on one requirement: it must never make a period look quieter than the saved scans show.
 
-- **Every scan in the period is read**, not only the first and last. What a tool could do at its most, and every reason to look at it, is reported even if it has gone by the latest scan. A tool poisoned on Wednesday and tidied up on Friday is reported as having been able to do more, with the reason marked "seen during the period and gone by the latest scan".
+- **Every scan in the period is read**, not only the first and last. Whatever was true of a tool at any scan is reported, even if it has gone by the latest one: what it could do at its most, free-form input, a spell as an unknown tool, a server withdrawing "can be undone", rewritten wording, changed labels, and every new reason to look at it. This holds for tools that were changed, added, removed, or that came and went. A tool poisoned on Wednesday and tidied up on Friday is reported as having been able to do more, with the reason marked "seen during the period and gone by the latest scan".
 - The series starts from the last scan before the period, when there is one, so a change at its edge is not missed.
-- **A period that was not properly watched is never called quiet.** A server with fewer than two scans to compare, a stretch of more than 36 hours without a scan, or a saved scan that could not be read is reported as "not fully covered", in the subject and beside the server, with the stretch named. "No difference" is said only of the scans that were read, and says which.
-- Changes are sorted by what a reader needs first: tools that could do more than at the start, tools that came and went, tools changed and put back, tools added (each with what it is counted as doing), tools removed, rewritten wording, changed labels, tools counted as doing less, and changes to inputs or outputs only. A tool that becomes unknown counts as doing more, and so does one whose server stops saying its changes can be undone.
-- Within each list the tools that most need a look come first, and a list is cut only past 500 entries, saying how many were left out.
+- **A period that was not properly watched is never called quiet.** A server with fewer than two scans to compare, a long stretch without a scan, or a saved scan that could not be read is "not fully covered", in the subject and beside the server, with the stretch named. A long stretch is 36 hours, or half the period when that is shorter. A folder that gives no scans for the period is in the subject too. "No difference" is said only of the scans that were read, and says which.
+- Nothing is said to have stayed the same unless the tool was listed at every scan and counted as doing the same thing at each.
+- Changes are sorted by what a reader needs first: tools that could do more than at the start, tools that came and went, tools changed and put back, tools added (each with what it is counted as doing), tools removed, rewritten wording, changed labels, tools counted as doing less, and changes to inputs or outputs only. A tool that becomes unknown counts as doing more. Wording or labels changed and then put back count as needing a look.
+- Within each list the tools that most need a look come first. Planted text and overruled labels are never cut from "worth a person's look". Other lists are cut past 500 entries, and the least important one (inputs or outputs only) past 12, each saying how many were left out.
+- A new reason to look is told apart by where it was found, so a second planted instruction in a tool that already had one is new. A tool that was already worth a look before the period is named, not explained again.
 - A rewritten description is reported as a fact and never shown. If the new wording trips a text check, or its first sentence says the tool now acts, that is raised in the scanner's own words.
-- It follows the plain-language report's rules: each tool is read the more serious way at every scan, nothing says a server is safe, and a server's words appear only as tool-name identifiers. Dots in names are written "[.]" and "@" in a source "[at]", so nothing becomes a link or an address in a mail reader.
+- It follows the plain-language report's rules: each tool is read the more serious way at every scan, nothing says a server is safe, and a server's words appear only as tool-name identifiers. In the digest, dots in names and in server addresses are written "[.]" and "@" is written "[at]", so a mail reader does not make them links.
 - With `--until` the period is whole days in UTC ending with that day. Flags are read strictly: a misspelt one is refused, not ignored.
 
 Limits:
 
 - A scan sees one moment. A change made and undone between two scans is not seen, however often scans run.
-- Only the first sentence of a description is read for what a tool does. A rewrite whose second sentence says "then deletes it" is reported as rewritten wording, with "what it is counted as doing did not change". The digest prints this limit.
+- Only the first sentence of a description is read for what a tool does. A rewrite whose second sentence says "then deletes it" is reported as rewritten wording. The digest prints this limit.
 - A new parameter, or a changed note on one, is reported under "inputs or outputs". The notes are checked for planted instructions and not for what they imply the tool does.
 - Low-severity wording notes are not carried into the digest.
 - Scans made with different logins look like changes.
-- "Needs a look" in the subject is decided by fixed rules (more reach at any scan, an added tool that acts or takes free-form input, a new concern, or a change that came and went), not by judgement.
-- Two scans with the same timestamp are taken in file-name order. Every saved scan in a folder is read each time, with no limit on how many.
+- "Needs a look" in the subject is decided by fixed rules, not by judgement.
+- A tool that came and went is described by the most serious state it was in, plus anything more it could do in another; the order of its states is not given.
+- Two scans with the same timestamp are taken in file-name order. Servers are told apart by their shown address in lower case, cut at 80 characters. Every saved scan in a folder is read each time, with no limit on how many.
+- A tool name made of ordinary characters is printed as it is, so a server can still choose a name that reads like a phrase. Names carrying a word of reassurance are flagged.
+- The subject says "weekly" whatever `--days` is.
 
 Tried on the two live GitHub scans (reported as not fully covered: they are four minutes apart) and on the two published GitHub releases relabelled as scans five days apart, nowhere else.
 
-Review: one independent review of the first draft found six ways it could understate a week, the main one being that a change made mid-week was invisible whenever the two ends differed. The digest was rewritten around reading every scan, and each of the six has a test. The rewrite has not been reviewed. It should be before a digest is sent to anyone.
+Review: two independent reviews. The first found six ways the first draft could understate a week, the main one being that a change made mid-week was invisible whenever the two ends differed; the digest was rewritten around reading every scan. The second confirmed those six closed for the cases named and found the same pattern surviving wherever something was still judged from the two ends only (reversibility, wording, labels, added and removed tools), plus concerns compared by their sentence and not their place, a gap rule that did not scale to a short period, folders that gave nothing leaving the subject quiet, and two sentences that could be false. Each is fixed with a test. That second round of fixes has not been reviewed.
 
 ## Signed-in servers
 
@@ -160,4 +165,4 @@ Invariant Labs' `mcp-scan` (now part of Snyk) already scans a developer's local 
 - `src/text.ts`: making untrusted text safe to print.
 - `src/report.ts`, `src/cli.ts`: the text report and the commands.
 - `ops/`: a daily scan for one machine: the script, its systemd timer and an installer to run yourself. It uses the `gh` login on that machine and logs one line of counts a day.
-- `test/`: 101 tests. None touches the network; one starts the command itself, in cases that stop before any request.
+- `test/`: 107 tests. None touches the network; one starts the command itself, in cases that stop before any request.
