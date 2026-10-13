@@ -1,0 +1,20 @@
+{
+  "name": "aethis-mcp-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lists what an MCP server lets an agent do, labels the risky tools, and reports what changed between two looks. It never calls a tool.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "scan": "node src/cli.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "typescript": "^6.0.3"
+  }
+}

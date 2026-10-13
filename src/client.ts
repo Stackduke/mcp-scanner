@@ -1,0 +1,126 @@
+import type { ToolDefinition } from "./types.ts";
+
+/**
+ * The smallest MCP client that can answer one question: what tools does this server offer?
+ *
+ * It speaks the Streamable HTTP transport, performs the handshake and asks for the tool list.
+ * It never calls a tool, sends no credentials, and treats everything it receives as data.
+ */
+export type ListToolsResult =
+  | { outcome: "listed"; server: { name?: string; version?: string }; tools: ToolDefinition[] }
+  /** The server wants a login before it will say anything (401 or 403). */
+  | { outcome: "sign-in-required"; status: number }
+  /** An answer arrived, but not one this client can use. */
+  | { outcome: "not-usable"; detail: string }
+  /** No answer: DNS, connection, TLS or timeout. */
+  | { outcome: "unreachable"; detail: string };
+
+export interface ListToolsOptions {
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  /** Stop after this many pages of tools, so a misbehaving server cannot hold the scan open. */
+  maxPages?: number;
+}
+
+const protocolVersion = "2025-06-18";
+const userAgent = "aethis-mcp-scanner/0.1 (+https://aethis.io)";
+const maxBodyBytes = 4_000_000;
+
+class ReplyTooLarge extends Error {}
+
+/** Reads a reply a piece at a time and stops at the limit, so a huge or endless body cannot fill memory. */
+async function readCapped(response: Response, limit: number): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "", received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    received += value.byteLength;
+    if (received > limit) { await reader.cancel().catch(() => undefined); throw new ReplyTooLarge(); }
+    text += decoder.decode(value, { stream: true });
+  }
+}
+
+interface RpcMessage { result?: Record<string, unknown>; error?: { code?: number; message?: string } }
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The JSON-RPC reply inside a plain JSON body or a server-sent event stream. */
+export function readRpcReply(contentType: string, body: string): RpcMessage | null {
+  const candidates: string[] = [];
+  if (contentType.includes("text/event-stream")) {
+    for (const line of body.split(/\r?\n/)) if (line.startsWith("data:")) candidates.push(line.slice(5).trim());
+  } else {
+    candidates.push(body);
+  }
+  for (const text of candidates) {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (isRecord(parsed) && (isRecord(parsed.result) || isRecord(parsed.error))) return parsed as RpcMessage;
+    } catch { /* not this one */ }
+  }
+  return null;
+}
+
+/** Keeps only what the protocol defines for a tool, and only when it has the right shape. */
+export function readTool(value: unknown): ToolDefinition | null {
+  if (!isRecord(value) || typeof value.name !== "string" || !value.name) return null;
+  const tool: ToolDefinition = { name: value.name };
+  if (typeof value.title === "string") tool.title = value.title;
+  if (typeof value.description === "string") tool.description = value.description;
+  if (value.inputSchema !== undefined) tool.inputSchema = value.inputSchema;
+  if (value.outputSchema !== undefined) tool.outputSchema = value.outputSchema;
+  if (isRecord(value.annotations)) tool.annotations = value.annotations;
+  return tool;
+}
+
+export async function listTools(url: string, { fetchImpl = fetch, timeoutMs = 15_000, maxPages = 50 }: ListToolsOptions = {}): Promise<ListToolsResult> {
+  let sessionId: string | null = null;
+
+  async function send(body: Record<string, unknown>): Promise<{ status: number; contentType: string; text: string }> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      "User-Agent": userAgent,
+      "MCP-Protocol-Version": protocolVersion,
+    };
+    if (sessionId) headers["Mcp-Session-Id"] = sessionId;
+    const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs), redirect: "error" });
+    sessionId = response.headers.get("Mcp-Session-Id") ?? sessionId;
+    const text = await readCapped(response, maxBodyBytes);
+    return { status: response.status, contentType: response.headers.get("Content-Type") ?? "", text };
+  }
+
+  try {
+    const hello = await send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion, capabilities: {}, clientInfo: { name: "aethis-mcp-scanner", version: "0.1" } } });
+    if (hello.status === 401 || hello.status === 403) return { outcome: "sign-in-required", status: hello.status };
+    if (hello.status < 200 || hello.status >= 300) return { outcome: "not-usable", detail: `initialize answered ${hello.status}` };
+    const initialized = readRpcReply(hello.contentType, hello.text);
+    if (!initialized?.result) return { outcome: "not-usable", detail: "initialize returned no result" };
+    const info = isRecord(initialized.result.serverInfo) ? initialized.result.serverInfo : {};
+    const server = { ...(typeof info.name === "string" ? { name: info.name } : {}), ...(typeof info.version === "string" ? { version: info.version } : {}) };
+
+    // The protocol asks for this notification before any request. Servers that do not need it ignore it.
+    await send({ jsonrpc: "2.0", method: "notifications/initialized" }).catch(() => undefined);
+
+    const tools: ToolDefinition[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < maxPages; page += 1) {
+      const answer = await send({ jsonrpc: "2.0", id: 2 + page, method: "tools/list", ...(cursor ? { params: { cursor } } : {}) });
+      if (answer.status === 401 || answer.status === 403) return { outcome: "sign-in-required", status: answer.status };
+      const reply = readRpcReply(answer.contentType, answer.text);
+      if (!reply?.result) return { outcome: "not-usable", detail: reply?.error?.message ? "tools/list was refused" : "tools/list returned no result" };
+      if (!Array.isArray(reply.result.tools)) return { outcome: "not-usable", detail: "tools/list returned no list of tools" };
+      for (const item of reply.result.tools) { const tool = readTool(item); if (tool) tools.push(tool); }
+      cursor = typeof reply.result.nextCursor === "string" && reply.result.nextCursor ? reply.result.nextCursor : undefined;
+      if (!cursor) return { outcome: "listed", server, tools };
+    }
+    // A list cut short would make the missing tools look removed in the next comparison.
+    return { outcome: "not-usable", detail: `the tool list did not end after ${maxPages} pages` };
+  } catch (error) {
+    if (error instanceof ReplyTooLarge) return { outcome: "not-usable", detail: "a reply was larger than this scanner accepts" };
+    return { outcome: "unreachable", detail: error instanceof Error ? error.name : "unknown" };
+  }
+}
