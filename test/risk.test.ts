@@ -64,3 +64,9 @@ test("a free-form target is marked broad, from the name or a parameter", () => {
   assert.equal(labelTool({ name: "run", inputSchema: { type: "object", properties: { command: { type: "string" } } } }).broad, true);
   assert.equal(labelTool({ name: "search_code", inputSchema: { type: "object", properties: { query: { type: "string" } } } }).broad, undefined);
 });
+
+test("moving money is read off a money word beside an action, not off a bare banking verb", () => {
+  const money = (name: string) => labelTool({ name }).classes.includes("money");
+  for (const name of ["send_money", "create_transaction", "void_transaction", "settle_transaction", "settle_up", "capture_payment", "void_invoice"]) assert.ok(money(name), name);
+  for (const name of ["void_envelope", "capture_screenshot", "list_transactions"]) assert.ok(!money(name), name);
+});

@@ -20,7 +20,7 @@ const verbs: Record<Kind, string[]> = {
   write: ["create", "update", "edit", "set", "add", "write", "insert", "upsert", "modify", "patch", "put", "upload", "deploy", "run", "execute", "exec", "merge", "push", "commit", "move", "rename", "enable", "disable", "start", "stop", "restart", "assign", "approve", "reject", "close", "reopen", "import", "apply", "trigger", "schedule", "book", "cancel", "archive", "post", "submit", "save", "register", "sync", "mark", "pin", "star", "fork", "lock", "unlock", "attach", "link", "unlink", "transfer", "grant", "rotate", "configure", "install", "restore", "rollback", "comment", "label", "dismiss", "store", "remember", "record", "log", "track", "subscribe", "unsubscribe", "rerun", "retry", "pause", "resume", "release", "request", "manage", "toggle", "change", "replace", "copy", "clone", "duplicate", "provision", "launch", "invoke", "call", "place", "open", "accept", "decline", "complete", "claim", "hide", "unhide", "unresolve", "mute", "unmute", "follow", "unfollow", "block", "unblock", "ban", "flag", "vote", "react", "bookmark", "pay", "buy", "purchase", "refund", "charge", "withdraw", "deposit", "donate", "fund", "checkout", "swap", "trade", "bid", "tip", "redeem", "mint", "burn", "stake", "sign", "authorize", "authorise", "impersonate", "seed", "migrate", "scale", "overwrite", "append", "populate", "initialize", "initialise", "init", "bootstrap", "build", "compile", "format", "rebase", "revert", "tag", "untag", "enqueue", "queue", "dispatch", "emit", "fire", "issue", "void", "settle", "capture", "reverse", "allocate", "reserve", "consume", "ingest", "index", "reindex", "train", "finetune", "evict", "flush", "drain", "detach", "disconnect", "connect", "join", "leave", "kick", "promote", "demote", "elevate", "escalate", "suspend", "activate", "expire", "extend", "renew"],
   read: ["get", "list", "read", "search", "fetch", "find", "query", "lookup", "describe", "show", "view", "check", "retrieve", "count", "export", "download", "inspect", "status", "validate", "analyze", "analyse", "summarize", "summarise", "explain", "compare", "browse", "ask", "watch", "monitor", "preview", "calculate", "estimate", "verify", "test", "ping", "whoami", "info", "detect", "diff", "trace", "explore", "discover", "scan", "audit", "review", "recommend", "suggest", "translate", "extract", "parse", "predict", "score", "rank", "match", "locate", "select", "load", "return", "display"],
 };
-const moneyWords = ["pay", "payment", "refund", "charge", "payout", "invoice", "purchase", "buy", "checkout", "withdraw", "withdrawal", "deposit", "transfer", "fund", "bounty", "billing", "subscription", "order", "price", "wallet", "swap", "trade", "bid", "tip", "donate", "donation", "credit", "coupon", "balance", "funds", "settle", "capture", "void", "mint", "stake"];
+const moneyWords = ["pay", "payment", "refund", "charge", "payout", "invoice", "purchase", "buy", "checkout", "withdraw", "withdrawal", "deposit", "transfer", "fund", "bounty", "billing", "subscription", "order", "price", "wallet", "swap", "trade", "bid", "tip", "donate", "donation", "credit", "coupon", "balance", "funds", "money", "transaction", "settle", "settlement", "mint", "stake"];
 const broadWords = ["sql", "shell", "bash", "command", "cmd", "exec", "execute", "eval", "script", "graphql", "raw", "arbitrary", "cypher", "terminal", "powershell"];
 const broadProperties = ["sql", "command", "cmd", "script", "cypher", "graphql", "shell", "statement"];
 
@@ -53,6 +53,11 @@ const kindOf = (token: string): Kind | null => {
   for (const kind of ["destructive", "send", "write", "read"] as const) if (isIn(token, verbs[kind])) return kind;
   return null;
 };
+
+/** What kind of action a single word names, if it names one. */
+export const actionKind = (token: string): CapabilityClass | null => kindOf(token);
+/** Words that are verbs at the start of a name and usually nouns elsewhere: "issue", "request", "comment". */
+export const isNounLike = (token: string): boolean => isIn(token, nounLike);
 
 function propertyNames(schema: unknown): string[] {
   if (typeof schema !== "object" || schema === null) return [];
@@ -100,6 +105,13 @@ export function nameSuggests(tool: ToolDefinition): CapabilityClass[] {
   return fromWords(words(tool.name)).classes;
 }
 
+/** The first sentence of a description, as words: where the verb usually is. */
+const openingWords = (tool: ToolDefinition) => words((tool.description ?? "").split(/[.\n]/)[0] ?? "").slice(0, 24);
+/** What the opening of the description suggests. The server writes it, so it is evidence of action and never of harmlessness. */
+export function descriptionSuggests(tool: ToolDefinition): CapabilityClass[] {
+  return fromWords(openingWords(tool)).classes;
+}
+
 export function labelTool(tool: ToolDefinition): CapabilityLabel {
   const nameTokens = words(tool.name);
   const annotations = tool.annotations ?? {};
@@ -128,8 +140,7 @@ export function labelTool(tool: ToolDefinition): CapabilityLabel {
   if (byName.classes.length) return withBroad({ ...byName, source: "aethis_heuristic" });
 
   // Nothing in the name: try the first sentence of the description, where the verb usually is.
-  const opening = words((tool.description ?? "").split(/[.\n]/)[0] ?? "").slice(0, 24);
-  const byDescription = fromWords(opening);
+  const byDescription = fromWords(openingWords(tool));
   if (byDescription.classes.length) return withBroad({ ...byDescription, source: "aethis_heuristic", basis: byDescription.basis.map((word) => `${word} in the description`) });
 
   return withBroad({ classes: [], source: "unclassified", basis: [] });

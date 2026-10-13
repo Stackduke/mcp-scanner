@@ -27,6 +27,7 @@ const textRules: TextRule[] = [
   { rule: "encoded-content", severity: "medium", reason: "Contains a long run of encoded text a person cannot read.", pattern: /\b[A-Za-z0-9+/]{160,}={0,2}/ },
 ];
 
+const actWords: Record<string, string> = { write: "change things", send: "send things to other people", money: "move money", destructive: "delete or destroy things" };
 const longDescription = 4_000;
 const deepestSchema = 40;
 
@@ -89,7 +90,7 @@ export function findInTool(tool: ToolDefinition): Finding[] {
   const suggested = nameSuggests(tool);
   const acts = suggested.filter((kind) => kind !== "read");
   if (tool.annotations?.readOnlyHint === true && acts.length) {
-    findings.push({ rule: "annotation-mismatch", severity: "medium", where: "annotations.readOnlyHint", reason: `The server marks this tool read-only, but its name suggests it can ${acts.join(", ")}.`, excerpt: printable(tool.name, 120) });
+    findings.push({ rule: "annotation-mismatch", severity: "medium", where: "annotations.readOnlyHint", reason: `The server marks this tool read-only, but its name suggests it can ${acts.map((kind) => actWords[kind]).join(" and ")}.`, excerpt: printable(tool.name, 120) });
   } else if (tool.annotations?.destructiveHint === false && suggested.includes("destructive")) {
     findings.push({ rule: "annotation-mismatch", severity: "medium", where: "annotations.destructiveHint", reason: "The server marks this tool as not destructive, but its name suggests it deletes or removes something.", excerpt: printable(tool.name, 120) });
   }

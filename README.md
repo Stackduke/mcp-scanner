@@ -10,6 +10,7 @@ It is a prototype for the observation side of Aethis. It is not connected to the
 - **Labels each tool** in the console's vocabulary: Read, Write, Send, Money, Destructive, and "broad" for a free-form target such as SQL or a shell command. A label comes from the server's own annotations when it gives them, and otherwise is a guess from the words in the tool's name, or failing that the first sentence of its description. The report marks every guess and shows the words it rests on. The guess leans one way on purpose: a word that says the tool changes something outranks a word that says it reads.
 - **Checks the text a model would read** (names, descriptions, titles and every string in the input and output schemas) for signs of tool poisoning: instructions aimed at the model, invisible characters, pointers at credential stores, requests to send data elsewhere, and a tool whose annotations contradict its name.
 - **Compares two snapshots**: tools added, removed and changed; for each changed field, whether it appeared, disappeared or was rewritten; capabilities that widened; rewritten descriptions shown before and after; and new text findings.
+- **Says what a server lets an agent do, in plain words**, for a reader who is not an engineer. See "The plain-language report" below.
 - **Reads a project's published definitions at a tag**, for projects that keep them as files, so a release history can be compared without running the server or signing in.
 
 ## What it does not do
@@ -33,11 +34,50 @@ npm run scan -- scan https://huggingface.co/mcp
 npm run scan -- scan https://huggingface.co/mcp --save
 AETHIS_SCAN_GITHUB_TOKEN=$(gh auth token) node src/cli.ts signed-in github --save
 npm run scan -- diff data/snapshots/<a>.json data/snapshots/<b>.json
+npm run scan -- authority data/snapshots/<a>.json [more.json ...]
 npm run scan -- history github/github-mcp-server v1.14.0 v2.0.0
 npm run check
 ```
 
 `--save` writes the snapshot under `data/snapshots/<source>/`, which is ignored by git. `scan` sends no credential. `history` makes one request to GitHub's API per tag, unauthenticated unless `GITHUB_TOKEN` is set, in which case the token goes to `api.github.com` only.
+
+## The plain-language report
+
+Added on 2026-10-13. `authority` takes one or more saved snapshots and says what an agent connected to those servers can do: what it can read, change, send, spend and do irreversibly, most serious first, then what a misled or taken-over agent could do through the server, then how far to trust the report.
+
+It is built on one requirement: it must never reassure wrongly. Two rules follow.
+
+**It reads every tool the more serious way.**
+
+- Where the server's label, a tool's name and its description disagree, the report goes with whichever says most, and lists the tool under "Worth a person's look" with the reason. A tool named `delete_account` that its server marks read-only is counted as destructive.
+- A description, which the server writes, counts as evidence that a tool acts and never that it is harmless. A tool whose only sign of being harmless is its description is listed as unknown.
+- A tool nobody can label is unknown and treated as able to change things. So is a tool whose name has unusual characters, or one of nine serious words such as "delete" run together with other letters, even when the server marks it read-only.
+- A tool the server marks read-only whose name has no word the report understands (`paybill`, `supprimer_compte`) stays in the read list, because nothing contradicts the server, but it is starred and listed first, with a line saying it is there on the server's word alone.
+- A change is called reversible only when a server that plainly says the tool writes also says it is not destructive, the report did not overrule that server on the same tool, and the tool neither sends nor moves money.
+
+**It never says what a server cannot do.** A missing label proves nothing, so the report lists what it found and stops. Tools that only read are listed by name under "Said to only read", as the server's or the name's claim, with a line saying nobody has tested it.
+
+Other points:
+
+- A tool is listed under the most serious thing it does and counted under everything it does. Tools whose label was overruled come first in every list, and each has its own line under "Worth a person's look" however many lesser notes there are. Lists are cut only past 500 entries, and say so.
+- The section on what a misled or taken-over agent could do always includes handing the server's operator anything the agent knows, because what goes into any tool, even one that only reads, is sent to the server.
+- Every sentence is written by the scanner, and no model is involved. A server's descriptions and titles are never quoted. Tool names appear only as identifiers, underscores kept, cut to the characters tool names normally have and never in a form a terminal turns into a link. An earlier draft turned names into words ("kinds of thing: pull request, file"); that let a server put a sentence of its own into the report, so it was removed. The report is headed by the address that was scanned; the name a server gives itself appears once, in quotes, and not at all if it carries a word of reassurance such as "safe", "verified" or "official".
+- "Moves money" and "sends" are never the server's own statement, because the protocol gives it no way to make one. They are read off names and descriptions, and the report says so.
+- With several snapshots it opens with what an agent connected to all of them can do. That is the nearest this prototype gets to a per-agent report: it knows servers, not agents.
+- It describes what a server offers. It knows nothing of a policy, of the account behind the connection, or of what a tool does when called, and says so.
+
+Limits:
+
+- Names are read as English words split at underscores, hyphens and capitals. `rm_user`, `supprimer_compte` or `sendmoney` are not understood. A word that is usually a thing ("commit", "refund", "release") counts as an action only at the start of a name, so `get_refund_transfer` reads as a reader. The report prints this limit, and lists the "only reads" tools by name so that a person can catch what the word lists miss.
+- A server chooses its tool names. One that names a tool `verified_safe_by_aethis` gets that name printed, as an identifier, with a note that it carries a word of reassurance.
+- Reading the more serious way costs false alarms. On the live GitHub snapshot `run_secret_scanning` is listed as changing things because of the word "run", against the server's read-only mark. On 244 real tools (the live GitHub list and the 22 open servers; those 22 lists were not saved in this repository, so this figure cannot be re-run from it), a description added an action to 7, and at least two of those were wrong.
+- `capture_authorization` and `void_authorization` are not read as money: "capture" and "void" were dropped as money words because they also made `capture_screenshot` and `void_envelope` look like payments.
+- Where a server says a change is not destructive, the report gives no undo warning for that tool and says that this rests on the server's word.
+- Free-form input is spotted by a short list of words ("sql", "command", "script"). A tool taking `code` or `expression` is not caught.
+- A live scan keeps only the first definition when a server lists one name twice (`src/snapshot.ts`). The report keeps repeats when it reads a file, so this gap is in scanning, not in reporting.
+- Tried on the live GitHub snapshot and the 22 open servers from the first look, nowhere else.
+
+Review: three independent reviews, the third on a stronger model because the first two kept finding problems. The first found five ways the draft could understate a server and one way a server's name could write into it. The second found those fixes incomplete, including a sentence listing what a server could not do; that sentence is gone. The third judged that the labelling rules now hold for names and descriptions the word lists understand, and found four things to fix before anyone outside the team reads a report: the "kinds of thing" line as a channel for a server's own words, link-like tool names, the missing warning that every tool hands its input to the server's operator, and two list limits that contradicted this README. All four are fixed, each with a test. Those last fixes have not been reviewed.
 
 ## Signed-in servers
 
@@ -82,10 +122,11 @@ Invariant Labs' `mcp-scan` (now part of Snyk) already scans a developer's local 
 - `src/client.ts`: the handshake and the tool list.
 - `src/snapshot.ts`, `src/diff.ts`: fingerprints, snapshots and the comparison.
 - `src/risk.ts`: capability labels.
+- `src/authority.ts`: the plain-language report.
 - `src/findings.ts`: the text checks.
 - `src/sources/github-snapshots.ts`: definitions a repository publishes as files.
 - `src/signed-in.ts`: the servers a token may be sent to, the check a token must pass, and the one function that sends it.
 - `src/text.ts`: making untrusted text safe to print.
 - `src/report.ts`, `src/cli.ts`: the text report and the commands.
 - `ops/`: a daily scan for one machine: the script, its systemd timer and an installer to run yourself. It uses the `gh` login on that machine and logs one line of counts a day.
-- `test/`: 62 tests. None touches the network; one starts the command itself, in cases that stop before any request.
+- `test/`: 85 tests. None touches the network; one starts the command itself, in cases that stop before any request.

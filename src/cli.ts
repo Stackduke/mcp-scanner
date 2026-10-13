@@ -1,16 +1,18 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { listTools } from "./client.ts";
+import { authorityOf, describeAuthority } from "./authority.ts";
+import { listTools, readTool } from "./client.ts";
 import { diffSnapshots } from "./diff.ts";
 import { describeDiff, describeSnapshot } from "./report.ts";
 import { scanSignedIn, signedInServers } from "./signed-in.ts";
 import { takeSnapshot } from "./snapshot.ts";
 import { snapshotFromRepository } from "./sources/github-snapshots.ts";
-import type { Snapshot } from "./types.ts";
+import type { Snapshot, ToolDefinition } from "./types.ts";
 
 const usage = `Usage:
   npm run scan -- scan <https-url> [--save]         List a server's tools, label them, and check their text.
   npm run scan -- signed-in <name> [--save]         The same, for a server that wants a sign-in (${Object.keys(signedInServers).join(", ")}).
+  npm run scan -- authority <snapshot.json>...      What an agent can do through these servers, in plain words.
   npm run scan -- diff <before.json> <after.json>   Compare two saved snapshots.
   npm run scan -- history <owner/repo> <from> <to>  Compare tool definitions a repository publishes at two tags.
 
@@ -26,6 +28,31 @@ async function save(snapshot: Snapshot): Promise<string> {
   const file = path.join(directory, `${snapshot.takenAt.replace(/[:.]/g, "-")}.json`);
   await writeFile(file, `${JSON.stringify(snapshot, null, 2)}\n`);
   return file;
+}
+
+/** A saved snapshot read back with nothing taken on trust: the file may have been made by hand. */
+async function readSnapshot(file: string): Promise<Snapshot | null> {
+  let parsed: unknown;
+  try { parsed = JSON.parse(await readFile(file, "utf8")); } catch { return null; }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const { source, takenAt, server, tools } = parsed as Record<string, unknown>;
+  if (typeof source !== "string" || typeof takenAt !== "string" || !Array.isArray(tools)) return null;
+  const seen = new Map<string, number>();
+  const read = tools.map((tool) => {
+    const definition = readTool(tool);
+    if (!definition) return null;
+    const given = (tool as { variant?: unknown }).variant;
+    // A source may give several definitions of one tool, as named variants or by repeating the name.
+    // Each is kept, because the serious one may not be the first.
+    const base = typeof given === "string" && given ? `${definition.name}#${given}` : definition.name;
+    const times = (seen.get(base) ?? 0) + 1;
+    seen.set(base, times);
+    const variant = [typeof given === "string" ? given : "", times > 1 ? `repeat-${times}` : ""].filter(Boolean).join("-");
+    return variant ? { ...definition, variant } : definition;
+  });
+  if (read.some((tool) => tool === null)) return null;
+  const name = typeof server === "object" && server !== null ? (server as { name?: unknown }).name : undefined;
+  return takeSnapshot(source, read as Array<ToolDefinition & { variant?: string }>, typeof name === "string" ? { name } : undefined, takenAt);
 }
 
 async function main(argv: string[]): Promise<number> {
@@ -63,6 +90,13 @@ async function main(argv: string[]): Promise<number> {
     console.log(describeSnapshot(snapshot));
     console.log("\nThis is the list this token is allowed to see. Another account, or a token with other permissions, may be shown more or fewer tools.");
     if (flags.has("--save")) console.log(`\nSaved to ${await save(snapshot)}`);
+    return 0;
+  }
+
+  if (command === "authority" && args[0]) {
+    const snapshots = await Promise.all(args.map(readSnapshot));
+    if (snapshots.some((snapshot) => snapshot === null)) { console.error("One of those files is not a saved snapshot."); return 2; }
+    console.log(describeAuthority((snapshots as Snapshot[]).map(authorityOf)));
     return 0;
   }
 
