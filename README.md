@@ -87,4 +87,5 @@ Invariant Labs' `mcp-scan` (now part of Snyk) already scans a developer's local 
 - `src/signed-in.ts`: the servers a token may be sent to, the check a token must pass, and the one function that sends it.
 - `src/text.ts`: making untrusted text safe to print.
 - `src/report.ts`, `src/cli.ts`: the text report and the commands.
-- `test/`: 56 tests, none of which touch the network.
+- `ops/`: a daily scan for one machine: the script, its systemd timer and an installer to run yourself. It uses the `gh` login on that machine and logs one line of counts a day.
+- `test/`: 62 tests. None touches the network; one starts the command itself, in cases that stop before any request.

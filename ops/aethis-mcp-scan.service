@@ -1,0 +1,6 @@
+[Unit]
+Description=Daily look at GitHub's hosted MCP server for the Aethis tool-change tracker
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/aethis-mcp-scan
