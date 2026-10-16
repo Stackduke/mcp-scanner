@@ -264,3 +264,17 @@ test("the feed stays small however many servers change, and says how many it lef
   assert.ok(feed.changes.every((change) => change.added.length <= 10 && change.changed.length <= 10));
   assert.ok(JSON.stringify(feed).length < 1_100_000);
 });
+
+test("a run whose checks stall still finishes and writes its files", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
+  const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
+    if (String(input).startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: [{ server: { name: "com.example/stalls", remotes: [{ type: "streamable-http", url: "https://stalls.example.com/mcp" }] } }], metadata: {} });
+    // A reply that never comes, cancelled only by the request's own abort signal, as a stalled server behaves.
+    return new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
+  }) as typeof fetch;
+  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, checkTimeoutMs: 50, environment: {}, fetchImpl });
+  assert.equal(summary.checked, 1);
+  const [line] = (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n");
+  assert.equal((JSON.parse(line ?? "{}") as Endpoint).outcome, "unreachable");
+  assert.ok((await readdir(dataDir)).includes("feed.json"));
+});

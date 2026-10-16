@@ -33,6 +33,8 @@ export interface TrackOptions {
   hostGapMs: number;
   /** Minutes after which no new check starts. */
   budgetMinutes: number;
+  /** The longest one check may take, all its requests together. Default 60 seconds. */
+  checkTimeoutMs?: number;
   environment: Record<string, string | undefined>;
   fetchImpl?: typeof fetch;
   now?: () => Date;
@@ -60,6 +62,18 @@ async function readJson<T>(file: string): Promise<T | null> {
 
 /** The full definitions of a server watched with a login, rewritten when they change. */
 const watchedFile = (vendor: string) => `watched/${vendor}.json`;
+
+/**
+ * A check that has not finished in time counts as unreachable. Node does not wait for the request
+ * timeouts alone (they do not keep it running), so without this ordinary timer a run whose checks
+ * had all stalled would simply end, silently, before writing anything.
+ */
+async function withinTime(check: Promise<CheckResult>, ms: number): Promise<CheckResult> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<CheckResult>((resolve) => { timer = setTimeout(() => resolve({ outcome: "unreachable", detail: "TimeoutError" }), ms); });
+  try { return await Promise.race([check.catch((): CheckResult => ({ outcome: "unreachable", detail: "error" })), late]); }
+  finally { clearTimeout(timer); }
+}
 
 const byId = (a: Endpoint, b: Endpoint) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
@@ -125,9 +139,7 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   const deadline = Date.parse(startedAt) + options.budgetMinutes * 60_000;
   const { done, notStarted } = await crawl(plan, async (endpoint) => {
     const at = clock().toISOString();
-    let result: CheckResult;
-    try { result = await listTools(endpoint.url, { ...(fetchImpl ? { fetchImpl } : {}), timeoutMs: 15_000 }); }
-    catch { result = { outcome: "unreachable", detail: "error" }; }
+    const result = await withinTime(listTools(endpoint.url, { ...(fetchImpl ? { fetchImpl } : {}), timeoutMs: 15_000 }), options.checkTimeoutMs ?? 60_000);
     await record(endpoint, result, at);
     return endpoint.outcome;
   }, { concurrency: options.concurrency, hostGapMs: options.hostGapMs, deadline, now: () => clock().getTime() });

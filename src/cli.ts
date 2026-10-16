@@ -200,4 +200,14 @@ async function main(argv: string[]): Promise<number> {
   return command ? 2 : 0;
 }
 
-main(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (error: unknown) => { console.error(error instanceof Error ? error.message : "The scan failed."); process.exitCode = 1; });
+let finished = false;
+// Node ends quietly when nothing is left that it waits for. A command that ends that way did not finish, and must not look as if it did.
+process.on("beforeExit", () => { if (!finished) { console.error("The command stopped before it finished."); process.exitCode = 1; finished = true; } });
+main(process.argv.slice(2)).then(
+  (code) => { process.exitCode = code; },
+  (error: unknown) => { console.error(error instanceof Error ? error.message : "The scan failed."); process.exitCode = 1; },
+).finally(() => {
+  finished = true;
+  // An abandoned request may hold a connection open; the work is done, so do not wait for it.
+  setTimeout(() => process.exit(), 5_000).unref();
+});
