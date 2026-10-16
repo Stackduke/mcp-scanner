@@ -3,3 +3,4 @@ data/snapshots/
 .env
 .env.*
 *.log
+tracker-data/

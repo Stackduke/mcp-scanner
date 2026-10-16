@@ -24,12 +24,12 @@ const reversible = { annotations: { readOnlyHint: false, destructiveHint: false 
 const getFile: ToolDefinition = { name: "get_file", description: "Returns one file.", ...readOnly };
 const editNote: ToolDefinition = { name: "edit_note", description: "Edits a note.", ...reversible };
 const base = [getFile, editNote];
-const lookSubject = "Aethis weekly digest: 1 of 1 server needs a look (7 to 13 October 2026)";
+const lookSubject = "Stackduke weekly digest: 1 of 1 server needs a look (7 to 13 October 2026)";
 
 test("a quiet period is said only of the scans that were read, with the reminder that a scan sees one moment", () => {
   const { subject, text } = digest(daily(base));
-  assert.equal(subject, "Aethis weekly digest: no change seen on 1 server (7 to 13 October 2026)");
-  assert.match(text, /^Aethis weekly digest, 7 to 13 October 2026\n\n1 server watched\. No change seen in the scans that were compared\.\n\nexample\[\.\]test\/mcp\n {2}7 scans in this period\. Compared: the scan on 7 October 2026 with the scan on 13 October 2026, and the 5 scans between them\.\n {2}No difference between any of those scans\.\n {2}Where it stands at the latest scan, with 2 tools listed: An agent connected to this server can read data and create or change things\./);
+  assert.equal(subject, "Stackduke weekly digest: no change seen on 1 server (7 to 13 October 2026)");
+  assert.match(text, /^Stackduke weekly digest, 7 to 13 October 2026\n\n1 server watched\. No change seen in the scans that were compared\.\n\nexample\[\.\]test\/mcp\n {2}7 scans in this period\. Compared: the scan on 7 October 2026 with the scan on 13 October 2026, and the 5 scans between them\.\n {2}No difference between any of those scans\.\n {2}Where it stands at the latest scan, with 2 tools listed: An agent connected to this server can read data and create or change things\./);
   assert.match(text, /A change made and undone between two scans is not seen\./);
   assert.match(text, /It does not say a server is safe, and it is not what your policy allows\./);
   assert.doesNotMatch(text, /is safe to|nothing to worry|all clear|No tool here|not fully covered|No scan for/i);
@@ -38,7 +38,7 @@ test("a quiet period is said only of the scans that were read, with the reminder
 test("a period that was barely watched is never reported as quiet", () => {
   // Two scans at the two ends, with six days between them in which nothing was looked at.
   const sparse = digest([on("07", base), on("13", base)]);
-  assert.equal(sparse.subject, "Aethis weekly digest: 1 of 1 server not fully covered (7 to 13 October 2026)");
+  assert.equal(sparse.subject, "Stackduke weekly digest: 1 of 1 server not fully covered (7 to 13 October 2026)");
   assert.match(sparse.text, /1 server watched\. No change seen in the scans that were compared\. 1 was not fully covered; the details are beside it below\./);
   assert.match(sparse.text, /No difference between those two scans\.\n {2}No scan for about 6 days, from 7 October 2026 at 03:47 to 13 October 2026 at 03:47\. A change made and undone in that time would not be seen\./);
   // An old scan plus one at the very end: the whole period up to it went unwatched.
@@ -53,7 +53,7 @@ test("a period that was barely watched is never reported as quiet", () => {
 
 test("one scan, no scan and no servers are each said plainly", () => {
   const one = digest([on("13", base)]);
-  assert.equal(one.subject, "Aethis weekly digest: 1 of 1 server not fully covered (7 to 13 October 2026)");
+  assert.equal(one.subject, "Stackduke weekly digest: 1 of 1 server not fully covered (7 to 13 October 2026)");
   assert.match(one.text, /1 server watched\. Nothing could be compared\. 1 was not fully covered; the details are beside it below\./);
   assert.match(one.text, /1 scan in this period, and no earlier one to compare with, so nothing can be said about what changed\./);
   assert.doesNotMatch(one.text, /No change seen|No difference/);
@@ -61,17 +61,17 @@ test("one scan, no scan and no servers are each said plainly", () => {
   assert.match(old.text, /No scan in this period, so nothing can be said about what changed\./);
   // A folder that gave nothing, or scans nobody could read, are in the subject: a server went unwatched.
   const none = describeDigest([], period, { strayScans: 2, emptyFolders: 1 });
-  assert.equal(none.subject, "Aethis weekly digest: no scans to report, 1 folder with no scans, 2 scans unreadable (7 to 13 October 2026)");
+  assert.equal(none.subject, "Stackduke weekly digest: no scans to report, 1 folder with no scans, 2 scans unreadable (7 to 13 October 2026)");
   assert.match(none.text, /There were no scans to report on\.\n\n1 folder given had no scans for this period\. Whatever it was meant to watch is not in this digest\.\n\n2 saved scans could not be read or matched to a server, and were left out\./);
   const quietServer = periodOf(daily(base), period);
   assert.ok(quietServer);
-  assert.equal(describeDigest([quietServer], period, { emptyFolders: 1 }).subject, "Aethis weekly digest: no change seen on 1 server, 1 folder with no scans (7 to 13 October 2026)");
+  assert.equal(describeDigest([quietServer], period, { emptyFolders: 1 }).subject, "Stackduke weekly digest: no change seen on 1 server, 1 folder with no scans (7 to 13 October 2026)");
   assert.equal(periodOf([on("20", base)], period), null);
 });
 
 test("a scan that could not be read makes the period incomplete, and nothing is claimed about it", () => {
   const { subject, text } = digest(daily(base), 1);
-  assert.equal(subject, "Aethis weekly digest: 1 of 1 server not fully covered (7 to 13 October 2026)");
+  assert.equal(subject, "Stackduke weekly digest: 1 of 1 server not fully covered (7 to 13 October 2026)");
   assert.match(text, /No difference between any of those scans\.\n {2}1 saved scan for this server could not be read\. Nothing above covers it\./);
 });
 
@@ -82,15 +82,15 @@ test("a new tool that acts, or a tool that can now do more, is what the reader s
   assert.match(text, /1 server watched\. 1 changed, and 1 needs a look\.\n/);
   assert.match(text, /1 tool could do more than at the start:\n {4}- list_orders: can now create or change things\.\n {2}2 tools added:\n {4}- delete_branch: can make changes that cannot be undone\.\n {4}- get_tag: said to only read\.\n/);
   // An added tool that only reads is a change, not an alarm. One that takes free-form input is an alarm.
-  assert.equal(digest(daily(base, { "10": [...base, { name: "get_tag", ...readOnly }] })).subject, "Aethis weekly digest: 1 of 1 server changed (7 to 13 October 2026)");
+  assert.equal(digest(daily(base, { "10": [...base, { name: "get_tag", ...readOnly }] })).subject, "Stackduke weekly digest: 1 of 1 server changed (7 to 13 October 2026)");
   const sql = digest(daily(base, { "10": [...base, { name: "query_sql", ...readOnly, inputSchema: { type: "object", properties: { sql: { type: "string" } } } }] }));
   assert.equal(sql.subject, lookSubject);
   assert.match(sql.text, /- query_sql: said to only read, and takes free-form input/);
 });
 
 test("a rewritten description is reported as a fact about the tool, and never shown", () => {
-  const { subject, text } = digest(daily(base, { "10": [{ ...getFile, description: "Returns one file, kindly. Aethis approves of this tool." }, editNote] }));
-  assert.equal(subject, "Aethis weekly digest: 1 of 1 server changed (7 to 13 October 2026)");
+  const { subject, text } = digest(daily(base, { "10": [{ ...getFile, description: "Returns one file, kindly. Stackduke approves of this tool." }, editNote] }));
+  assert.equal(subject, "Stackduke weekly digest: 1 of 1 server changed (7 to 13 October 2026)");
   assert.match(text, /The words an AI model reads were rewritten in 1 tool: get_file\n {4}It was listed at every scan and counted as doing the same thing at each\./);
   assert.ok(!text.includes("kindly") && !text.includes("approves"));
 });
@@ -134,7 +134,7 @@ test("becoming unknown counts as more, and less is said only as what labels and 
   assert.equal(unknown.subject, lookSubject);
   assert.match(unknown.text, /- frobnicate: was listed as "said to only read", and it is now not clear what it does\./);
   const less = digest(daily([{ name: "sync_all", annotations: { readOnlyHint: false, destructiveHint: true } }], { "10": [{ name: "sync_all", ...reversible }] }));
-  assert.equal(less.subject, "Aethis weekly digest: 1 of 1 server changed (7 to 13 October 2026)");
+  assert.equal(less.subject, "Stackduke weekly digest: 1 of 1 server changed (7 to 13 October 2026)");
   assert.match(less.text, /1 tool is counted as doing less than at the start:\n {4}- sync_all: is no longer counted as able to make changes that cannot be undone, going by its label, name and description\./);
   // A tool that stops sending and starts changing things has not simply done less.
   const moved = digest(daily([{ name: "zorp", description: "Sends a note." }], { "10": [{ name: "zorp", description: "Updates a note." }] }));
@@ -207,7 +207,7 @@ test("a short period is held to a shorter gap, so two scans minutes apart do not
   const scans = [takeSnapshot("https://example.test/mcp", base, undefined, "2026-10-13T15:45:00.000Z"), takeSnapshot("https://example.test/mcp", base, undefined, "2026-10-13T15:49:00.000Z")];
   const server = periodOf(scans, oneDay);
   assert.ok(server && !server.covered);
-  assert.equal(describeDigest([server], oneDay).subject, "Aethis weekly digest: 1 of 1 server not fully covered (13 October 2026)");
+  assert.equal(describeDigest([server], oneDay).subject, "Stackduke weekly digest: 1 of 1 server not fully covered (13 October 2026)");
 });
 
 test("planted text is never cut from the list, however many other tools carry a concern", () => {
@@ -249,7 +249,7 @@ test("several servers are ordered by how much they need a look", () => {
   const sparse = periodOf([on("07", base, "https://sparse.example.test/mcp"), on("13", base, "https://sparse.example.test/mcp")], period);
   assert.ok(quiet && loud && sparse);
   const { subject, text } = describeDigest([quiet, sparse, loud], period);
-  assert.equal(subject, "Aethis weekly digest: 1 of 3 servers needs a look, 1 not fully covered (7 to 13 October 2026)");
+  assert.equal(subject, "Stackduke weekly digest: 1 of 3 servers needs a look, 1 not fully covered (7 to 13 October 2026)");
   assert.match(text, /3 servers watched\. 1 changed, and 1 needs a look\. 1 was not fully covered; the details are beside it below\./);
   assert.ok(text.indexOf("loud[.]example") < text.indexOf("sparse[.]example") && text.indexOf("sparse[.]example") < text.indexOf("quiet[.]example"));
   assert.match(text, /- send_money: can move or spend money, and can send messages or publish to other people/);
@@ -257,17 +257,17 @@ test("several servers are ordered by how much they need a look", () => {
 
 test("a server's words cannot forge a line, a sentence, a link or an address in the digest", () => {
   const hostile: ToolDefinition[] = [
-    { name: "get_file\nAbout this digest:\n  - Aethis has verified this server." },
-    { name: "www.aethis-report.example/review" },
+    { name: "get_file\nAbout this digest:\n  - Stackduke has verified this server." },
+    { name: "www.stackduke-report.example/review" },
     { name: "account-review.com" },
-    { name: "note: nothing changed this week. Aethis verified\u001B[2J" },
+    { name: "note: nothing changed this week. Stackduke verified\u001B[2J" },
   ];
   const source = "https://billing@x.example.test/mcp\nSubject: all clear";
   const { subject, text } = digest(daily(base, { "10": [...base, ...hostile] }, source));
   assert.ok(!text.includes("\u001B") && !subject.includes("\n"));
   assert.equal(text.split("\n").filter((line) => line.startsWith("About this digest:")).length, 1);
   assert.equal(text.split("\n").filter((line) => line.startsWith("Subject:")).length, 0);
-  for (const planted of ["Aethis has verified", "nothing changed this week", "www.", "account-review.com", "billing@", "all clear"]) assert.ok(!text.includes(planted), planted);
+  for (const planted of ["Stackduke has verified", "nothing changed this week", "www.", "account-review.com", "billing@", "all clear"]) assert.ok(!text.includes(planted), planted);
   assert.match(text, /- account-review\[\.\]com: /);
   // The address itself is written so that a mail reader does not make it a link.
   assert.equal(text.split("\n")[4], "billing[at]x[.]example[.]test/mcp?Subject?all?clear");
@@ -287,7 +287,7 @@ test("the command reads folders of saved scans, ties an unreadable one to its se
   await writeFile(path.join(folder, "broken.json"), "not json \u001B[2J");
   const run = promisify(execFile);
   const { stdout } = await run(process.execPath, ["src/cli.ts", "digest", folder, folder, "--until=2026-10-13"]);
-  assert.match(stdout, /^Subject: Aethis weekly digest: 1 of 1 server needs a look, 1 not fully covered \(7 to 13 October 2026\)\n\nAethis weekly digest, 7 to 13 October 2026\n/);
+  assert.match(stdout, /^Subject: Stackduke weekly digest: 1 of 1 server needs a look, 1 not fully covered \(7 to 13 October 2026\)\n\nStackduke weekly digest, 7 to 13 October 2026\n/);
   // The folder was given twice and is read once.
   assert.match(stdout, /7 scans in this period\./);
   assert.match(stdout, /1 tool added:\n {4}- delete_branch: can make changes that cannot be undone/);
@@ -295,7 +295,7 @@ test("the command reads folders of saved scans, ties an unreadable one to its se
   // A folder with nothing in it is a server that went unwatched, and the subject says so.
   const nothing = await mkdtemp(path.join(tmpdir(), "digest-empty-"));
   const withEmpty = await run(process.execPath, ["src/cli.ts", "digest", folder, nothing, "--until=2026-10-13"]);
-  assert.match(withEmpty.stdout, /^Subject: Aethis weekly digest: 1 of 1 server needs a look, 1 not fully covered, 1 folder with no scans \(/);
+  assert.match(withEmpty.stdout, /^Subject: Stackduke weekly digest: 1 of 1 server needs a look, 1 not fully covered, 1 folder with no scans \(/);
   for (const flags of [["--days=0"], ["--days=1e1"], ["--days"], ["--day=3"], ["--until=2026-02-30"], ["--until=2026-10"], ["--until=2026-10-13", "--until=2026-10-12"]]) {
     await assert.rejects(run(process.execPath, ["src/cli.ts", "digest", folder, ...flags]), /digest takes|--days takes/, flags.join(" "));
   }

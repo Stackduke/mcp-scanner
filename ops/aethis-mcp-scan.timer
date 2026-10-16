@@ -1,9 +1,0 @@
-[Unit]
-Description=Run the Aethis MCP scan once a day
-
-[Timer]
-OnCalendar=*-*-* 03:47:00 UTC
-Persistent=true
-
-[Install]
-WantedBy=timers.target

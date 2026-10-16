@@ -1,14 +1,18 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { authorityOf, describeAuthority, shownSource } from "./authority.ts";
-import { listTools, readTool } from "./client.ts";
+import { listTools } from "./client.ts";
 import { diffSnapshots } from "./diff.ts";
+import { connect, ghSecretSet, readHidden } from "./connect.ts";
 import { describeDigest, periodOf } from "./digest.ts";
 import { describeDiff, describeSnapshot } from "./report.ts";
 import { scanSignedIn, signedInServers } from "./signed-in.ts";
+import { readSnapshot, save } from "./files.ts";
+import { describeReview, review } from "./review.ts";
 import { takeSnapshot } from "./snapshot.ts";
+import { track } from "./track.ts";
 import { snapshotFromRepository } from "./sources/github-snapshots.ts";
-import type { Snapshot, ToolDefinition } from "./types.ts";
+import type { Snapshot } from "./types.ts";
 
 const usage = `Usage:
   npm run scan -- scan <https-url> [--save]         List a server's tools, label them, and check their text.
@@ -18,45 +22,21 @@ const usage = `Usage:
                                                     --days=7 and --until=YYYY-MM-DD set the period, in UTC.
   npm run scan -- diff <before.json> <after.json>   Compare two saved snapshots.
   npm run scan -- history <owner/repo> <from> <to>  Compare tool definitions a repository publishes at two tags.
+  npm run scan -- track [options]                   One run of the public tracker: read the registry, look at the endpoints
+                                                    due, and write the data folder and the feed. Options, each at most once:
+                                                    --data=tracker-data --budget-minutes=45 --max-checks=6000 --per-host=30
+                                                    --concurrency=24 --host-gap-ms=1000 --skip-registry
+  npm run scan -- review [--data=tracker-data] [--days=2]
+                                                    Look again, live, at servers the tracker found new or changed, and print
+                                                    what the text checks find. For a person; it writes nothing.
+  npm run scan -- connect [vendor...] [--repo=owner/name]
+                                                    Add vendor tokens to the tracker's repository secrets, one hidden
+                                                    prompt each, each tested first. Default: every vendor, Stackduke/mcp-scanner.
 
 Nothing here calls a tool. scan sends no credential. signed-in reads a token from an environment
 variable and sends it only to that server's fixed address; the token is never printed or saved.
 --save writes the snapshot under data/snapshots/<source>/. history sends GITHUB_TOKEN, if set, to
 api.github.com only.`;
-
-async function save(snapshot: Snapshot): Promise<string> {
-  const name = snapshot.source.replace(/^https?:\/\//, "").replace(/[^a-zA-Z0-9.@-]+/g, "_").slice(0, 120);
-  const directory = path.join("data", "snapshots", name);
-  await mkdir(directory, { recursive: true });
-  const file = path.join(directory, `${snapshot.takenAt.replace(/[:.]/g, "-")}.json`);
-  await writeFile(file, `${JSON.stringify(snapshot, null, 2)}\n`);
-  return file;
-}
-
-/** A saved snapshot read back with nothing taken on trust: the file may have been made by hand. */
-async function readSnapshot(file: string): Promise<Snapshot | null> {
-  let parsed: unknown;
-  try { parsed = JSON.parse(await readFile(file, "utf8")); } catch { return null; }
-  if (typeof parsed !== "object" || parsed === null) return null;
-  const { source, takenAt, server, tools } = parsed as Record<string, unknown>;
-  if (typeof source !== "string" || typeof takenAt !== "string" || !Array.isArray(tools)) return null;
-  const seen = new Map<string, number>();
-  const read = tools.map((tool) => {
-    const definition = readTool(tool);
-    if (!definition) return null;
-    const given = (tool as { variant?: unknown }).variant;
-    // A source may give several definitions of one tool, as named variants or by repeating the name.
-    // Each is kept, because the serious one may not be the first.
-    const base = typeof given === "string" && given ? `${definition.name}#${given}` : definition.name;
-    const times = (seen.get(base) ?? 0) + 1;
-    seen.set(base, times);
-    const variant = [typeof given === "string" ? given : "", times > 1 ? `repeat-${times}` : ""].filter(Boolean).join("-");
-    return variant ? { ...definition, variant } : definition;
-  });
-  if (read.some((tool) => tool === null)) return null;
-  const name = typeof server === "object" && server !== null ? (server as { name?: unknown }).name : undefined;
-  return takeSnapshot(source, read as Array<ToolDefinition & { variant?: string }>, typeof name === "string" ? { name } : undefined, takenAt);
-}
 
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
@@ -153,6 +133,52 @@ async function main(argv: string[]): Promise<number> {
     });
     const digest = describeDigest(servers, period, { strayScans: stray, emptyFolders });
     console.log(`Subject: ${digest.subject}\n\n${digest.text}`);
+    return 0;
+  }
+
+  if (command === "track" && !args.length) {
+    const defaults: Record<string, string> = { data: "tracker-data", "budget-minutes": "45", "max-checks": "6000", "per-host": "30", concurrency: "24", "host-gap-ms": "1000" };
+    const given = new Map<string, string>();
+    for (const flag of flags) {
+      const match = /^--([a-z-]+)(?:=(.+))?$/.exec(flag);
+      const name = match?.[1] ?? "", value = match?.[2];
+      const known = name === "skip-registry" ? value === undefined : Object.hasOwn(defaults, name) && value !== undefined;
+      if (!known || given.has(name)) { console.error(`track does not take ${flag.split("=")[0]}, or took it twice.`); return 2; }
+      given.set(name, value ?? "");
+    }
+    const option = (name: string) => given.get(name) ?? (defaults[name] as string);
+    const value: Record<string, number> = {};
+    for (const name of ["budget-minutes", "max-checks", "per-host", "concurrency", "host-gap-ms"]) {
+      const text = option(name);
+      if (!/^\d{1,6}$/.test(text) || Number(text) < (name === "host-gap-ms" ? 0 : 1)) { console.error(`--${name} takes a whole number${name === "host-gap-ms" ? "" : " from 1"}.`); return 2; }
+      value[name] = Number(text);
+    }
+    const summary = await track({
+      dataDir: option("data"), readRegistry: !given.has("skip-registry"),
+      maxChecks: value["max-checks"] as number, perHost: value["per-host"] as number, concurrency: value.concurrency as number,
+      hostGapMs: value["host-gap-ms"] as number, budgetMinutes: value["budget-minutes"] as number,
+      environment: process.env, log: (line) => console.log(line),
+    });
+    console.log(`Done: ${summary.checked} of ${summary.planned} checks made, ${summary.changed} with a change, ${summary.notStarted} left for the next run.`);
+    return 0;
+  }
+
+  if (command === "review" && !args.length) {
+    const given = new Map([...flags].map((flag) => { const match = /^--(data|days)=(.+)$/.exec(flag); return [match?.[1] ?? flag, match?.[2] ?? ""] as const; }));
+    const days = given.get("days") ?? "2";
+    if ([...given.keys()].some((name) => name !== "data" && name !== "days") || given.size !== flags.size || !/^\d{1,3}$/.test(days) || Number(days) < 1) { console.error("review takes --data=<folder> and --days=N, each at most once."); return 2; }
+    console.log(describeReview(await review({ dataDir: given.get("data") ?? "tracker-data", days: Number(days), concurrency: 16, hostGapMs: 1000, budgetMinutes: 60 })));
+    return 0;
+  }
+
+  if (command === "connect") {
+    const repoFlags = [...flags].map((flag) => /^--repo=([\w.-]+\/[\w.-]+)$/.exec(flag));
+    if (repoFlags.some((match) => !match) || repoFlags.length > 1) { console.error("connect takes only --repo=owner/name."); return 2; }
+    const repository = repoFlags[0]?.[1] ?? "Stackduke/mcp-scanner";
+    const vendors = args.length ? args : Object.keys(signedInServers);
+    console.log(`Each token is tested against its vendor's server, then stored as a secret of ${repository}. Nothing is printed or written to a file.`);
+    const { stored, skipped } = await connect(vendors, repository, { readSecret: readHidden, storeSecret: ghSecretSet, print: (...lines) => console.log(lines.join("\n")) });
+    console.log(`\nStored: ${stored.join(", ") || "none"}. Skipped: ${skipped.join(", ") || "none"}.`);
     return 0;
   }
 

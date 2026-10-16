@@ -28,9 +28,9 @@ export interface Snapshot {
   tools: SnapshotTool[];
 }
 
-/** The same vocabulary the Aethis console uses for a tool's capability. */
+/** The vocabulary Stackduke uses for a tool's capability. */
 export type CapabilityClass = "read" | "write" | "destructive" | "send" | "money";
-export type CapabilityLabelSource = "mcp_annotation" | "aethis_heuristic" | "unclassified";
+export type CapabilityLabelSource = "mcp_annotation" | "heuristic" | "unclassified";
 
 export interface CapabilityLabel {
   classes: CapabilityClass[];

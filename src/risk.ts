@@ -1,7 +1,7 @@
 import type { CapabilityClass, CapabilityLabel, ToolDefinition } from "./types.ts";
 
 /**
- * Labels what a tool can do, in the Aethis console's vocabulary.
+ * Labels what a tool can do, in the vocabulary Stackduke uses.
  *
  * Two sources are used, and the label says which. A server's own annotations
  * (`readOnlyHint`, `destructiveHint`) are taken as given: they are hints the server
@@ -137,11 +137,11 @@ export function labelTool(tool: ToolDefinition): CapabilityLabel {
   }
 
   const byName = fromWords(nameTokens);
-  if (byName.classes.length) return withBroad({ ...byName, source: "aethis_heuristic" });
+  if (byName.classes.length) return withBroad({ ...byName, source: "heuristic" });
 
   // Nothing in the name: try the first sentence of the description, where the verb usually is.
   const byDescription = fromWords(openingWords(tool));
-  if (byDescription.classes.length) return withBroad({ ...byDescription, source: "aethis_heuristic", basis: byDescription.basis.map((word) => `${word} in the description`) });
+  if (byDescription.classes.length) return withBroad({ ...byDescription, source: "heuristic", basis: byDescription.basis.map((word) => `${word} in the description`) });
 
   return withBroad({ classes: [], source: "unclassified", basis: [] });
 }

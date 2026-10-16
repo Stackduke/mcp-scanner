@@ -23,7 +23,7 @@ export interface RepositorySnapshotOptions {
 
 export async function snapshotFromRepository({ repository, ref, directory = "__toolsnaps__", fetchImpl = fetch, token }: RepositorySnapshotOptions): Promise<Snapshot> {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error("repository must look like owner/name");
-  const headers: Record<string, string> = { Accept: "application/vnd.github+json", "User-Agent": "aethis-mcp-scanner/0.1 (+https://aethis.io)" };
+  const headers: Record<string, string> = { Accept: "application/vnd.github+json", "User-Agent": "stackduke-mcp-scanner/0.2 (+https://stackduke.com/tracker)" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const listing = await fetchImpl(`https://api.github.com/repos/${repository}/git/trees/${encodeURIComponent(ref)}?recursive=1`, { headers, signal: AbortSignal.timeout(30_000) });

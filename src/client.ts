@@ -26,7 +26,7 @@ export interface ListToolsOptions {
 }
 
 const protocolVersion = "2025-06-18";
-const userAgent = "aethis-mcp-scanner/0.1 (+https://aethis.io)";
+export const userAgent = "stackduke-mcp-scanner/0.2 (+https://stackduke.com/tracker)";
 const maxBodyBytes = 4_000_000;
 
 class ReplyTooLarge extends Error {}
@@ -99,7 +99,7 @@ export async function listTools(url: string, { fetchImpl = fetch, timeoutMs = 15
   }
 
   try {
-    const hello = await send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion, capabilities: {}, clientInfo: { name: "aethis-mcp-scanner", version: "0.1" } } });
+    const hello = await send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion, capabilities: {}, clientInfo: { name: "stackduke-mcp-scanner", version: "0.2" } } });
     if (hello.status === 401 || hello.status === 403) return { outcome: "sign-in-required", status: hello.status };
     if (hello.status < 200 || hello.status >= 300) return { outcome: "not-usable", detail: `initialize answered ${hello.status}` };
     const initialized = readRpcReply(hello.contentType, hello.text);

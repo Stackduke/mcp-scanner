@@ -23,7 +23,7 @@ test("the verb is found by position, so nouns that look like verbs do not mislea
 test("where no word qualifies there is no guess, and the description is tried before giving up", () => {
   assert.deepEqual(labelTool({ name: "wubble_wait_for_request" }), { classes: [], source: "unclassified", basis: [] });
   const fromDescription = labelTool({ name: "weather", description: "Returns the forecast for a city. Then more text." });
-  assert.equal(fromDescription.source, "aethis_heuristic");
+  assert.equal(fromDescription.source, "heuristic");
   assert.deepEqual(fromDescription.classes, ["read"]);
 });
 

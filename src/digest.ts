@@ -303,9 +303,9 @@ export function describeDigest(servers: ServerPeriod[], period: Period, missing:
   const gaps = !uncovered.length ? "" : main ? `${uncovered.length} not fully covered` : `${uncovered.length} of ${all} not fully covered`;
   // A folder that was meant to hold a server's scans and gave none is a server that was not watched.
   const lost = empty || stray ? [empty ? `${plural(empty, "folder")} with no scans` : "", stray ? `${plural(stray, "scan")} unreadable` : ""].filter(Boolean).join(", ") : "";
-  const subject = `Aethis weekly digest: ${[main, gaps, lost].filter(Boolean).join(", ")} (${when})`;
+  const subject = `Stackduke weekly digest: ${[main, gaps, lost].filter(Boolean).join(", ")} (${when})`;
 
-  const lines: string[] = [`Aethis weekly digest, ${when}`, ""];
+  const lines: string[] = [`Stackduke weekly digest, ${when}`, ""];
   if (!servers.length) lines.push("There were no scans to report on.");
   else {
     const anyCompared = servers.some(compared);
@@ -329,7 +329,7 @@ export function describeDigest(servers: ServerPeriod[], period: Period, missing:
     "  - Each tool is read the more serious way across its label, its name and its description, at every scan. Labels are the server's own and have not been tested.",
     "  - Only the first sentence of a description is read for what a tool does. The rest, and the notes on a tool's inputs, are checked for planted instructions and not for actions.",
     "  - A different login can be shown different tools, so scans made with different logins will look like changes.",
-    "  - No tool was called. Every sentence is written by Aethis; only tool names are the server's, and its descriptions are not quoted.",
+    "  - No tool was called. Every sentence is written by Stackduke; only tool names are the server's, and its descriptions are not quoted.",
     "  - Dates and times are in UTC.",
   );
   return { subject, text: lines.join("\n") };

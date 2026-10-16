@@ -19,7 +19,7 @@ const json = (value: unknown) => new Response(JSON.stringify(value), { status: 2
 const hello = (name = "Demo") => json({ jsonrpc: "2.0", id: 1, result: { serverInfo: { name }, capabilities: {} } });
 const tools = (list: unknown[]) => json({ jsonrpc: "2.0", id: 2, result: { tools: list } });
 const token = "made-up-token-for-this-test";
-const variable = "AETHIS_SCAN_GITHUB_TOKEN";
+const variable = "STACKDUKE_SCAN_GITHUB_TOKEN";
 
 test("every signed-in server has a fixed https address and its own token variable", () => {
   const variables = Object.values(signedInServers).map((server) => server.tokenVariable);
@@ -27,7 +27,7 @@ test("every signed-in server has a fixed https address and its own token variabl
   for (const server of Object.values(signedInServers)) {
     assert.equal(new URL(server.url).protocol, "https:");
     assert.equal(new URL(server.url).username + new URL(server.url).password + new URL(server.url).search, "");
-    assert.match(server.tokenVariable, /^AETHIS_SCAN_[A-Z]+_TOKEN$/);
+    assert.match(server.tokenVariable, /^STACKDUKE_SCAN_[A-Z]+_TOKEN$/);
   }
 });
 
@@ -54,6 +54,15 @@ test("the token goes to the server's fixed address and nowhere else", async () =
   assert.equal(scan.outcome === "answered" && scan.result.outcome, "listed");
   assert.deepEqual(sent, Array(3).fill({ url: signedInServers.github?.url, authorization: `Bearer ${token}` }));
   assert.ok(!JSON.stringify(scan).includes(token));
+});
+
+test("the former variable is still read, and the current one wins when both are set", async () => {
+  const former = fakeServer(hello(), new Response(null, { status: 202 }), tools([]));
+  assert.equal((await scanSignedIn("github", { AETHIS_SCAN_GITHUB_TOKEN: token }, former.fetchImpl)).outcome, "answered");
+  assert.equal(former.sent[0]?.authorization, `Bearer ${token}`);
+  const both = fakeServer(hello(), new Response(null, { status: 202 }), tools([]));
+  await scanSignedIn("github", { [variable]: token, AETHIS_SCAN_GITHUB_TOKEN: "made-up-older-token" }, both.fetchImpl);
+  assert.equal(both.sent[0]?.authorization, `Bearer ${token}`);
 });
 
 test("a name that is not in the list sends nothing, whatever it is", async () => {
@@ -111,4 +120,25 @@ test("the command never prints a token, and does not take one as an argument", a
   assert.equal(unchecked.code, 2);
   assert.match(unchecked.output, /was not sent/);
   assert.ok(!unchecked.output.includes(token));
+});
+
+test("connect tests each token on its vendor's server before storing it, and never prints it", async () => {
+  const { connect } = await import("../src/connect.ts");
+  const printed: string[] = [], stored: Array<[string, string, string]> = [];
+  const answers = [token, "", "made-up-refused-token"];
+  const respond = (value: string) => (value === token ? [hello(), new Response(null, { status: 202 }), tools([{ name: "list_issues" }])] : [new Response(null, { status: 401 })]);
+  const result = await connect(["github", "linear", "stripe", "nobody"], "Stackduke/mcp-scanner", {
+    readSecret: async () => answers.shift() ?? "",
+    storeSecret: async (name, value, repository) => { stored.push([name, value, repository]); return true; },
+    scan: (vendor, environment) => {
+      const value = Object.values(environment)[0] as string;
+      return scanSignedIn(vendor, environment, fakeServer(...respond(value)).fetchImpl);
+    },
+    print: (...lines) => printed.push(...lines),
+  });
+  assert.deepEqual(result, { stored: ["github"], skipped: ["linear", "stripe", "nobody"] });
+  assert.deepEqual(stored, [["STACKDUKE_SCAN_GITHUB_TOKEN", token, "Stackduke/mcp-scanner"]]);
+  assert.ok(printed.includes("  It works: the server listed 1 tool."));
+  assert.ok(printed.includes("  The server refused it (HTTP 401). Not stored."));
+  assert.ok(!printed.join("\n").includes(token) && !printed.join("\n").includes("made-up-refused-token"));
 });

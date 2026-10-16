@@ -71,15 +71,15 @@ export interface AuthorityReport {
   minorNotes: number;
 }
 
-const seriousFirst: AuthorityKind[] = ["money", "destructive", "send", "write", "unclear", "read"];
+export const seriousFirst: AuthorityKind[] = ["money", "destructive", "send", "write", "unclear", "read"];
 const acting = ["money", "destructive", "send", "write"] as const;
 type Acting = (typeof acting)[number];
 // Words a tool or server name has no reason to carry. A name that has one is not repeated as words.
-const reassurance = new Set(["aethis", "safe", "safely", "verified", "approved", "trusted", "secure", "harmless", "reviewed", "audited", "certified", "checked", "risky", "risk"]);
+const reassurance = new Set(["stackduke", "aethis", "safe", "safely", "verified", "approved", "trusted", "secure", "harmless", "reviewed", "audited", "certified", "checked", "risky", "risk"]);
 // Actions serious enough to look for inside a longer run of letters, as in "deleteaccount".
 const stems = ["delete", "remove", "destroy", "purge", "truncate", "refund", "transfer", "withdraw", "publish"];
 /** Untrusted text cut down to a fixed set of characters. */
-function confined(text: unknown, notAllowed: RegExp, longest: number): string {
+export function confined(text: unknown, notAllowed: RegExp, longest: number): string {
   const flat = typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
   const kept = flat.replace(notAllowed, "?").replace(/\?{2,}/g, "?");
   return /[A-Za-z0-9]/.test(kept) ? (kept.length > longest ? `${kept.slice(0, longest)}…` : kept) : "";
@@ -89,7 +89,7 @@ const ordinaryName = /^(?!(?:www|ftp)\.)[A-Za-z0-9_.-]{1,60}$/i;
 const unlinked = (text: string) => (/^(?:www|ftp)\./i.test(text) ? text.replace(/\./g, "?") : text);
 // A dot is written "[.]", so a name such as "bit.ly" is not made into a link by a terminal or a mail reader.
 export const defanged = (text: string) => text.replace(/\./g, "[.]");
-const shownName = (tool: { name: unknown; variant?: unknown }) => {
+export const shownName = (tool: { name: unknown; variant?: unknown }) => {
   const name = defanged(confined(tool.name, /[^A-Za-z0-9_.-]+/g, 60)) || "(no name)";
   const variant = defanged(confined(tool.variant, /[^A-Za-z0-9_.-]+/g, 30));
   return variant ? `${name}#${variant}` : name;
@@ -167,7 +167,7 @@ function reachOf(tool: SnapshotTool): Reach {
 
 export interface ToolAssessment {
   tool: AuthorityTool;
-  /** Why a person should look at it. Aethis's words. */
+  /** Why a person should look at it. Stackduke's words. */
   reasons: string[];
   /** The same reasons, each with where it was found, so that a second planted text of the same kind counts as new. */
   points: Array<{ key: string; reason: string }>;
@@ -361,7 +361,7 @@ function describeOne(report: AuthorityReport): string[] {
   const of = (count: number) => (count === total ? (total === 1 ? "the one tool" : `all ${total} tools`) : `${count} of the ${total} tools`);
   const disputed = all(report).filter((tool) => tool.disputed).length;
   lines.push("", "How far to trust this:");
-  if (server) lines.push(`  - For ${of(server)}, the server itself says whether the tool only reads. Aethis has not tested what it says.`);
+  if (server) lines.push(`  - For ${of(server)}, the server itself says whether the tool only reads. Stackduke has not tested what it says.`);
   if (name) lines.push(`  - For ${of(name)}, the label is a guess from the tool's name.`);
   if (description) lines.push(`  - For ${of(description)}, it is a guess from the tool's description, which the server writes. A description counts only as evidence that a tool changes something.`);
   if (none) lines.push(`  - Nothing reliable was found for ${of(none)}.`);
@@ -375,7 +375,7 @@ function describeOne(report: AuthorityReport): string[] {
     "  - This report does not say a server is safe, and does not list what a server cannot do. A missing label proves nothing.",
     "  - This is what the server offers, not what your policy allows.",
     "  - It comes from a list of tool definitions. No tool was called.",
-    "  - Every sentence is written by Aethis. The server's descriptions are not quoted; only its tool names and the name it gives itself appear, and a server chooses those.",
+    "  - Every sentence is written by Stackduke. The server's descriptions are not quoted; only its tool names and the name it gives itself appear, and a server chooses those.",
   );
   return lines;
 }

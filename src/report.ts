@@ -30,13 +30,13 @@ export function describeSnapshot(snapshot: Snapshot): string {
   lines.push(`${plural(snapshot.tools.length, "tool")} listed from ${source} at ${printable(snapshot.takenAt, 40)}`);
   lines.push("");
   lines.push(`Can change things: ${labelled.filter(({ label }) => label.classes.some((kind) => kind !== "read")).length}   Destructive: ${count("destructive")}   Money: ${count("money")}   Send: ${count("send")}   Read only: ${labelled.filter(({ label }) => label.classes.length === 1 && label.classes[0] === "read").length}   Unlabelled: ${labelled.filter(({ label }) => !label.classes.length).length}`);
-  lines.push(`Labels from the server's own annotations: ${labelled.filter(({ label }) => label.source === "mcp_annotation").length}   guessed from names or descriptions: ${labelled.filter(({ label }) => label.source === "aethis_heuristic").length}`);
+  lines.push(`Labels from the server's own annotations: ${labelled.filter(({ label }) => label.source === "mcp_annotation").length}   guessed from names or descriptions: ${labelled.filter(({ label }) => label.source === "heuristic").length}`);
   lines.push("");
   for (const { tool, label } of labelled) {
-    const guessed = label.source === "aethis_heuristic";
+    const guessed = label.source === "heuristic";
     lines.push(`  ${keyOf(tool).padEnd(44)} ${kinds(label)}${guessed ? ` *  from ${printable(label.basis.join(", "), 80)}` : ""}`);
   }
-  if (labelled.some(({ label }) => label.source === "aethis_heuristic")) lines.push("", "  * a guess from the words shown; the server gave no annotation.");
+  if (labelled.some(({ label }) => label.source === "heuristic")) lines.push("", "  * a guess from the words shown; the server gave no annotation.");
 
   const flagged = labelled.filter(({ findings }) => findings.length);
   lines.push("", flagged.length ? `Worth a look: ${plural(flagged.reduce((sum, { findings }) => sum + findings.length, 0), "finding")} in ${plural(flagged.length, "tool")}` : "Nothing matched the text checks. That means no pattern fired, not that the server is safe.");
