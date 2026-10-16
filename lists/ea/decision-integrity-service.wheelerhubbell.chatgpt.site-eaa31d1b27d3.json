@@ -1,0 +1,1 @@
+{"source":"https://decision-integrity-service.wheelerhubbell.chatgpt.site/agent/mcp","takenAt":"2026-10-16T17:42:56.010Z","server":{"name":"decision-integrity","version":"1.0.0"},"tools":[{"name":"evaluate_decision_integrity","kind":"write","fields":{"title":"d4f5333ba09cf3e1","description":"b8000680da6ba230","inputSchema":"8f5e8032d6c1043a","annotations":"99300d9e2937ba92"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://mcplint-web.vercel.app/api/mcp","takenAt":"2026-10-16T17:53:40.105Z","server":{"name":"mcp-surface-lint","version":"0.4.0"},"tools":[{"name":"check_mcp_server","kind":"read","fields":{"title":"463ffc9550eff7b2","description":"316e7b1a58ba239b","inputSchema":"3e0b1e82e2c26070","outputSchema":"2299fd454d3c029d","annotations":"139076388a98d13d"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://ads.getlulu.dev/crypto/mcp","takenAt":"2026-10-16T18:02:39.113Z","server":{"name":"crypto-price","version":"3.4.4"},"tools":[{"name":"get_crypto_price","kind":"read","fields":{"description":"c3066db46ab22510","inputSchema":"34118dd9f4409ee9","outputSchema":"82ef96cebaf5fbe1","annotations":"8803fb4b4971327e"}}]}

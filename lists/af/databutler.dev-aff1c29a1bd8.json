@@ -1,0 +1,1 @@
+{"source":"https://databutler.dev/api/mcp/tax","takenAt":"2026-10-16T18:03:49.577Z","server":{"name":"databutler-tax","version":"1.1.0"},"tools":[{"name":"take_home_pay","kind":"read","fields":{"title":"eafff23913c2294d","description":"6e2e944be1e6dd62","inputSchema":"fd520c3db8d48b23","annotations":"3866eaa83870f8f7"}}]}

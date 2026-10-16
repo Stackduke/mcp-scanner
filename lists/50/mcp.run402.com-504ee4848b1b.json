@@ -1,0 +1,1 @@
+{"source":"https://mcp.run402.com/mcp","takenAt":"2026-10-16T17:51:54.979Z","server":{"name":"run402-remote","version":"0.2.0"},"tools":[{"name":"run402_quickstart","kind":"send","fields":{"description":"b785bdb03043712a","inputSchema":"99334726611ccf58"}},{"name":"x402_price_check","kind":"unclear","fields":{"description":"a73feffe26e12d5a","inputSchema":"37c7fdf27b56a238"}}]}

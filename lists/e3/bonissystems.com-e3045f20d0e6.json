@@ -1,0 +1,1 @@
+{"source":"https://bonissystems.com/api/knox/agents/registry-expansion/mcp","takenAt":"2026-10-16T18:03:44.089Z","server":{"name":"knox-registry-expansion","version":"1.0.0"},"tools":[{"name":"describe_routing","kind":"write","fields":{"description":"2642e31cbfd81a94","inputSchema":"99334726611ccf58"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://scrapemole-api.vercel.app/mcp","takenAt":"2026-10-16T17:57:15.335Z","server":{"name":"scrapemole-amazon","version":"1.0.0"},"tools":[{"name":"amazon_product","kind":"read","fields":{"title":"c6e9e120f449bc56","description":"1380cbb952abcef6","inputSchema":"c416d87f2f1159a9","annotations":"ac2c497580f5ea9c"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://canivibe.ai/mcp","takenAt":"2026-10-16T17:41:56.844Z","server":{"name":"canivibe","version":"1.0.0"},"tools":[{"name":"ai_provider_status","kind":"unclear","fields":{"description":"c84b536e9728a787","inputSchema":"80f84c3571f3ef21"}},{"name":"check_provider_health","kind":"read","fields":{"description":"a101e505d714b42b","inputSchema":"73cd3b39ac8a77b9"}}]}

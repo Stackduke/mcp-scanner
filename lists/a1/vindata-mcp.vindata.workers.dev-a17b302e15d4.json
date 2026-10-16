@@ -1,0 +1,1 @@
+{"source":"https://vindata-mcp.vindata.workers.dev/mcp","takenAt":"2026-10-16T18:00:11.232Z","server":{"name":"VinData MCP","version":"1.0.0"},"tools":[{"name":"decode_vin","kind":"unclear","fields":{"description":"a8b8bcba21e12041","inputSchema":"3d83fe1d8abeeb74"}}]}

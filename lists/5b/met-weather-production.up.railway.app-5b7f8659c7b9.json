@@ -1,0 +1,1 @@
+{"source":"https://met-weather-production.up.railway.app/mcp","takenAt":"2026-10-16T17:53:51.086Z","server":{"name":"met-weather","version":"0.1.0"},"tools":[{"name":"weather_forecast","kind":"unclear","fields":{"description":"8cabb4cac1576988","inputSchema":"7a33991e8d73a1af"}}]}

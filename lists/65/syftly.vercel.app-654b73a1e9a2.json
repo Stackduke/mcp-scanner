@@ -1,0 +1,1 @@
+{"source":"https://syftly.vercel.app/api/mcp","takenAt":"2026-10-16T17:58:44.208Z","server":{"name":"syftly","version":"0.1.0"},"tools":[{"name":"find_best_tool","kind":"read","fields":{"description":"fd992a4cb5ec709d","inputSchema":"0f72c575624cd4ab","outputSchema":"5c5ed0cb9a41bb44"}}]}

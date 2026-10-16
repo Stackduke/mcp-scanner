@@ -1,0 +1,1 @@
+{"source":"https://paperloo.vercel.app/api/mcp","takenAt":"2026-10-16T17:55:17.869Z","tools":[{"name":"audit_site","kind":"read","fields":{"description":"7a1cac5912e2200f"}},{"name":"list_sites","kind":"read","fields":{"description":"682ea24967a1e03e"}}]}

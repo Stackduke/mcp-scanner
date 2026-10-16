@@ -1,0 +1,1 @@
+{"source":"https://dmarc-spf-audit.david-cyr.workers.dev/mcp","takenAt":"2026-10-16T17:43:09.857Z","server":{"name":"dmarc-spf-audit","version":"0.1.0"},"tools":[{"name":"run","kind":"write","fields":{"description":"074d209ca560dfbc","inputSchema":"b0547fa506a00d99","annotations":"44136fa355b3678a"}}]}

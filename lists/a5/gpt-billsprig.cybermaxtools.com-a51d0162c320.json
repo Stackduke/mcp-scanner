@@ -1,0 +1,1 @@
+{"source":"https://gpt-billsprig.cybermaxtools.com/mcp?via=mcp-registry","takenAt":"2026-10-16T17:44:45.890Z","server":{"name":"cybermax-billsprig","version":"1.0.0"},"tools":[{"name":"create_invoice","kind":"money","fields":{"title":"b900ac09a0c8a1e7","description":"2426d2d20345ba71","inputSchema":"1a799e648e809e64","annotations":"ae78503371695cf7"}}]}

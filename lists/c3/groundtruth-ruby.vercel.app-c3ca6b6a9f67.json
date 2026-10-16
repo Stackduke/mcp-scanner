@@ -1,0 +1,1 @@
+{"source":"https://groundtruth-ruby.vercel.app/api/mcp","takenAt":"2026-10-16T17:44:50.743Z","server":{"name":"groundtruth","version":"0.1.0"},"tools":[{"name":"ask_humans","kind":"read","fields":{"description":"f304d7beeae326dc","inputSchema":"391d78c895d09f8e"}},{"name":"check_answers","kind":"read","fields":{"description":"a6523267f2c9f90f","inputSchema":"cc50b3d8d0ee9fa1"}}]}

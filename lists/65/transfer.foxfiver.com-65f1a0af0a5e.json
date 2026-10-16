@@ -1,0 +1,1 @@
+{"source":"https://transfer.foxfiver.com/mcp","takenAt":"2026-10-16T17:59:26.592Z","server":{"name":"foxfiver-state-transfer-tracker","version":"1.0.0"},"tools":[{"name":"get_upcoming_state_transfer","kind":"read","fields":{"description":"d40113e504a5e24d","inputSchema":"99334726611ccf58"}}]}

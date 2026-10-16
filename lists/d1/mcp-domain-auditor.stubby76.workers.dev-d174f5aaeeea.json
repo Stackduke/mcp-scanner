@@ -1,0 +1,1 @@
+{"source":"https://mcp-domain-auditor.stubby76.workers.dev/mcp","takenAt":"2026-10-16T17:47:07.001Z","server":{"name":"mcp-domain-auditor","version":"1.0.0"},"tools":[{"name":"audit_domain","kind":"read","fields":{"description":"b89748c1d80d7acb","inputSchema":"a35edf308102f5f3","outputSchema":"eec1edb2afeeea07","annotations":"47cfe292ffd2aa4c"}}]}

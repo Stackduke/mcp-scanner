@@ -1,0 +1,1 @@
+{"source":"https://api.jobvetta.com/mcp","takenAt":"2026-10-16T17:38:59.232Z","server":{"name":"jobvetta","version":"1.0.0"},"tools":[{"name":"get_job","kind":"read","fields":{"description":"b80245a93d6cac4e","inputSchema":"205ba4d6e177fd73"}},{"name":"search_jobs","kind":"read","fields":{"description":"a2e2b77cc117417e","inputSchema":"f47d8d48d87c17d3"}}]}

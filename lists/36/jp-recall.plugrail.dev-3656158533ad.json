@@ -1,0 +1,1 @@
+{"source":"https://jp-recall.plugrail.dev/mcp","takenAt":"2026-10-16T17:45:51.687Z","server":{"name":"jp-recall","version":"0.1.0"},"tools":[{"name":"get_recall_detail","kind":"read","fields":{"description":"b1ce54404e2d9487","inputSchema":"30b9565a223424b1"}},{"name":"search_recalls","kind":"read","fields":{"description":"2dd6725bcde8ee04","inputSchema":"b55cfd7cd754821f"}}]}

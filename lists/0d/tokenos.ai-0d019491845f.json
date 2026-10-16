@@ -1,0 +1,1 @@
+{"source":"https://tokenos.ai/api/mcp/apps/contract-audit","takenAt":"2026-10-16T17:59:16.487Z","server":{"name":"tokenos-contract-audit","version":"1.0.0"},"tools":[{"name":"quick_audit","kind":"read","fields":{"title":"134c92d3c6a46d33","description":"52f5c8c49919832e","inputSchema":"7667d477e05e1f95","annotations":"733a6b4920494850"}}]}

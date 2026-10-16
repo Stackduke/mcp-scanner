@@ -1,0 +1,1 @@
+{"source":"https://mcp.kloudle.dev/mcp","takenAt":"2026-10-16T17:49:55.310Z","server":{"name":"kloudle-cloud-security-scanner","version":"1.0.0"},"tools":[{"name":"get","kind":"read","fields":{"description":"a688da9ccff0cc66","inputSchema":"315f9d5a807a6016"}},{"name":"search","kind":"read","fields":{"description":"6a03e248d8cc8cee","inputSchema":"ad47746d82279f60"}}]}

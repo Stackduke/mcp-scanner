@@ -1,0 +1,1 @@
+{"source":"https://www.mahastrategies.com/api/mcp/context-review?channel=registry","takenAt":"2026-10-16T18:01:35.628Z","server":{"name":"maha-context-review","version":"1.0.2"},"tools":[{"name":"review_context_retention","kind":"read","fields":{"title":"5f6149966d91865d","description":"279ab4a19da8b8ba","inputSchema":"765a5ec227884a13","annotations":"ae78503371695cf7"}}]}

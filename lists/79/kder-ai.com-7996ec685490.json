@@ -1,0 +1,1 @@
+{"source":"https://kder-ai.com/mcp","takenAt":"2026-10-16T17:45:58.975Z","server":{"name":"address-validator","version":"1.0.0"},"tools":[{"name":"validate_address","kind":"read","fields":{"title":"d17c2a49272c9fe7","description":"dce4cc9de2ba4868","inputSchema":"95e7b4feced30618","outputSchema":"969cd54e5701f36d","annotations":"2861b581676d4534"}}]}

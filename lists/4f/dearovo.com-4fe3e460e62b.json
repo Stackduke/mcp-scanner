@@ -1,0 +1,1 @@
+{"source":"https://dearovo.com/mcp","takenAt":"2026-10-16T17:42:55.862Z","server":{"name":"dearovo-mcp","version":"1.0.0"},"tools":[{"name":"find_writing_help","kind":"send","fields":{"description":"757f6056801a4e54","inputSchema":"544347f959f40b48"}},{"name":"message_writing_tips","kind":"money","fields":{"description":"9ade2ff2db3bacee","inputSchema":"338e59268d1e2312"}}]}

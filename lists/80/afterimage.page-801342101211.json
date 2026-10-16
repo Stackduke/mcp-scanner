@@ -1,0 +1,1 @@
+{"source":"https://afterimage.page/mcp","takenAt":"2026-10-16T17:37:19.942Z","server":{"name":"afterimage","version":"0.1.0"},"tools":[{"name":"get_page","kind":"read","fields":{"description":"f6e4b0cd71e05ebb","inputSchema":"2d0abb315709c817"}},{"name":"search_pages","kind":"read","fields":{"description":"1f15cc805d5a04f3","inputSchema":"2936cc64f570db9b"}}]}

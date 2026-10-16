@@ -1,0 +1,1 @@
+{"source":"https://peptigraph.org/mcp","takenAt":"2026-10-16T17:55:29.093Z","server":{"name":"peptigraph","version":"1.0.0"},"tools":[{"name":"reconstitution_calc","kind":"unclear","fields":{"description":"bf1a93646b9031ce","inputSchema":"78e650ce7dbfd829"}},{"name":"reverse_calc","kind":"write","fields":{"description":"055ee2702a50455f","inputSchema":"a91ac8df76454ab4"}}]}

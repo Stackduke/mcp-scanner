@@ -1,0 +1,1 @@
+{"source":"https://apkbuild.org/mcp","takenAt":"2026-10-16T17:40:17.776Z","server":{"name":"apkbuild","version":"1.0.0"},"tools":[{"name":"get_pricing","kind":"read","fields":{"description":"7778c05d56821905","inputSchema":"efddc7bd8bbcef73"}},{"name":"get_services","kind":"read","fields":{"description":"c6f18d7a935b5258","inputSchema":"efddc7bd8bbcef73"}}]}

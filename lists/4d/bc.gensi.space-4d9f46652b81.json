@@ -1,0 +1,1 @@
+{"source":"https://bc.gensi.space/mcp","takenAt":"2026-10-16T17:41:23.687Z","server":{"name":"aegis-security-mcp","version":"1.0.0"},"tools":[{"name":"health","kind":"unclear","fields":{"description":"4e0d6525450ffff5","inputSchema":"efddc7bd8bbcef73"}},{"name":"screen_token","kind":"money","fields":{"description":"56a20863eb1fe685","inputSchema":"61d9121d731979a3"}}]}

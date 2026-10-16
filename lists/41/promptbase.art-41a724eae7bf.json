@@ -1,0 +1,1 @@
+{"source":"https://promptbase.art/mcp","takenAt":"2026-10-16T17:56:05.926Z","server":{"name":"promptbase-marketplace","version":"1.0.0"},"tools":[{"name":"get_prompt","kind":"read","fields":{"description":"e721a890762dbf44","inputSchema":"a9656dcf7f2b7f81"}},{"name":"list_prompts","kind":"read","fields":{"description":"57e1d5fe30e58146","inputSchema":"a584d9cf439133c7"}}]}

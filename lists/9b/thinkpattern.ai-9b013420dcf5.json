@@ -1,0 +1,1 @@
+{"source":"https://thinkpattern.ai/mcp","takenAt":"2026-10-16T17:59:09.803Z","server":{"name":"thinkpattern","version":"1.0.0"},"tools":[{"name":"get_latest_news","kind":"read","fields":{"description":"bb63c0772c320e68","inputSchema":"1922f51ce0294969"}},{"name":"search_news","kind":"read","fields":{"description":"f6b1c771a791675d","inputSchema":"9fdbe38e40bd184e"}}]}

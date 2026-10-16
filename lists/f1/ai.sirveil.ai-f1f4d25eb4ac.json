@@ -1,0 +1,1 @@
+{"source":"https://ai.sirveil.ai/api/v1/mcp","takenAt":"2026-10-16T17:37:47.254Z","server":{"name":"sirveil-exposure","version":"1.0.0"},"tools":[{"name":"verify_indexed","kind":"read","fields":{"title":"382426e12fec992b","description":"fb4dccbb968e9faa","inputSchema":"44d2633123e5a7e5","annotations":"139076388a98d13d"}}]}

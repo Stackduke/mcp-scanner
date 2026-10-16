@@ -1,0 +1,1 @@
+{"source":"https://medicalclaim.ai/mcp","takenAt":"2026-10-16T17:53:42.514Z","server":{"name":"builtforai-medicalclaim","version":"1.0.0"},"tools":[{"name":"medicare_procedure_coverage","kind":"unclear","fields":{"description":"2d09a63e46410501","inputSchema":"b40b2b254be86c4a"}}]}

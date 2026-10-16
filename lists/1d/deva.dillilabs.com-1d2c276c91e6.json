@@ -1,0 +1,1 @@
+{"source":"https://deva.dillilabs.com/mcp","takenAt":"2026-10-16T17:43:03.219Z","server":{"name":"Validate Email Address MCP Server","version":"2.13.0.2"},"tools":[{"name":"validate_email","kind":"read","fields":{"description":"b9eb6811781fb6d5","inputSchema":"09a114eaed54059d"}}]}

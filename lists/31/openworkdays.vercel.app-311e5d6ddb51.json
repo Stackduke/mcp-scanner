@@ -1,0 +1,1 @@
+{"source":"https://openworkdays.vercel.app/api/mcp","takenAt":"2026-10-16T17:55:02.262Z","server":{"name":"openworkdays","version":"0.1.0"},"tools":[{"name":"businessdays","kind":"read","fields":{"description":"3fa9cc9502b89815","inputSchema":"c20bc6085492da60","annotations":"ae78503371695cf7"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://mcp.hellobasestation.com/mcp","takenAt":"2026-10-16T17:49:33.803Z","server":{"name":"pdfkit-mcp","version":"1.0.7"},"tools":[{"name":"basestation.create_autofill_job","kind":"write","fields":{"description":"3d8842e8c6a713a3","inputSchema":"bde033e24d7157bc"}}]}

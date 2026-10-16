@@ -1,0 +1,1 @@
+{"source":"https://well-001-extract-table.mmelnyk2000.workers.dev/mcp","takenAt":"2026-10-16T18:00:29.633Z","server":{"name":"well-001-extract-table","version":"1.0.0"},"tools":[{"name":"extract-table-from-pdf","kind":"read","fields":{"description":"80f8a45ca10422a0","inputSchema":"2a0cc2b1c5f6bb29","annotations":"9abc732202d20353"}}]}

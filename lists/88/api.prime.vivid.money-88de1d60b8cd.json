@@ -1,0 +1,1 @@
+{"source":"https://api.prime.vivid.money/mcp","takenAt":"2026-10-16T17:39:31.815Z","server":{"name":"vivid-money-mcp","version":"1.0.0"},"tools":[{"name":"build_onboarding_link","kind":"write","fields":{"description":"330ad79cd0e69fbd","inputSchema":"1c600e14e9651121","outputSchema":"ccc744c2e69e7916","annotations":"063f0fd853751926"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://youtube-transcript.ai/mcp","takenAt":"2026-10-16T18:02:32.251Z","server":{"name":"youtube-transcript.ai","version":"1.1.0"},"tools":[{"name":"get_youtube_transcript","kind":"read","fields":{"description":"f2a5ca36e78ccb6f","inputSchema":"e9880255b7b8e984"}}]}

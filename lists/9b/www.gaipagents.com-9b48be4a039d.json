@@ -1,0 +1,1 @@
+{"source":"https://www.gaipagents.com/mcp/agents/procurement-verify","takenAt":"2026-10-16T18:03:58.289Z","server":{"name":"gaip-procurement-verify","version":"1.5.0"},"tools":[{"name":"gaip_verify_supplier_claims","kind":"write","fields":{"title":"27c9fb929ecf994c","description":"3796d0c94d16e5f5","inputSchema":"9421bcfcab76b970","annotations":"99300d9e2937ba92"}}]}

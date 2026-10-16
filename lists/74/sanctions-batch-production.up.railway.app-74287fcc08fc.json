@@ -1,0 +1,1 @@
+{"source":"https://sanctions-batch-production.up.railway.app/mcp","takenAt":"2026-10-16T17:57:06.804Z","server":{"name":"sanctions-batch","version":"0.1.0"},"tools":[{"name":"batch_sanctions_screen","kind":"unclear","fields":{"description":"f0a04f632c0285c7","inputSchema":"bf999b6dea0d7b83"}}]}

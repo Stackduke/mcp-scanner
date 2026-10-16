@@ -1,0 +1,1 @@
+{"source":"https://api.arsenal-quant.com/mcp","takenAt":"2026-10-16T17:38:18.559Z","server":{"name":"Arsenal Decision Engine","version":"2.0.0"},"tools":[{"name":"evaluate_pool","kind":"unclear","fields":{"description":"79558058a9abe7a2","inputSchema":"3ddd9a6013ce332c"}}]}

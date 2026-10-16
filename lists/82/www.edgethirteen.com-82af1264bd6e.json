@@ -1,0 +1,1 @@
+{"source":"https://www.edgethirteen.com/api/mcp/graham-number-calculator","takenAt":"2026-10-16T18:03:54.595Z","server":{"name":"graham-number-calculator","version":"1.0.0"},"tools":[{"name":"compute_graham_number","kind":"read","fields":{"description":"51a64ec26591d50f","inputSchema":"fc2a508d2399ad13","annotations":"294baf9a03fe50cb"}}]}

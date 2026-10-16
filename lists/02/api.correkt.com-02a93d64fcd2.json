@@ -1,0 +1,1 @@
+{"source":"https://api.correkt.com/mcp","takenAt":"2026-10-16T17:38:32.421Z","server":{"name":"correkt","version":"1.0.0"},"tools":[{"name":"search_products","kind":"read","fields":{"description":"1a4f352594d790a7","inputSchema":"f6617fca123a0f4d","outputSchema":"94ca63975f4025a8"}}]}

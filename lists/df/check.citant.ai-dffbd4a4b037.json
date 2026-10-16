@@ -1,0 +1,1 @@
+{"source":"https://check.citant.ai/mcp?src=registry","takenAt":"2026-10-16T17:42:08.099Z","server":{"name":"citant-ai-crawler-check","version":"1.0.0"},"tools":[{"name":"check_ai_crawler_access","kind":"read","fields":{"title":"ccb14ac05345ea33","description":"a50ca38f7be8eb67","inputSchema":"97e981b8797e0282","annotations":"c101e3e98cc55e9a"}}]}

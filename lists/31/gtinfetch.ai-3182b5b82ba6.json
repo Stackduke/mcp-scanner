@@ -1,0 +1,1 @@
+{"source":"https://gtinfetch.ai/mcp","takenAt":"2026-10-16T17:44:51.565Z","server":{"name":"gtinfetch","version":"1.6.0-estate2"},"tools":[{"name":"fetch_gtin","kind":"read","fields":{"title":"78635f376187df0a","description":"6d2b2a504a662401","inputSchema":"b53fafc2fcbbd505","outputSchema":"63ff6cfab219d7b5","annotations":"139076388a98d13d"}}]}

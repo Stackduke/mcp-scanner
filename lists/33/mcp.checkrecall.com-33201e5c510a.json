@@ -1,0 +1,1 @@
+{"source":"https://mcp.checkrecall.com/mcp","takenAt":"2026-10-16T17:48:08.410Z","server":{"name":"recallchecker","version":"1.0.0"},"tools":[{"name":"check_vehicle_recalls","kind":"read","fields":{"title":"2846f8f2757eef93","description":"133a925ac1ae3350","inputSchema":"5b2f3103ba04fd31","annotations":"dc58e55a8287733e"}}]}

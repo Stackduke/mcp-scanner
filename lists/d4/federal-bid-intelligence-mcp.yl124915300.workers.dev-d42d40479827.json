@@ -1,0 +1,1 @@
+{"source":"https://federal-bid-intelligence-mcp.yl124915300.workers.dev/mcp","takenAt":"2026-10-16T17:43:53.088Z","server":{"name":"US Federal Bid Intelligence","version":"0.1.0"},"tools":[{"name":"getOpportunityIntelligence","kind":"read","fields":{"description":"d665f0c8007c7fa7","inputSchema":"92eadc5fac313661"}}]}

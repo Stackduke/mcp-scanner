@@ -1,0 +1,1 @@
+{"source":"https://www.gaipagents.com/mcp/agents/art-intelligence","takenAt":"2026-10-16T18:03:19.942Z","server":{"name":"gaip-art-intelligence","version":"1.5.0"},"tools":[{"name":"evaluate_public_art_evidence","kind":"read","fields":{"title":"f2fe988512cfa23b","description":"1b6324dfb7283306","inputSchema":"500f82a214b19e0b","annotations":"139076388a98d13d"}}]}

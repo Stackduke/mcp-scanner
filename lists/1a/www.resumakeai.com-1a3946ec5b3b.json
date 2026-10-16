@@ -1,0 +1,1 @@
+{"source":"https://www.resumakeai.com/api/mcp","takenAt":"2026-10-16T18:01:54.042Z","server":{"name":"resumakeai","version":"1.0.0"},"tools":[{"name":"score_resume","kind":"write","fields":{"title":"95696bd3109f377c","description":"78d0effebaa6d978","inputSchema":"85686e0b270ef986"}}]}

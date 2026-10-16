@@ -1,0 +1,1 @@
+{"source":"https://uncertaintycalculator.com/api/mcp","takenAt":"2026-10-16T17:59:43.314Z","server":{"name":"uncertainty-calculator","version":"1.0.0"},"tools":[{"name":"calculate_uncertainty","kind":"read","fields":{"title":"6f3d67684ab56177","description":"b53d8d6570a4d966","inputSchema":"90f7f22a8980f169","outputSchema":"cb1807c2cb5e5bc0","annotations":"ae78503371695cf7"}}]}

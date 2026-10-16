@@ -1,0 +1,1 @@
+{"source":"https://mcp.hasdata.com/mcp?apis=google_trends","takenAt":"2026-10-16T18:03:57.401Z","server":{"name":"hasdata-mcp-api-server","version":"1.0.0"},"tools":[{"name":"hasdata_google_trends_search_getTrendsData","kind":"read","fields":{"title":"9d07e5b5762d6743","description":"7c278220f687adfe","inputSchema":"9ea190c9f4e229cf","annotations":"294baf9a03fe50cb"}}]}

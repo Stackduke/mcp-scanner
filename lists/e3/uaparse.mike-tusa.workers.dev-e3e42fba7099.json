@@ -1,0 +1,1 @@
+{"source":"https://uaparse.mike-tusa.workers.dev/mcp","takenAt":"2026-10-16T17:59:39.105Z","server":{"name":"uaparse","version":"0.5.2"},"tools":[{"name":"parse_user_agent","kind":"read","fields":{"title":"0e0cf780230cceb0","description":"678da16cf59b27aa","inputSchema":"c1372ea9ab492153","outputSchema":"9c3ad64519e9fa77","annotations":"80b6b3e11975de9e"}}]}

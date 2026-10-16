@@ -1,0 +1,1 @@
+{"source":"https://www.med-dent24.com/mcp","takenAt":"2026-10-16T18:01:37.018Z","server":{"name":"dedemed-shopmcp","version":"0.1.2"},"tools":[{"name":"get_product","kind":"read","fields":{"description":"cd49c4e1803a7aab","inputSchema":"013735eb48d9cf54"}},{"name":"list_products","kind":"read","fields":{"description":"16684893ca13a38e","inputSchema":"ee9001af176c8173"}}]}

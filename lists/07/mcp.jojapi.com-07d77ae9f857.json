@@ -1,0 +1,1 @@
+{"source":"https://mcp.jojapi.com/gpt-4o-ksdwzw","takenAt":"2026-10-16T18:03:55.057Z","server":{"name":"jojapi-gpt-4o-ksdwzw","version":"1.0.0"},"tools":[{"name":"post_chat_completions","kind":"money","fields":{"title":"2ef76ca718214dcb","description":"a57b4d178fef2b0d","inputSchema":"af1b393adc7da2f9"}}]}

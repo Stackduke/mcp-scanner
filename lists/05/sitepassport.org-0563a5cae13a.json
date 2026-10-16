@@ -1,0 +1,1 @@
+{"source":"https://sitepassport.org/.well-known/mcp.json","takenAt":"2026-10-16T17:57:54.994Z","server":{"name":"sitepassport","version":"1.0.0"},"tools":[{"name":"check_wordpress_agent_readiness","kind":"read","fields":{"description":"24a6f20266b37338","inputSchema":"050ef47e96d59d36","annotations":"294baf9a03fe50cb"}}]}

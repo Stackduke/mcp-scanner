@@ -1,0 +1,1 @@
+{"source":"https://justinmckelvey.com/mcp","takenAt":"2026-10-16T17:45:54.540Z","server":{"name":"justinmckelvey-ai-visibility","version":"1.0.0"},"tools":[{"name":"check_ai_visibility","kind":"read","fields":{"title":"30d07b83c335036d","description":"ac4c4f4379276e1a","inputSchema":"0dbd1ad779fab6cd","outputSchema":"3000363e0436dd58","annotations":"6f0a35280cb48213"}}]}

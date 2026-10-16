@@ -1,0 +1,1 @@
+{"source":"https://webmatik.ai/mcp","takenAt":"2026-10-16T18:00:27.849Z","server":{"name":"Webmatik","version":"1.0.0"},"tools":[{"name":"get_audit","kind":"read","fields":{"description":"d95b649b86453526","inputSchema":"2613fed0674751fc"}},{"name":"run_audit","kind":"write","fields":{"description":"43487417bca25556","inputSchema":"07cea019961db9b0"}}]}

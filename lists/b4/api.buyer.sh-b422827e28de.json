@@ -1,0 +1,1 @@
+{"source":"https://api.buyer.sh/mcp","takenAt":"2026-10-16T17:38:24.336Z","server":{"name":"buyer.sh","version":"0.1.0"},"tools":[{"name":"search_products","kind":"read","fields":{"title":"642f4c133f0b05c8","description":"1b84d55346d39f40","inputSchema":"ce6d406f3be43921","annotations":"dc58e55a8287733e"}}]}

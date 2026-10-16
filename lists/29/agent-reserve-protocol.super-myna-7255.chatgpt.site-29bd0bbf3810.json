@@ -1,0 +1,1 @@
+{"source":"https://agent-reserve-protocol.super-myna-7255.chatgpt.site/api/mcp","takenAt":"2026-10-16T17:37:23.854Z","server":{"name":"agent-reserve-protocol","version":"0.1.0"},"tools":[{"name":"evaluate_agent_spend_request","kind":"write","fields":{"title":"cc9433a2eff58efa","description":"b7352fc4ece61aa7","inputSchema":"814ed6e4bf030559","annotations":"ae78503371695cf7"}}]}

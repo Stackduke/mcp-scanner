@@ -1,0 +1,1 @@
+{"source":"https://nabanya.kasahorow.com/mcp","takenAt":"2026-10-16T17:54:21.172Z","server":{"name":"kasahorow","version":"0.1.0"},"tools":[{"name":"lookup_word","kind":"read","fields":{"description":"52f3c8b777e1b558","inputSchema":"9a40e387cdbd94b4"}},{"name":"validate_translation","kind":"read","fields":{"description":"1193c8e65d01182d","inputSchema":"eb71fae21909fd3f"}}]}

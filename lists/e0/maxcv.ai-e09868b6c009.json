@@ -1,0 +1,1 @@
+{"source":"https://maxcv.ai/mcp","takenAt":"2026-10-16T17:47:03.030Z","server":{"name":"maxcv","version":"0.1.0"},"tools":[{"name":"score_cv","kind":"write","fields":{"description":"56b9d0f3e381b591","inputSchema":"6fe237ae194f6cc8"}},{"name":"tailor_cv","kind":"write","fields":{"description":"3043df91c4a431f3","inputSchema":"6fe237ae194f6cc8"}}]}

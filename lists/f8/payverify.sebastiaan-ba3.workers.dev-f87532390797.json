@@ -1,0 +1,1 @@
+{"source":"https://payverify.sebastiaan-ba3.workers.dev/mcp","takenAt":"2026-10-16T17:55:25.189Z","server":{"name":"payverify","version":"1.0.0"},"tools":[{"name":"verify_base_usdc_tx","kind":"read","fields":{"description":"4f2c5725e0ae2aa4","inputSchema":"d2fcf801ee73f70a"}}]}

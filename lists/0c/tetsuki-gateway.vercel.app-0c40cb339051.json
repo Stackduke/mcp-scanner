@@ -1,0 +1,1 @@
+{"source":"https://tetsuki-gateway.vercel.app/mcp","takenAt":"2026-10-16T17:59:01.378Z","server":{"name":"tetsuki-gateway","version":"0.1.0"},"tools":[{"name":"check_llms_txt","kind":"read","fields":{"description":"5d6796054e47ceb6","inputSchema":"ad0d91c3755961f4"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://mcp.agenticrail.nz/","takenAt":"2026-10-16T17:47:25.520Z","server":{"name":"AgenticRail","version":"1.3.0"},"tools":[{"name":"evaluate_step","kind":"unclear","fields":{"description":"389a32e1cd4e7bef","inputSchema":"03ae8eecbcdfeb5c"}},{"name":"verify_receipt","kind":"write","fields":{"description":"56b6684aaa4d5850","inputSchema":"76db6430d965ed1e"}}]}

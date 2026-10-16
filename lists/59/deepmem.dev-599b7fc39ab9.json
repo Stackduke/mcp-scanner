@@ -1,0 +1,1 @@
+{"source":"https://deepmem.dev/mcp","takenAt":"2026-10-16T17:42:57.188Z","server":{"name":"deepmem","version":"1.29.1"},"tools":[{"name":"deepmem_search","kind":"unclear","fields":{"description":"726fe7fe2dad249e","inputSchema":"e5fc302fca1ac6b2"}},{"name":"deepmem_write","kind":"write","fields":{"description":"aafb68939ba3a025","inputSchema":"9894a57e0f8335ca"}}]}

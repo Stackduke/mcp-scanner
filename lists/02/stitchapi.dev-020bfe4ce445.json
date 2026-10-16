@@ -1,0 +1,1 @@
+{"source":"https://stitchapi.dev/api/mcp","takenAt":"2026-10-16T17:58:26.983Z","server":{"name":"stitchapi-docs","version":"1.0.0"},"tools":[{"name":"get_doc","kind":"read","fields":{"description":"46c5fc306fdcebe2","inputSchema":"12d166e3240bf691"}},{"name":"search_docs","kind":"read","fields":{"description":"64281e2b944548ba","inputSchema":"3c7bdf74f1dfcd29"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://latitude10.tech/mcp/readiness","takenAt":"2026-10-16T18:02:57.571Z","server":{"name":"latitude10-agent-readiness","version":"1.0.0"},"tools":[{"name":"check_agent_readiness","kind":"read","fields":{"title":"d7ccf502a9427893","description":"16f76c9e46def11f","inputSchema":"fdf44a1ba0e7d34b","annotations":"31c89f5367991ab3"}}]}

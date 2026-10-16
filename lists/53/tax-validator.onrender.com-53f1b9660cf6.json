@@ -1,0 +1,1 @@
+{"source":"https://tax-validator.onrender.com/mcp","takenAt":"2026-10-16T17:58:53.877Z","server":{"name":"moroccan-tax-validator","version":""},"tools":[{"name":"check_ice","kind":"read","fields":{"description":"e19c53cc359b2573","inputSchema":"01cd5732bcb50f8e"}},{"name":"check_if","kind":"read","fields":{"description":"444a8926e2c1b293","inputSchema":"065f63d368d72f4f"}}]}

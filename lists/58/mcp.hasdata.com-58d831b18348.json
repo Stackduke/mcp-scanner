@@ -1,0 +1,1 @@
+{"source":"https://mcp.hasdata.com/mcp?apis=facebook","takenAt":"2026-10-16T18:03:48.002Z","server":{"name":"hasdata-mcp-api-server","version":"1.0.0"},"tools":[{"name":"hasdata_facebook_profile_getFacebookProfile","kind":"read","fields":{"title":"60ee56cf307dd8f3","description":"c0fec0f71cfdfc99","inputSchema":"fa31272d15f58622","annotations":"294baf9a03fe50cb"}}]}

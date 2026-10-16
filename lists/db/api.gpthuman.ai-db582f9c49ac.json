@@ -1,0 +1,1 @@
+{"source":"https://api.gpthuman.ai/mcp","takenAt":"2026-10-16T17:38:50.953Z","server":{"name":"GPTHuman MCP Server","version":"1.0.1"},"tools":[{"name":"humanize_text","kind":"write","fields":{"title":"dd321cb5d15909a2","description":"493ddaf4b20e49e8","inputSchema":"13cc83480693f0b0","annotations":"ee5d98d8f547a95d"}}]}

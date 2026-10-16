@@ -1,0 +1,1 @@
+{"source":"https://agentglass.net/mcp","takenAt":"2026-10-16T17:37:30.628Z","server":{"name":"agentglass","version":"0.1.0"},"tools":[{"name":"scan_job_page","kind":"read","fields":{"title":"ec74e911456f28c2","description":"f213655afa860e0d","inputSchema":"0be691dbedd4db80"}}]}

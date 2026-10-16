@@ -1,0 +1,1 @@
+{"source":"https://refund.decide.fyi/api/mcp","takenAt":"2026-10-16T17:56:35.143Z","server":{"name":"refund.decide.fyi","version":"1.3.1"},"tools":[{"name":"refund_eligibility","kind":"money","fields":{"title":"cbf4013ac3e11232","description":"f9382c9d59d3df83","inputSchema":"a200abcebe842a8d","outputSchema":"97d2d9a35ba9a178","annotations":"ae78503371695cf7"}}]}

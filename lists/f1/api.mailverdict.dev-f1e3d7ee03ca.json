@@ -1,0 +1,1 @@
+{"source":"https://api.mailverdict.dev/mcp","takenAt":"2026-10-16T17:39:11.853Z","server":{"name":"mailverdict","version":"0.1.1"},"tools":[{"name":"check_domain","kind":"read","fields":{"description":"10d1465e3c1d21c7","inputSchema":"19d044bf4b1e5323"}},{"name":"check_email","kind":"read","fields":{"description":"c08915c7c9605a81","inputSchema":"2c1448967467d522"}}]}

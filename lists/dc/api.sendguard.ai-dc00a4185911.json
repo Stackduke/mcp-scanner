@@ -1,0 +1,1 @@
+{"source":"https://api.sendguard.ai/mcp","takenAt":"2026-10-16T17:39:44.234Z","server":{"name":"sendguard","version":"1.0.1"},"tools":[{"name":"preflight_email","kind":"send","fields":{"title":"f4ecd3db9eb64c85","description":"afc6ba0bee70a6fb","inputSchema":"ef57eea331af0f40","outputSchema":"14be365b876e83b1","annotations":"647343ff57c70cf5"}}]}

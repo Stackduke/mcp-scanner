@@ -1,0 +1,1 @@
+{"source":"https://url-safety-validator-mcp-production.up.railway.app/","takenAt":"2026-10-16T17:59:47.069Z","server":{"name":"url-safety-validator-mcp","version":"1.2.40"},"tools":[{"name":"check_url","kind":"read","fields":{"description":"99c86d527b59201b","inputSchema":"89b0862c1a1881d6","outputSchema":"e01e768e9865c373"}}]}

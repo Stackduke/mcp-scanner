@@ -1,0 +1,1 @@
+{"source":"https://addresstozip.jp/mcp","takenAt":"2026-10-16T17:37:16.806Z","server":{"name":"address-to-zip","version":"1.1.0"},"tools":[{"name":"lookup_zipcode","kind":"write","fields":{"description":"1b07b1a3c216eae9","inputSchema":"7daf91d1a5c147ae"}},{"name":"search_address","kind":"read","fields":{"description":"7d43560114a472b5","inputSchema":"ab1a02bb9f3a1d21"}}]}

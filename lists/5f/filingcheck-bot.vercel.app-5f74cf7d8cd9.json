@@ -1,0 +1,1 @@
+{"source":"https://filingcheck-bot.vercel.app/mcp","takenAt":"2026-10-16T17:43:56.401Z","server":{"name":"filingcheck","version":"1.0.0"},"tools":[{"name":"check_filing","kind":"read","fields":{"description":"70b74f27d0ecb92c","inputSchema":"0f355b24d627bf75"}}]}

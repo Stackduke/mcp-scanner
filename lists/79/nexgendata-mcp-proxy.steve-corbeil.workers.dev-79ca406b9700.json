@@ -1,0 +1,1 @@
+{"source":"https://nexgendata-mcp-proxy.steve-corbeil.workers.dev/weather-mcp-server/mcp","takenAt":"2026-10-16T18:04:10.389Z","server":{"name":"weather-mcp-server","version":"2.14.7"},"tools":[{"name":"get_weather","kind":"read","fields":{"description":"33746717289ea3fe","inputSchema":"3832962b59f3c6dd","annotations":"9dcb442c205aba53"}}]}

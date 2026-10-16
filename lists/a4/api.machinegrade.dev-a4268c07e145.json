@@ -1,0 +1,1 @@
+{"source":"https://api.machinegrade.dev/mcp","takenAt":"2026-10-16T17:39:11.032Z","server":{"name":"machinegrade-validate-mcp","version":"0.1.2"},"tools":[{"name":"validate","kind":"read","fields":{"description":"0885659f67ed2b44","inputSchema":"e4d2dde937d9cf2f"}}]}

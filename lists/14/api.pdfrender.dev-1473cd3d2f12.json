@@ -1,0 +1,1 @@
+{"source":"https://api.pdfrender.dev/mcp/","takenAt":"2026-10-16T17:39:28.276Z","server":{"name":"pdfrender","version":"1"},"tools":[{"name":"render_html_to_pdf","kind":"read","fields":{"title":"15397732c35cdf56","description":"0c8a6d81350a5e7c","inputSchema":"a620437bfa54e2ac","outputSchema":"82ef96cebaf5fbe1","annotations":"ae42dfe675742c77"}}]}

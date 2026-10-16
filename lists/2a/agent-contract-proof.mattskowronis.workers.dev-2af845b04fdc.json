@@ -1,0 +1,1 @@
+{"source":"https://agent-contract-proof.mattskowronis.workers.dev/mcp","takenAt":"2026-10-16T17:37:22.474Z","server":{"name":"agent-contract-proof","version":"1.0.0"},"tools":[{"name":"verify_agent_contract","kind":"read","fields":{"description":"d56669b436f5bd29","inputSchema":"0e91ce827a039281"}}]}

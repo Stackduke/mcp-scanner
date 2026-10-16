@@ -1,0 +1,1 @@
+{"source":"https://tasks-example-ca49f0f6.alpic.live/","takenAt":"2026-10-16T17:58:53.463Z","server":{"name":"tasks-example","version":"0.0.1"},"tools":[{"name":"greet","kind":"unclear","fields":{"inputSchema":"1ca6f1405ea49b6b"}},{"name":"long_running_task","kind":"write","fields":{"description":"1cf6598d166d3080","inputSchema":"b27ea80305d4cdc1"}}]}

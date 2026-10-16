@@ -1,0 +1,1 @@
+{"source":"https://api.klisten.co.kr/mcp","takenAt":"2026-10-16T17:39:02.614Z","server":{"name":"klisten-catalog-local","version":"0.1.0"},"tools":[{"name":"modelroute_catalog","kind":"read","fields":{"description":"fe5cda13130a242e","inputSchema":"e22f69fbbf5f6b18","outputSchema":"9c7e6cc1486541fa","annotations":"b037c08f5c62e5ea"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://mcp.jojapi.com/google-web-search","takenAt":"2026-10-16T18:03:53.053Z","server":{"name":"jojapi-google-web-search","version":"1.0.0"},"tools":[{"name":"get_v1","kind":"read","fields":{"title":"46f0db3c748665f8","description":"506baaaf712869cc","inputSchema":"a5c27609b433aed7"}}]}

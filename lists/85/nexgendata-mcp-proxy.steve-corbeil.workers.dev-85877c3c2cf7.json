@@ -1,0 +1,1 @@
+{"source":"https://nexgendata-mcp-proxy.steve-corbeil.workers.dev/legal-mcp-server/mcp","takenAt":"2026-10-16T18:03:55.391Z","server":{"name":"Legal & Court Records MCP Server","version":"1.0.0"},"tools":[{"name":"search_court_records","kind":"read","fields":{"description":"421ffb661a606aa1","inputSchema":"69c46c2447f1a3d5","annotations":"e3c63749d68e2c13"}}]}

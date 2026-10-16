@@ -1,0 +1,1 @@
+{"source":"https://curbspec.com/api/mcp","takenAt":"2026-10-16T17:42:45.346Z","server":{"name":"mcp-typescript server on vercel","version":"0.1.0"},"tools":[{"name":"check_vehicle","kind":"write","fields":{"title":"fbddeac588af050d","description":"cde52a731b847ca3","inputSchema":"0a7e43d60c9959c2"}}]}

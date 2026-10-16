@@ -1,0 +1,1 @@
+{"source":"https://mcp.hasdata.com/mcp?apis=bing","takenAt":"2026-10-16T18:03:38.927Z","server":{"name":"hasdata-mcp-api-server","version":"1.0.0"},"tools":[{"name":"hasdata_bing_serp_getSearchResults","kind":"read","fields":{"title":"731c06c38c2d2e94","description":"187ee33c400a62f0","inputSchema":"d8d2069ba9747eea","annotations":"294baf9a03fe50cb"}}]}

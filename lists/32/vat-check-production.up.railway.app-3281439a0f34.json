@@ -1,0 +1,1 @@
+{"source":"https://vat-check-production.up.railway.app/mcp","takenAt":"2026-10-16T17:59:57.595Z","server":{"name":"vat-check","version":"0.2.0"},"tools":[{"name":"check_vat","kind":"read","fields":{"description":"2b8c85182534fce7","inputSchema":"6fa2ae0d00918f31"}}]}

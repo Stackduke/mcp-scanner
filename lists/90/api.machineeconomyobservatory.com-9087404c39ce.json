@@ -1,0 +1,1 @@
+{"source":"https://api.machineeconomyobservatory.com/mcp","takenAt":"2026-10-16T17:39:10.859Z","server":{"name":"meo-preflight","version":"0.2.0"},"tools":[{"name":"preflight_machine_payment","kind":"read","fields":{"title":"eb487acfd9d0e993","description":"31f93446462648fa","inputSchema":"30d71520fe75253d","outputSchema":"d1677a49ff764e29","annotations":"ae78503371695cf7"}}]}

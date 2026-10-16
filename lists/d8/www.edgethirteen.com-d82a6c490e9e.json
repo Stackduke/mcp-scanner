@@ -1,0 +1,1 @@
+{"source":"https://www.edgethirteen.com/api/mcp/altman-z-score-calculator","takenAt":"2026-10-16T18:03:41.985Z","server":{"name":"altman-z-score-calculator","version":"1.0.0"},"tools":[{"name":"compute_altman_z_score","kind":"read","fields":{"description":"0c4e43d5c363a826","inputSchema":"54921869659744ce","annotations":"294baf9a03fe50cb"}}]}

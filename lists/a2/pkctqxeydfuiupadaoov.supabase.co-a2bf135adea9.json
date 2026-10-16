@@ -1,0 +1,1 @@
+{"source":"https://pkctqxeydfuiupadaoov.supabase.co/functions/v1/procurement-mcp","takenAt":"2026-10-16T17:55:40.351Z","server":{"name":"OSA Procurement Guard","version":"0.2.2"},"tools":[{"name":"procurement_decision","kind":"money","fields":{"description":"49f0de0610e4ddfe","inputSchema":"8fd1079568a5ba0f","annotations":"58c0033c5cba7fda"}}]}

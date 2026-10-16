@@ -1,0 +1,1 @@
+{"source":"https://46.101.199.72.nip.io/mcp","takenAt":"2026-10-16T17:37:09.070Z","server":{"name":"steve-filter","version":"0.1.0"},"tools":[{"name":"check_coin","kind":"read","fields":{"description":"02cbc40b6d407881","inputSchema":"349ee9b948c69733"}},{"name":"check_deployer","kind":"write","fields":{"description":"2bfdc3250ccdf6b8","inputSchema":"f08595088c230da7"}}]}

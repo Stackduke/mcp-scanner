@@ -1,0 +1,1 @@
+{"source":"https://claude.seoapi.com/mcp","takenAt":"2026-10-16T17:42:14.613Z","server":{"name":"claude","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"0f5b556afc415ca9","description":"f5c6c94c74b2233c","inputSchema":"65e830a91c0abb8e"}}]}

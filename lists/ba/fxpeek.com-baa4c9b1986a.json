@@ -1,0 +1,1 @@
+{"source":"https://fxpeek.com/api/mcp","takenAt":"2026-10-16T17:44:16.853Z","server":{"name":"fxpeek-rates","version":"1.0.0"},"tools":[{"name":"get_history","kind":"read","fields":{"description":"6b257e79701fd588","inputSchema":"d5be11bb422448aa"}},{"name":"get_latest_rate","kind":"read","fields":{"description":"7571df3360d5bcd7","inputSchema":"6571959fac5c975e"}}]}

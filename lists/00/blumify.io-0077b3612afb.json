@@ -1,0 +1,1 @@
+{"source":"https://blumify.io/api/media/v1/mcp/public","takenAt":"2026-10-16T18:02:48.849Z","server":{"name":"blumify-public","version":"1.0.0"},"tools":[{"name":"get_transcript","kind":"read","fields":{"title":"ba00d331fd6a647c","description":"42726efefb0b8c7e","inputSchema":"9c4ee032489c2f49","annotations":"461c740b05709ab0"}}]}

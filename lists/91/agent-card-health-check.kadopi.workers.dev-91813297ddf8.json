@@ -1,0 +1,1 @@
+{"source":"https://agent-card-health-check.kadopi.workers.dev/mcp","takenAt":"2026-10-16T17:37:21.325Z","server":{"name":"agent-card-health-check","version":"0.1.0"},"tools":[{"name":"diagnose_agent_card","kind":"unclear","fields":{"description":"ce068d6a60409914","inputSchema":"8df38f6619f66640"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://vantane.com/mcp","takenAt":"2026-10-16T17:59:56.442Z","server":{"name":"vies-smoother","version":"1.28.1"},"tools":[{"name":"validate_vat","kind":"read","fields":{"description":"ed1241a95c935d46","inputSchema":"4fb5e4134012db1a"}},{"name":"validate_vat_batch","kind":"read","fields":{"description":"d951b65494d2c605","inputSchema":"0f3b1fbd4033743b"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://api.tradermatrix.pro/api/mcp/free","takenAt":"2026-10-16T17:40:00.951Z","server":{"name":"traderdaddy-pro-free","version":"1.0.0"},"tools":[{"name":"get_premarket_gappers","kind":"read","fields":{"description":"3e3e0a150154f351","inputSchema":"7a014b717a77aac9"}}]}

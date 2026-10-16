@@ -1,0 +1,1 @@
+{"source":"https://scrapiq.io/mcp","takenAt":"2026-10-16T17:57:16.657Z","server":{"name":"scrapiq-mcp-server","version":"0.2.0"},"tools":[{"name":"scrapiq_extract","kind":"read","fields":{"title":"86342e4b7c88bf99","description":"0737a1144deafb44","inputSchema":"4f14d7e64c848e9e"}}]}

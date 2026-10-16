@@ -1,0 +1,1 @@
+{"source":"https://mcp.hasdata.com/mcp?apis=google_images","takenAt":"2026-10-16T18:03:50.031Z","server":{"name":"hasdata-mcp-api-server","version":"1.0.0"},"tools":[{"name":"hasdata_google_images_images_getImageSearchResults","kind":"read","fields":{"title":"e67edc6e80a7d605","description":"a905fe13ab957b54","inputSchema":"c2a7d0d9994a7b62","annotations":"294baf9a03fe50cb"}}]}

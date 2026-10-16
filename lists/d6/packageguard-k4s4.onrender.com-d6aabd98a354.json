@@ -1,0 +1,1 @@
+{"source":"https://packageguard-k4s4.onrender.com/mcp","takenAt":"2026-10-16T17:55:13.112Z","server":{"name":"packageguard","version":"1.0.0"},"tools":[{"name":"check_package_safety","kind":"read","fields":{"description":"8dda7f95e19d3261","inputSchema":"7047a57ad7ca99d0"}}]}

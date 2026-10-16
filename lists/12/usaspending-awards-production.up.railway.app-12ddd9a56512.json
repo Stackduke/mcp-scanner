@@ -1,0 +1,1 @@
+{"source":"https://usaspending-awards-production.up.railway.app/mcp","takenAt":"2026-10-16T17:59:49.703Z","server":{"name":"usaspending-awards","version":"0.1.0"},"tools":[{"name":"search_us_federal_awards","kind":"read","fields":{"description":"c04b113569d8a5d1","inputSchema":"586d5260471272c3"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://mcp.jojapi.com/gpt-5","takenAt":"2026-10-16T18:03:56.057Z","server":{"name":"jojapi-gpt-5","version":"1.0.0"},"tools":[{"name":"post_chat_completions","kind":"money","fields":{"title":"2ef76ca718214dcb","description":"a57b4d178fef2b0d","inputSchema":"2bed6fee470c3baa"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://agentpay-extract.agentpay-apis.workers.dev/mcp","takenAt":"2026-10-16T17:37:33.702Z","server":{"name":"Web Extract","version":"1.1.0"},"tools":[{"name":"extract_page","kind":"write","fields":{"title":"7f88b0d6aa1d2840","description":"85c0414c65001b3f","inputSchema":"5cf80fcc9a2b5ebf","annotations":"dc58e55a8287733e"}}]}
