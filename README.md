@@ -54,7 +54,7 @@ npm run check
 **How often, and how politely.**
 
 - Endpoints that listed tools last time are looked at daily. New endpoints come next. Endpoints that asked for a sign-in, failed, or answered in a way the scanner cannot use rest for 4 to 10 days, spread by address.
-- At most 48 checks run at once, never two on one host. Checks on one host start at least a second apart, and no site (a domain and its subdomains, or one owner's space on shared hosting such as `workers.dev`) gets more than 30 checks in a run. A run stops starting checks after 55 minutes, and the oldest-checked endpoints go first next time.
+- At most 48 checks run at once, never two on one host. Checks on one host start at least a second apart, no host gets more than 30 checks in a run, and no site (a domain and its subdomains; on shared hosting such as `workers.dev` or Cloud Run, each host is its own site) more than 150. A run stops starting checks after 55 minutes, and the oldest-checked endpoints go first next time.
 - A list with more than 2,000 tools, a tool name over 256 characters, more than 8 MB in all, or a definition the scanner cannot process counts as "not usable" for that server; the run goes on.
 - Each request times out after 15 seconds. The scanner identifies itself as `stackduke-mcp-scanner/0.2 (+https://stackduke.com/tracker)`. To have an endpoint left out, open an issue.
 
@@ -62,10 +62,10 @@ npm run check
 
 | Path | What |
 | --- | --- |
-| `endpoints.jsonl` | Every endpoint: registry names, its last 40 checks and their outcomes, its last 30 changes (each naming at most 50 tools per list, with full counts). |
+| `endpoints.jsonl` | Every endpoint: registry names, its last 40 checks and their outcomes, its last 10 changes (each naming at most 20 tools per list, with full counts). |
 | `lists/` | The latest tool list of each endpoint as fingerprints: each tool's name, what it is counted as doing, and a hash of each field. Rewritten only when something changes. |
 | `watched/` | The full definitions from servers scanned with a token, rewritten only when they change. |
-| `feed.json` | What the web page reads: coverage, the servers watched with a token, and the latest change on each server that changed in the last 30 days, with how many checks in those 30 days listed tools. |
+| `feed.json` | What the web page reads: coverage, the servers watched with a token, and the latest change on each server that changed in the last 30 days (at most 300, within 1 MB, with the total), with how many checks in those 30 days listed tools. |
 | `servers.json` | Every endpoint that listed tools, with its counts and the same 30-day coverage. |
 
 The `data` branch must exist before the first run; the workflow checks it out.

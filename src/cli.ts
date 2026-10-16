@@ -24,7 +24,7 @@ const usage = `Usage:
   npm run scan -- history <owner/repo> <from> <to>  Compare tool definitions a repository publishes at two tags.
   npm run scan -- track [options]                   One run of the public tracker: read the registry, look at the endpoints
                                                     due, and write the data folder and the feed. Options, each at most once:
-                                                    --data=tracker-data --budget-minutes=45 --max-checks=30000 --per-host=30
+                                                    --data=tracker-data --budget-minutes=45 --max-checks=30000 --per-host=30 --per-site=150
                                                     --concurrency=48 --host-gap-ms=1000 --skip-registry
   npm run scan -- review [--data=tracker-data] [--days=2]
                                                     Look again, live, at servers the tracker found new or changed, and print
@@ -137,7 +137,7 @@ async function main(argv: string[]): Promise<number> {
   }
 
   if (command === "track" && !args.length) {
-    const defaults: Record<string, string> = { data: "tracker-data", "budget-minutes": "45", "max-checks": "30000", "per-host": "30", concurrency: "48", "host-gap-ms": "1000" };
+    const defaults: Record<string, string> = { data: "tracker-data", "budget-minutes": "45", "max-checks": "30000", "per-host": "30", "per-site": "150", concurrency: "48", "host-gap-ms": "1000" };
     const given = new Map<string, string>();
     for (const flag of flags) {
       const match = /^--([a-z-]+)(?:=(.+))?$/.exec(flag);
@@ -148,14 +148,14 @@ async function main(argv: string[]): Promise<number> {
     }
     const option = (name: string) => given.get(name) ?? (defaults[name] as string);
     const value: Record<string, number> = {};
-    for (const name of ["budget-minutes", "max-checks", "per-host", "concurrency", "host-gap-ms"]) {
+    for (const name of ["budget-minutes", "max-checks", "per-host", "per-site", "concurrency", "host-gap-ms"]) {
       const text = option(name);
       if (!/^\d{1,6}$/.test(text) || Number(text) < (name === "host-gap-ms" ? 0 : 1)) { console.error(`--${name} takes a whole number${name === "host-gap-ms" ? "" : " from 1"}.`); return 2; }
       value[name] = Number(text);
     }
     const summary = await track({
       dataDir: option("data"), readRegistry: !given.has("skip-registry"),
-      maxChecks: value["max-checks"] as number, perHost: value["per-host"] as number, concurrency: value.concurrency as number,
+      maxChecks: value["max-checks"] as number, perHost: value["per-host"] as number, perSite: value["per-site"] as number, concurrency: value.concurrency as number,
       hostGapMs: value["host-gap-ms"] as number, budgetMinutes: value["budget-minutes"] as number,
       environment: process.env, log: (line) => console.log(line),
     });

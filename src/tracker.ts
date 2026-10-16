@@ -72,9 +72,13 @@ export interface Endpoint {
 }
 
 const keptChecks = 40;
-const keptChanges = 30;
+const keptChanges = 10;
 /** Names kept per list in a change, so a server renaming thousands of tools cannot bloat the published files. */
-export const keptNames = 50;
+export const keptNames = 20;
+/** Fewer again in the feed, which a web page loads whole. */
+const feedNames = 10;
+/** The feed stops adding changes past this size, and says how many it left out. */
+const feedBudgetBytes = 1_000_000;
 const hour = 3_600_000, day = 24 * hour;
 
 export const endpointId = (url: string) => createHash("sha256").update(url).digest("hex").slice(0, 12);
@@ -111,20 +115,23 @@ export function mergeRegistry(endpoints: Map<string, Endpoint>, read: RegistryRe
 export interface PlanOptions {
   /** Most endpoints looked at in one run. */
   maxChecks: number;
-  /** Most endpoints on one site in one run, so a site listing thousands of endpoints is not hammered. */
+  /** Most endpoints on one host in one run, so a host listing thousands of endpoints is not hammered. */
   perHost: number;
+  /** Most endpoints on one site (a domain and its subdomains) in one run, so many subdomains cannot fill a run. */
+  perSite: number;
 }
 
-// Hosting suffixes shared by many unrelated owners: a site under these is one more label deep.
-const sharedSuffixes = new Set(["workers.dev", "pages.dev", "vercel.app", "netlify.app", "github.io", "onrender.com", "fly.dev", "herokuapp.com", "supabase.co", "railway.app", "deno.dev", "run.app", "azurewebsites.net", "amazonaws.com", "replit.app", "modal.run", "ngrok-free.app", "web.app", "firebaseapp.com"]);
+// Hosting shared by many unrelated owners: there, each host is its own site.
+const sharedHosting = ["workers.dev", "pages.dev", "vercel.app", "netlify.app", "github.io", "onrender.com", "fly.dev", "herokuapp.com", "supabase.co", "railway.app", "deno.dev", "run.app", "azurewebsites.net", "azurecontainerapps.io", "amazonaws.com", "replit.app", "modal.run", "ngrok-free.app", "web.app", "firebaseapp.com", "hf.space", "glitch.me"];
 
-/** The site an address belongs to, roughly its registrable domain, so many subdomains of one owner share one cap. */
+/** The site an address belongs to: its registrable domain, roughly, or the whole host on shared hosting. */
 export function siteOf(url: string): string {
-  const labels = new URL(url).hostname.toLowerCase().split(".");
-  const lastTwo = labels.slice(-2).join(".");
-  const countryPair = /^[a-z]{2}$/.test(labels.at(-1) ?? "") && (labels.at(-2)?.length ?? 0) <= 3;
-  const depth = sharedSuffixes.has(lastTwo) || countryPair ? 3 : 2;
-  return labels.slice(-depth).join(".");
+  const host = new URL(url).hostname.toLowerCase();
+  if (sharedHosting.some((suffix) => host.endsWith(`.${suffix}`))) return host;
+  const labels = host.split(".");
+  // example.co.uk, example.com.au: a country's own second level is part of the suffix.
+  const countrySecondLevel = /^[a-z]{2}$/.test(labels.at(-1) ?? "") && ["co", "com", "net", "org", "ac", "gov", "edu"].includes(labels.at(-2) ?? "");
+  return labels.slice(countrySecondLevel ? -3 : -2).join(".");
 }
 
 /** How long to wait before looking again at an endpoint that did not list tools: 4 to 10 days, spread by address. */
@@ -135,7 +142,7 @@ const age = (time: string | undefined, now: number) => (time ? now - Date.parse(
  * The endpoints to look at in this run, in order: those that list tools (looked at daily), then
  * those never looked at, then the rest when their rest is over. The oldest look comes first.
  */
-export function planChecks(endpoints: Iterable<Endpoint>, now: string, { maxChecks, perHost }: PlanOptions): Endpoint[] {
+export function planChecks(endpoints: Iterable<Endpoint>, now: string, { maxChecks, perHost, perSite }: PlanOptions): Endpoint[] {
   const at = Date.parse(now);
   const listing: Endpoint[] = [], fresh: Endpoint[] = [], resting: Endpoint[] = [];
   for (const endpoint of endpoints) {
@@ -147,13 +154,14 @@ export function planChecks(endpoints: Iterable<Endpoint>, now: string, { maxChec
   }
   const oldestFirst = (a: Endpoint, b: Endpoint) => age(b.lastChecked ?? b.firstSeen, at) - age(a.lastChecked ?? a.firstSeen, at) || (a.url < b.url ? -1 : 1);
   const plan: Endpoint[] = [];
-  const perHostCount = new Map<string, number>();
+  const perHostCount = new Map<string, number>(), perSiteCount = new Map<string, number>();
   for (const endpoint of [...listing.sort(oldestFirst), ...fresh.sort(oldestFirst), ...resting.sort(oldestFirst)]) {
     if (plan.length >= maxChecks) break;
-    const site = siteOf(endpoint.url);
-    const count = perHostCount.get(site) ?? 0;
-    if (count >= perHost) continue;
-    perHostCount.set(site, count + 1);
+    const host = new URL(endpoint.url).hostname, site = siteOf(endpoint.url);
+    const onHost = perHostCount.get(host) ?? 0, onSite = perSiteCount.get(site) ?? 0;
+    if (onHost >= perHost || onSite >= perSite) continue;
+    perHostCount.set(host, onHost + 1);
+    perSiteCount.set(site, onSite + 1);
     plan.push(endpoint);
   }
   return plan;
@@ -275,13 +283,15 @@ export function recordCheck(endpoint: Endpoint, result: CheckResult, now: string
   if (!listed) return null;
 
   const unchanged = previous !== null && listHashOf(previous) === listed.listHash;
+  // The server sent the same list, but the scanner now reads it differently: keep the new reading, record no change.
+  const reread = unchanged && canonical(previous.tools.map((tool) => tool.kind)) !== canonical(listed.print.tools.map((tool) => tool.kind));
   if (previous && !unchanged && endpoint.lastListed) endpoint.changes = [changeBetween(previous, listed.print, endpoint.lastListed), ...endpoint.changes].slice(0, keptChanges);
   endpoint.listHash = listed.listHash;
   endpoint.lastListed = now;
   endpoint.tools = listed.snapshot.tools.length;
   endpoint.kinds = listed.kinds;
   endpoint.file = printFile(endpoint);
-  return unchanged ? null : { snapshot: listed.snapshot, print: listed.print };
+  return unchanged && !reread ? null : { snapshot: listed.snapshot, print: listed.print };
 }
 
 /** The recent checks as times and outcomes. */
@@ -361,8 +371,10 @@ export interface Feed {
     listedLast48Hours: number;
   };
   watched: FeedWatched[];
-  /** The latest change on each endpoint that changed in the last 30 days, newest first. */
+  /** The latest change on each endpoint that changed in the last 30 days, newest first, as many as fit. */
   changes: FeedChange[];
+  /** How many endpoints changed in the last 30 days, shown or not. */
+  changesTotal: number;
 }
 
 const mostChanges = 300;
@@ -379,13 +391,24 @@ export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, Aut
   };
   const ofEndpoint = (endpoint: Endpoint) => ({ id: endpoint.id, url: endpoint.url, names: endpoint.names, firstSeen: endpoint.firstSeen });
 
-  const changes: FeedChange[] = public_
+  const shorter = (change: ChangeRecord): ChangeRecord => ({
+    ...change,
+    added: change.added.slice(0, feedNames), removed: change.removed.slice(0, feedNames),
+    changed: change.changed.slice(0, feedNames), moreSerious: change.moreSerious.slice(0, feedNames),
+  });
+  const allChanges = public_
     .flatMap((endpoint) => {
       const inPeriod = recent(endpoint);
-      return inPeriod[0] ? [{ ...ofEndpoint(endpoint), ...inPeriod[0], changesIn30Days: inPeriod.length, watchIn30Days: watchOf(endpoint) }] : [];
+      return inPeriod[0] ? [{ ...ofEndpoint(endpoint), ...shorter(inPeriod[0]), changesIn30Days: inPeriod.length, watchIn30Days: watchOf(endpoint) }] : [];
     })
-    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.url < b.url ? -1 : 1))
-    .slice(0, mostChanges);
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.url < b.url ? -1 : 1));
+  const changes: FeedChange[] = [];
+  let bytes = 0;
+  for (const change of allChanges.slice(0, mostChanges)) {
+    bytes += JSON.stringify(change).length;
+    if (bytes > feedBudgetBytes) break;
+    changes.push(change);
+  }
 
   const watched: FeedWatched[] = endpoints.filter((endpoint) => endpoint.signedIn).map((endpoint) => {
     const report = watchedReports.get(endpoint.id);
@@ -398,7 +421,7 @@ export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, Aut
       ...(endpoint.kinds ? { kinds: endpoint.kinds } : {}),
       groups: report ? report.groups.map((group) => ({ kind: group.kind, tools: group.tools.map((tool) => tool.name) })) : [],
       checks: checksOf(endpoint),
-      changes: endpoint.changes.slice(0, 10),
+      changes: endpoint.changes.slice(0, 5).map(shorter),
     };
   }).sort((a, b) => (a.vendor < b.vendor ? -1 : 1));
 
@@ -425,6 +448,7 @@ export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, Aut
     },
     watched,
     changes,
+    changesTotal: allChanges.length,
   };
   return { feed, servers };
 }

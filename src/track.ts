@@ -28,6 +28,7 @@ export interface TrackOptions {
   readRegistry: boolean;
   maxChecks: number;
   perHost: number;
+  perSite: number;
   concurrency: number;
   hostGapMs: number;
   /** Minutes after which no new check starts. */
@@ -119,7 +120,7 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   }
 
   // Each result is recorded as soon as it arrives, so the run holds one list at a time per check, not all of them.
-  const plan = planChecks(byUrl.values(), startedAt, { maxChecks: options.maxChecks, perHost: options.perHost });
+  const plan = planChecks(byUrl.values(), startedAt, { maxChecks: options.maxChecks, perHost: options.perHost, perSite: options.perSite });
   log(`planned ${plan.length} checks`);
   const deadline = Date.parse(startedAt) + options.budgetMinutes * 60_000;
   const { done, notStarted } = await crawl(plan, async (endpoint) => {
