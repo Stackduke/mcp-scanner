@@ -24,8 +24,8 @@ const usage = `Usage:
   npm run scan -- history <owner/repo> <from> <to>  Compare tool definitions a repository publishes at two tags.
   npm run scan -- track [options]                   One run of the public tracker: read the registry, look at the endpoints
                                                     due, and write the data folder and the feed. Options, each at most once:
-                                                    --data=tracker-data --budget-minutes=45 --max-checks=6000 --per-host=30
-                                                    --concurrency=24 --host-gap-ms=1000 --skip-registry
+                                                    --data=tracker-data --budget-minutes=45 --max-checks=30000 --per-host=30
+                                                    --concurrency=48 --host-gap-ms=1000 --skip-registry
   npm run scan -- review [--data=tracker-data] [--days=2]
                                                     Look again, live, at servers the tracker found new or changed, and print
                                                     what the text checks find. For a person; it writes nothing.
@@ -137,7 +137,7 @@ async function main(argv: string[]): Promise<number> {
   }
 
   if (command === "track" && !args.length) {
-    const defaults: Record<string, string> = { data: "tracker-data", "budget-minutes": "45", "max-checks": "6000", "per-host": "30", concurrency: "24", "host-gap-ms": "1000" };
+    const defaults: Record<string, string> = { data: "tracker-data", "budget-minutes": "45", "max-checks": "30000", "per-host": "30", concurrency: "48", "host-gap-ms": "1000" };
     const given = new Map<string, string>();
     for (const flag of flags) {
       const match = /^--([a-z-]+)(?:=(.+))?$/.exec(flag);

@@ -123,3 +123,11 @@ test("a failed connection with a token reports the kind of failure and nothing e
   const result = await listTools("https://example.test/mcp", { fetchImpl, bearerToken: "made-up-secret" });
   assert.deepEqual(result, { outcome: "unreachable", detail: "TypeError" });
 });
+
+test("a list with more tools, or longer names, than any client could use is refused, not kept", async () => {
+  const many = Array.from({ length: 2_001 }, (_, index) => ({ name: `tool_${index}` }));
+  for (const tools of [many, [{ name: "x".repeat(257) }]]) {
+    const { fetchImpl } = fakeServer(hello(), new Response(null, { status: 202 }), json({ jsonrpc: "2.0", id: 2, result: { tools } }));
+    assert.equal((await listTools("https://example.test/mcp", { fetchImpl })).outcome, "not-usable");
+  }
+});

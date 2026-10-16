@@ -9,7 +9,7 @@ import { readRegistry } from "./registry.ts";
 import type { RegistryRead } from "./registry.ts";
 import { scanSignedIn, signedInServers, tokenFor } from "./signed-in.ts";
 import { buildFeed, mergeRegistry, planChecks, readPrint, recordCheck, watchedEndpoint } from "./tracker.ts";
-import type { CheckResult, Endpoint, Feed } from "./tracker.ts";
+import type { CheckResult, Endpoint, RegistryState } from "./tracker.ts";
 
 /**
  * One run of the public tracker, over a data folder:
@@ -39,7 +39,7 @@ export interface TrackOptions {
 }
 
 export interface TrackSummary {
-  registry: Feed["registry"];
+  registry: RegistryState;
   planned: number;
   checked: number;
   notStarted: number;
@@ -72,22 +72,31 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   const byUrl = new Map(all.filter((endpoint) => !endpoint.signedIn).map((endpoint) => [endpoint.url, endpoint]));
   const watched = new Map(all.filter((endpoint) => endpoint.signedIn).map((endpoint) => [endpoint.signedIn as string, endpoint]));
 
-  let registry = (await readJson<Feed["registry"]>(file("registry.json"))) ?? { readAt: "", complete: false, entries: 0, endpoints: 0 };
+  const none: RegistryState = { readAt: "", complete: false, entries: 0, endpoints: 0, attemptedAt: "", attemptOk: false };
+  let registry: RegistryState = { ...none, ...(await readJson<Partial<RegistryState>>(file("registry.json"))) };
   if (options.readRegistry) {
     const read: RegistryRead = await readRegistry({ userAgent, ...(fetchImpl ? { fetchImpl } : {}) });
     log(`registry: ${read.entries.length} entries in ${read.pages} pages${read.complete ? "" : ", stopped before the end"}`);
     // An empty read is a registry that did not answer, not a registry with nothing in it.
+    registry = { ...registry, attemptedAt: startedAt, attemptOk: read.entries.length > 0 && read.complete };
     if (read.entries.length) {
       mergeRegistry(byUrl, read, startedAt);
-      registry = { readAt: startedAt, complete: read.complete, entries: read.entries.length, endpoints: new Set(read.entries.flatMap((entry) => entry.urls)).size };
+      registry = { ...registry, readAt: startedAt, complete: read.complete, entries: read.entries.length, endpoints: new Set(read.entries.flatMap((entry) => entry.urls)).size };
     }
   }
 
-  let changed = 0;
+  let changed = 0, failed = 0;
+  /** Records one check. A list the scanner cannot handle (one nested too deeply, say) is that server's failure, not the run's. */
   async function record(endpoint: Endpoint, result: CheckResult, at: string): Promise<void> {
-    const previous = result.outcome === "listed" && endpoint.file ? readPrint(await readJson(file(endpoint.file))) : null;
     const latestChange = endpoint.changes[0];
-    const saved = recordCheck(endpoint, result, at, previous);
+    const previous = result.outcome === "listed" && endpoint.file ? readPrint(await readJson(file(endpoint.file))) : null;
+    if (result.outcome === "listed" && endpoint.lastListed && !previous) log(`${endpoint.id}: its saved list is missing, so this look starts afresh`);
+    let saved: ReturnType<typeof recordCheck> = null;
+    try { saved = recordCheck(endpoint, result, at, previous); }
+    catch {
+      failed += 1;
+      recordCheck(endpoint, { outcome: "not-usable", detail: "the list could not be processed" }, at, null);
+    }
     if (endpoint.changes[0] !== latestChange) changed += 1;
     if (!saved || !endpoint.file) return;
     await writeWhole(file(endpoint.file), `${JSON.stringify(saved.print)}\n`);
@@ -103,23 +112,25 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     endpoint.url = server.url;
     const at = clock().toISOString();
     const scan = await scanSignedIn(vendor, environment, fetchImpl);
-    if (scan.outcome === "answered") await record(endpoint, scan.result, at);
-    else if (scan.outcome === "no-token") await record(endpoint, { outcome: "no-token" }, at);
-    else if (scan.outcome === "token-echoed") { await record(endpoint, { outcome: "not-usable", detail: "the server sent the token back" }, at); log(`${vendor}: the server sent the token back. Nothing it returned was kept. Replace that token.`); }
-    else if (scan.outcome === "unsafe-connection") throw new Error("Certificate checking is switched off here, so no token was sent.");
+    if (scan.outcome === "unsafe-connection") throw new Error("Certificate checking is switched off here, so no token was sent.");
+    if (scan.outcome === "token-echoed") log(`${vendor}: the server sent the token back. Nothing it returned was kept. Replace that token.`);
+    await record(endpoint, scan.outcome === "answered" ? scan.result : scan.outcome === "no-token" ? { outcome: "no-token" } : { outcome: "not-usable", detail: "the server sent the token back" }, at);
     log(`${vendor}: ${endpoint.outcome}${endpoint.tools !== undefined ? `, ${endpoint.tools} tools` : ""}`);
   }
 
+  // Each result is recorded as soon as it arrives, so the run holds one list at a time per check, not all of them.
   const plan = planChecks(byUrl.values(), startedAt, { maxChecks: options.maxChecks, perHost: options.perHost });
   log(`planned ${plan.length} checks`);
   const deadline = Date.parse(startedAt) + options.budgetMinutes * 60_000;
   const { done, notStarted } = await crawl(plan, async (endpoint) => {
     const at = clock().toISOString();
-    try { return { at, result: await listTools(endpoint.url, { ...(fetchImpl ? { fetchImpl } : {}), timeoutMs: 15_000 }) }; }
-    catch { return { at, result: { outcome: "unreachable", detail: "error" } as const }; }
+    let result: CheckResult;
+    try { result = await listTools(endpoint.url, { ...(fetchImpl ? { fetchImpl } : {}), timeoutMs: 15_000 }); }
+    catch { result = { outcome: "unreachable", detail: "error" }; }
+    await record(endpoint, result, at);
+    return endpoint.outcome;
   }, { concurrency: options.concurrency, hostGapMs: options.hostGapMs, deadline, now: () => clock().getTime() });
-  for (const { item, result } of done) await record(item, result.result, result.at);
-  log(`checked ${done.length}, not started ${notStarted.length}, changed ${changed}`);
+  log(`checked ${done.length}, not started ${notStarted.length}, changed ${changed}, could not process ${failed}`);
 
   const endpoints = [...byUrl.values(), ...watched.values()].sort(byId);
   const reports = new Map<string, AuthorityReport>();

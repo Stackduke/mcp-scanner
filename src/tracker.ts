@@ -14,7 +14,8 @@ import type { Snapshot } from "./types.ts";
  * - every tool is read the more serious way (the counts come from `authorityOf`);
  * - nothing says what a server cannot do, or that it is safe;
  * - a server's words appear only as identifiers: tool names cut to the characters tool names
- *   normally have, and its name for itself only when it carries no word of reassurance;
+ *   normally have. Its name for itself is not published;
+ * - a count of tools is given only for what was found: a kind with no tools is left out, never 0;
  * - nothing claims a period was quiet unless it was watched. Each change says between which two
  *   successful scans it happened, and each endpoint keeps a record of its recent checks.
  * The text checks for planted instructions are not published here. A finding goes to a person
@@ -24,18 +25,21 @@ export type CheckOutcome = "listed" | "sign-in-required" | "not-usable" | "unrea
 const outcomeCode: Record<CheckOutcome, string> = { listed: "L", "sign-in-required": "S", "not-usable": "N", unreachable: "U", "no-token": "T" };
 const codeOutcome = Object.fromEntries(Object.entries(outcomeCode).map(([outcome, code]) => [code, outcome])) as Record<string, CheckOutcome>;
 
-export type KindCounts = Record<AuthorityKind, number>;
+/** How many tools are counted under each kind. A kind with none is left out: a 0 would read as "cannot". */
+export type KindCounts = Partial<Record<AuthorityKind, number>>;
 
 export interface ChangeRecord {
   /** The scan that saw the change. */
   at: string;
   /** The last scan before it that listed tools. The change happened somewhere between the two. */
   since: string;
+  /** At most `keptNames` names each; `counts` has the full numbers. */
   added: string[];
   removed: string[];
   changed: Array<{ name: string; fields: ChangedField[] }>;
-  /** Tools counted as able to do more than before (added or changed), with the most serious thing each now does. */
+  /** Tools added or changed that are counted as able to do more than before, with the most serious thing each now does. */
   moreSerious: Array<{ name: string; kind: AuthorityKind }>;
+  counts: { added: number; removed: number; changed: number; moreSerious: number };
   /** Written by the scanner. Tool names are the only words of the server's in it. */
   summary: string;
 }
@@ -59,8 +63,6 @@ export interface Endpoint {
   listHash?: string;
   tools?: number;
   kinds?: KindCounts;
-  /** The server's name for itself, when it can be shown. */
-  declaredName?: string;
   /** Where the latest tool list is kept, relative to the data folder. */
   file?: string;
   /** The most recent checks, newest last, as `<time> <code>`. */
@@ -71,6 +73,8 @@ export interface Endpoint {
 
 const keptChecks = 40;
 const keptChanges = 30;
+/** Names kept per list in a change, so a server renaming thousands of tools cannot bloat the published files. */
+export const keptNames = 50;
 const hour = 3_600_000, day = 24 * hour;
 
 export const endpointId = (url: string) => createHash("sha256").update(url).digest("hex").slice(0, 12);
@@ -93,12 +97,12 @@ export function mergeRegistry(endpoints: Map<string, Endpoint>, read: RegistryRe
   for (const [url, names] of named) {
     const known = endpoints.get(url);
     const list = [...names].filter(Boolean).sort().slice(0, 5);
-    if (known && !known.signedIn) { known.names = list; known.inRegistry = true; delete known.leftRegistry; }
-    else if (!known) endpoints.set(url, { id: endpointId(url), url, names: list, firstSeen: now, inRegistry: true, checks: [], changes: [] });
+    if (known) { known.names = list; known.inRegistry = true; delete known.leftRegistry; }
+    else endpoints.set(url, { id: endpointId(url), url, names: list, firstSeen: now, inRegistry: true, checks: [], changes: [] });
   }
   if (!read.complete) return;
   for (const endpoint of endpoints.values()) {
-    if (endpoint.signedIn || named.has(endpoint.url) || !endpoint.inRegistry) continue;
+    if (named.has(endpoint.url) || !endpoint.inRegistry) continue;
     endpoint.inRegistry = false;
     endpoint.leftRegistry = now;
   }
@@ -107,8 +111,20 @@ export function mergeRegistry(endpoints: Map<string, Endpoint>, read: RegistryRe
 export interface PlanOptions {
   /** Most endpoints looked at in one run. */
   maxChecks: number;
-  /** Most endpoints on one host in one run, so a host listing thousands of endpoints is not hammered. */
+  /** Most endpoints on one site in one run, so a site listing thousands of endpoints is not hammered. */
   perHost: number;
+}
+
+// Hosting suffixes shared by many unrelated owners: a site under these is one more label deep.
+const sharedSuffixes = new Set(["workers.dev", "pages.dev", "vercel.app", "netlify.app", "github.io", "onrender.com", "fly.dev", "herokuapp.com", "supabase.co", "railway.app", "deno.dev", "run.app", "azurewebsites.net", "amazonaws.com", "replit.app", "modal.run", "ngrok-free.app", "web.app", "firebaseapp.com"]);
+
+/** The site an address belongs to, roughly its registrable domain, so many subdomains of one owner share one cap. */
+export function siteOf(url: string): string {
+  const labels = new URL(url).hostname.toLowerCase().split(".");
+  const lastTwo = labels.slice(-2).join(".");
+  const countryPair = /^[a-z]{2}$/.test(labels.at(-1) ?? "") && (labels.at(-2)?.length ?? 0) <= 3;
+  const depth = sharedSuffixes.has(lastTwo) || countryPair ? 3 : 2;
+  return labels.slice(-depth).join(".");
 }
 
 /** How long to wait before looking again at an endpoint that did not list tools: 4 to 10 days, spread by address. */
@@ -134,10 +150,10 @@ export function planChecks(endpoints: Iterable<Endpoint>, now: string, { maxChec
   const perHostCount = new Map<string, number>();
   for (const endpoint of [...listing.sort(oldestFirst), ...fresh.sort(oldestFirst), ...resting.sort(oldestFirst)]) {
     if (plan.length >= maxChecks) break;
-    const host = new URL(endpoint.url).hostname;
-    const count = perHostCount.get(host) ?? 0;
+    const site = siteOf(endpoint.url);
+    const count = perHostCount.get(site) ?? 0;
     if (count >= perHost) continue;
-    perHostCount.set(host, count + 1);
+    perHostCount.set(site, count + 1);
     plan.push(endpoint);
   }
   return plan;
@@ -174,31 +190,37 @@ export function readPrint(value: unknown): ListPrint | null {
   return ok ? (value as ListPrint) : null;
 }
 
-/** A fingerprint of a whole list, to tell a change without opening the saved list. */
-export const listHashOf = (print: ListPrint) => createHash("sha256").update(canonical(print.tools)).digest("hex");
+/**
+ * A fingerprint of a whole list, to tell a change without opening the saved list. It covers what the
+ * server sent and nothing the scanner decided, so a change to the scanner's rules is not a change.
+ */
+export const listHashOf = (print: ListPrint) => createHash("sha256").update(canonical(print.tools.map(({ name, fields }) => ({ name, fields })))).digest("hex");
 
 export function kindCounts(report: AuthorityReport): KindCounts {
-  const counts = Object.fromEntries(seriousFirst.map((kind) => [kind, 0])) as KindCounts;
-  for (const group of report.groups) counts[group.kind] = group.tools.length;
-  return counts;
+  return Object.fromEntries(report.groups.filter((group) => group.tools.length).map((group) => [group.kind, group.tools.length]));
 }
 
 const rankOf = (kind: AuthorityKind) => seriousFirst.indexOf(kind);
-const listedNames = (names: string[], most = 5) => (names.length > most ? `${names.slice(0, most).join(", ")} and ${names.length - most} more` : names.join(", "));
 const kindWords: Record<AuthorityKind, string> = { ...canDo, unclear: "not clear what it does" };
 
 /** One sentence per kind of change, written by the scanner. Tool names are given as identifiers. */
 export function describeChange(change: Omit<ChangeRecord, "summary">): string {
   const parts: string[] = [];
+  const { counts } = change;
+  const listedNames = (names: string[], total = names.length, most = 5) => {
+    const shown = names.slice(0, most);
+    return total > shown.length ? `${shown.join(", ")} and ${total - shown.length} more` : shown.join(", ");
+  };
   const touching = (...which: ChangedField[]) => change.changed.filter((tool) => tool.fields.some((field) => which.includes(field))).map((tool) => tool.name);
-  if (change.added.length) parts.push(`${plural(change.added.length, "tool")} added: ${listedNames(change.added)}.`);
-  if (change.removed.length) parts.push(`${plural(change.removed.length, "tool")} removed: ${listedNames(change.removed)}.`);
+  if (counts.added) parts.push(`${plural(counts.added, "tool")} added: ${listedNames(change.added, counts.added)}.`);
+  if (counts.removed) parts.push(`${plural(counts.removed, "tool")} removed: ${listedNames(change.removed, counts.removed)}.`);
   const described = touching("description"), titled = touching("title"), labelled = touching("annotations"), shaped = touching("inputSchema", "outputSchema");
   if (described.length) parts.push(`Description rewritten on ${listedNames(described)}.`);
   if (titled.length) parts.push(`Title changed on ${listedNames(titled)}.`);
   if (labelled.length) parts.push(`The server's own labels changed on ${listedNames(labelled)}.`);
   if (shaped.length) parts.push(`Inputs or outputs changed on ${listedNames(shaped)}.`);
-  if (change.moreSerious.length) parts.push(`Counted as able to do more: ${listedNames(change.moreSerious.map((tool) => `${tool.name} (${kindWords[tool.kind]})`), 3)}.`);
+  if (counts.changed > change.changed.length) parts.push(`${plural(counts.changed, "tool")} changed in all.`);
+  if (counts.moreSerious) parts.push(`Counted as able to do more: ${listedNames(change.moreSerious.map((tool) => `${tool.name} (${kindWords[tool.kind]})`), counts.moreSerious, 3)}.`);
   return parts.join(" ") || "The tool list changed.";
 }
 
@@ -210,19 +232,23 @@ export function changeBetween(before: ListPrint, after: ListPrint, since: string
   const changed = after.tools.flatMap((tool) => {
     const was = earlier.get(tool.name);
     const differing = was ? fields.filter((field) => was.fields[field] !== tool.fields[field]) : [];
-    return differing.length ? [{ name: shown(tool.name), fields: differing }] : [];
+    return differing.length ? [{ name: tool.name, fields: differing, kind: tool.kind, was: was?.kind }] : [];
   });
-  const moreSerious = after.tools.flatMap((tool) => {
-    const was = earlier.get(tool.name);
-    return (was ? rankOf(tool.kind) < rankOf(was.kind) : tool.kind !== "read") ? [{ name: shown(tool.name), kind: tool.kind }] : [];
-  });
+  const added = after.tools.filter((tool) => !earlier.has(tool.name));
+  const removed = before.tools.filter((tool) => !later.has(tool.name));
+  // Only tools the server added or changed: a tool it left alone is not counted as doing more because the scanner's rules moved.
+  const moreSerious = [
+    ...added.filter((tool) => tool.kind !== "read"),
+    ...changed.filter((tool) => tool.was !== undefined && rankOf(tool.kind) < rankOf(tool.was)),
+  ].sort((a, b) => rankOf(a.kind) - rankOf(b.kind));
   const change = {
     at: after.takenAt,
     since,
-    added: after.tools.filter((tool) => !earlier.has(tool.name)).map((tool) => shown(tool.name)),
-    removed: before.tools.filter((tool) => !later.has(tool.name)).map((tool) => shown(tool.name)),
-    changed,
-    moreSerious: moreSerious.sort((a, b) => rankOf(a.kind) - rankOf(b.kind)),
+    added: added.slice(0, keptNames).map((tool) => shown(tool.name)),
+    removed: removed.slice(0, keptNames).map((tool) => shown(tool.name)),
+    changed: changed.slice(0, keptNames).map((tool) => ({ name: shown(tool.name), fields: tool.fields })),
+    moreSerious: moreSerious.slice(0, keptNames).map((tool) => ({ name: shown(tool.name), kind: tool.kind })),
+    counts: { added: added.length, removed: removed.length, changed: changed.length, moreSerious: moreSerious.length },
   };
   return { ...change, summary: describeChange(change) };
 }
@@ -235,50 +261,58 @@ export type CheckResult = ListToolsResult | { outcome: "no-token" };
  * the history of changes.
  */
 export function recordCheck(endpoint: Endpoint, result: CheckResult, now: string, previous: ListPrint | null): { snapshot: Snapshot; print: ListPrint } | null {
-  const outcome: CheckOutcome = result.outcome;
-  endpoint.checks = [...endpoint.checks, `${now} ${outcomeCode[outcome]}`].slice(-keptChecks);
-  if (endpoint.outcome !== outcome) endpoint.outcomeSince = now;
-  endpoint.outcome = outcome;
-  endpoint.lastChecked = now;
-  if (result.outcome !== "listed") return null;
+  // Everything that can fail on a hostile list is worked out before the endpoint is touched.
+  const listed = result.outcome === "listed" ? (() => {
+    const snapshot = takeSnapshot(endpoint.url, result.tools, result.server, now);
+    const print = printOf(snapshot);
+    return { snapshot, print, listHash: listHashOf(print), kinds: kindCounts(authorityOf(snapshot)) };
+  })() : null;
 
-  const snapshot = takeSnapshot(endpoint.url, result.tools, result.server, now);
-  const print = printOf(snapshot);
-  const listHash = listHashOf(print);
-  const report = authorityOf(snapshot);
-  const unchanged = previous !== null && listHashOf(previous) === listHash;
-  if (previous && !unchanged && endpoint.lastListed) endpoint.changes = [changeBetween(previous, print, endpoint.lastListed), ...endpoint.changes].slice(0, keptChanges);
-  endpoint.listHash = listHash;
+  endpoint.checks = [...endpoint.checks, `${now} ${outcomeCode[result.outcome]}`].slice(-keptChecks);
+  if (endpoint.outcome !== result.outcome) endpoint.outcomeSince = now;
+  endpoint.outcome = result.outcome;
+  endpoint.lastChecked = now;
+  if (!listed) return null;
+
+  const unchanged = previous !== null && listHashOf(previous) === listed.listHash;
+  if (previous && !unchanged && endpoint.lastListed) endpoint.changes = [changeBetween(previous, listed.print, endpoint.lastListed), ...endpoint.changes].slice(0, keptChanges);
+  endpoint.listHash = listed.listHash;
   endpoint.lastListed = now;
-  endpoint.tools = snapshot.tools.length;
-  endpoint.kinds = kindCounts(report);
-  if (report.declaredName) endpoint.declaredName = report.declaredName;
-  else delete endpoint.declaredName;
+  endpoint.tools = listed.snapshot.tools.length;
+  endpoint.kinds = listed.kinds;
   endpoint.file = printFile(endpoint);
-  return unchanged ? null : { snapshot, print };
+  return unchanged ? null : { snapshot: listed.snapshot, print: listed.print };
 }
 
 /** The recent checks as times and outcomes. */
-export const checksOf = (endpoint: Endpoint) => endpoint.checks.map((entry) => {
+export const checksOf = (endpoint: Endpoint) => endpoint.checks.flatMap((entry) => {
   const [at = "", code = ""] = entry.split(" ");
-  return { at, outcome: codeOutcome[code] ?? "not-usable" };
+  const outcome = codeOutcome[code];
+  return outcome ? [{ at, outcome }] : [];
 });
 
 // The feed: what the web page reads. Versioned, so the page can refuse a shape it does not know.
 
-export interface FeedChange extends ChangeRecord { id: string; url: string; names: string[]; declaredName?: string; changesIn30Days: number }
+/**
+ * How closely an endpoint was watched in the last 30 days: how many checks were made and how many
+ * of them listed tools. "No change" means something only when these are high.
+ */
+export interface Watch { checks: number; listed: number }
+
+export interface FeedChange extends ChangeRecord { id: string; url: string; names: string[]; firstSeen: string; changesIn30Days: number; watchIn30Days: Watch }
 
 export interface FeedServer {
   id: string;
   url: string;
   names: string[];
-  declaredName?: string;
+  firstSeen: string;
   tools: number;
   kinds: KindCounts;
   lastChecked: string;
   lastListed: string;
   outcome: CheckOutcome;
   changesIn30Days: number;
+  watchIn30Days: Watch;
   lastChange?: string;
 }
 
@@ -286,23 +320,33 @@ export interface FeedWatched {
   id: string;
   vendor: string;
   url: string;
-  declaredName?: string;
   firstSeen: string;
   lastChecked?: string;
   lastListed?: string;
   outcome?: CheckOutcome;
   tools?: number;
   kinds?: KindCounts;
-  /** Tool names under the most serious thing each is counted as doing. */
+  /** Tool names under the most serious thing each is counted as doing. "read" means said to only read. */
   groups: Array<{ kind: AuthorityKind; tools: string[] }>;
   checks: Array<{ at: string; outcome: CheckOutcome }>;
   changes: ChangeRecord[];
 }
 
+export interface RegistryState {
+  /** The last read that returned entries, and whether it went to the end. */
+  readAt: string;
+  complete: boolean;
+  entries: number;
+  endpoints: number;
+  /** The last attempt, which may have failed: then the list of endpoints is the one from `readAt`. */
+  attemptedAt: string;
+  attemptOk: boolean;
+}
+
 export interface Feed {
   version: 1;
   generatedAt: string;
-  registry: { readAt: string; complete: boolean; entries: number; endpoints: number };
+  registry: RegistryState;
   coverage: {
     /** Endpoints the registry lists today. */
     endpoints: number;
@@ -323,18 +367,22 @@ export interface Feed {
 
 const mostChanges = 300;
 
-export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, AuthorityReport>, registry: Feed["registry"], now: string): { feed: Feed; servers: FeedServer[] } {
+export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, AuthorityReport>, registry: RegistryState, now: string): { feed: Feed; servers: FeedServer[] } {
   const at = Date.parse(now);
   const public_ = endpoints.filter((endpoint) => !endpoint.signedIn && endpoint.inRegistry);
   const count = (outcome: CheckOutcome) => public_.filter((endpoint) => endpoint.outcome === outcome).length;
-  const recent = (endpoint: Endpoint) => endpoint.changes.filter((change) => age(change.at, at) <= 30 * day);
-  const ofEndpoint = (endpoint: Endpoint) => ({ id: endpoint.id, url: endpoint.url, names: endpoint.names, ...(endpoint.declaredName ? { declaredName: endpoint.declaredName } : {}) });
+  const inMonth = (time: string) => age(time, at) <= 30 * day;
+  const recent = (endpoint: Endpoint) => endpoint.changes.filter((change) => inMonth(change.at));
+  const watchOf = (endpoint: Endpoint): Watch => {
+    const checks = checksOf(endpoint).filter((check) => inMonth(check.at));
+    return { checks: checks.length, listed: checks.filter((check) => check.outcome === "listed").length };
+  };
+  const ofEndpoint = (endpoint: Endpoint) => ({ id: endpoint.id, url: endpoint.url, names: endpoint.names, firstSeen: endpoint.firstSeen });
 
-  const changes: FeedChange[] = endpoints
-    .filter((endpoint) => !endpoint.signedIn)
+  const changes: FeedChange[] = public_
     .flatMap((endpoint) => {
       const inPeriod = recent(endpoint);
-      return inPeriod[0] ? [{ ...ofEndpoint(endpoint), ...inPeriod[0], changesIn30Days: inPeriod.length }] : [];
+      return inPeriod[0] ? [{ ...ofEndpoint(endpoint), ...inPeriod[0], changesIn30Days: inPeriod.length, watchIn30Days: watchOf(endpoint) }] : [];
     })
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.url < b.url ? -1 : 1))
     .slice(0, mostChanges);
@@ -342,9 +390,7 @@ export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, Aut
   const watched: FeedWatched[] = endpoints.filter((endpoint) => endpoint.signedIn).map((endpoint) => {
     const report = watchedReports.get(endpoint.id);
     return {
-      id: endpoint.id, vendor: endpoint.signedIn as string, url: endpoint.url,
-      ...(endpoint.declaredName ? { declaredName: endpoint.declaredName } : {}),
-      firstSeen: endpoint.firstSeen,
+      id: endpoint.id, vendor: endpoint.signedIn as string, url: endpoint.url, firstSeen: endpoint.firstSeen,
       ...(endpoint.lastChecked ? { lastChecked: endpoint.lastChecked } : {}),
       ...(endpoint.lastListed ? { lastListed: endpoint.lastListed } : {}),
       ...(endpoint.outcome ? { outcome: endpoint.outcome } : {}),
@@ -357,14 +403,13 @@ export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, Aut
   }).sort((a, b) => (a.vendor < b.vendor ? -1 : 1));
 
   const servers: FeedServer[] = public_
-    .filter((endpoint) => endpoint.lastListed && endpoint.kinds && endpoint.lastChecked && endpoint.outcome)
-    .map((endpoint) => ({
+    .flatMap((endpoint) => endpoint.lastListed && endpoint.kinds && endpoint.lastChecked && endpoint.outcome ? [{
       ...ofEndpoint(endpoint),
-      tools: endpoint.tools ?? 0, kinds: endpoint.kinds as KindCounts,
-      lastChecked: endpoint.lastChecked as string, lastListed: endpoint.lastListed as string, outcome: endpoint.outcome as CheckOutcome,
-      changesIn30Days: recent(endpoint).length,
+      tools: endpoint.tools ?? 0, kinds: endpoint.kinds,
+      lastChecked: endpoint.lastChecked, lastListed: endpoint.lastListed, outcome: endpoint.outcome,
+      changesIn30Days: recent(endpoint).length, watchIn30Days: watchOf(endpoint),
       ...(endpoint.changes[0] ? { lastChange: endpoint.changes[0].at } : {}),
-    }))
+    }] : [])
     .sort((a, b) => (a.url < b.url ? -1 : 1));
 
   const feed: Feed = {

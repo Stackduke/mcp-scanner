@@ -7,7 +7,7 @@ import { crawl } from "../src/crawl.ts";
 import { readEntry, readRegistry, scannableAddress } from "../src/registry.ts";
 import { takeSnapshot } from "../src/snapshot.ts";
 import { track } from "../src/track.ts";
-import { buildFeed, changeBetween, mergeRegistry, planChecks, printOf, recordCheck } from "../src/tracker.ts";
+import { buildFeed, changeBetween, keptNames, listHashOf, mergeRegistry, planChecks, printOf, recordCheck, siteOf } from "../src/tracker.ts";
 import type { Endpoint, Feed } from "../src/tracker.ts";
 import type { ToolDefinition } from "../src/types.ts";
 
@@ -62,21 +62,21 @@ test("an endpoint leaves the registry only on a complete read", () => {
 
 test("listing endpoints are looked at daily, new ones next, the rest after a rest; no host gets more than its share", () => {
   const plan = planChecks([
-    endpoint("https://resting.example.com/a", { lastChecked: hoursBefore(24), outcome: "sign-in-required" }),
-    endpoint("https://rested.example.com/a", { lastChecked: hoursBefore(24 * 11), outcome: "unreachable" }),
-    endpoint("https://new.example.com/a"),
-    endpoint("https://daily.example.com/a", { lastChecked: hoursBefore(23), outcome: "listed" }),
-    endpoint("https://recent.example.com/a", { lastChecked: hoursBefore(2), outcome: "listed" }),
-    endpoint("https://left.example.com/a", { inRegistry: false, leftRegistry: hoursBefore(24 * 8) }),
-    endpoint("https://busy.example.com/1"), endpoint("https://busy.example.com/22"), endpoint("https://busy.example.com/333"),
-    endpoint("https://signed.example.com/a", { signedIn: "demo" }),
+    endpoint("https://resting.test/a", { lastChecked: hoursBefore(24), outcome: "sign-in-required" }),
+    endpoint("https://rested.test/a", { lastChecked: hoursBefore(24 * 11), outcome: "unreachable" }),
+    endpoint("https://new.test/a"),
+    endpoint("https://daily.test/a", { lastChecked: hoursBefore(23), outcome: "listed" }),
+    endpoint("https://recent.test/a", { lastChecked: hoursBefore(2), outcome: "listed" }),
+    endpoint("https://left.test/a", { inRegistry: false, leftRegistry: hoursBefore(24 * 8) }),
+    endpoint("https://busy.test/1"), endpoint("https://busy.test/22"), endpoint("https://busy.test/333"),
+    endpoint("https://signed.test/a", { signedIn: "demo" }),
   ], now, { maxChecks: 100, perHost: 2 });
   assert.deepEqual(plan.map((item) => item.url), [
-    "https://daily.example.com/a",
-    "https://busy.example.com/1", "https://busy.example.com/22", "https://new.example.com/a",
-    "https://rested.example.com/a",
+    "https://daily.test/a",
+    "https://busy.test/1", "https://busy.test/22", "https://new.test/a",
+    "https://rested.test/a",
   ]);
-  assert.equal(planChecks([endpoint("https://a.example.com/1"), endpoint("https://b.example.com/1")], now, { maxChecks: 1, perHost: 5 }).length, 1);
+  assert.equal(planChecks([endpoint("https://a.test/1"), endpoint("https://b.test/1")], now, { maxChecks: 1, perHost: 5 }).length, 1);
 });
 
 test("a change is recorded between the two scans that listed tools, and a failed scan in between is kept", () => {
@@ -100,7 +100,7 @@ test("a change is recorded between the two scans that listed tools, and a failed
   assert.deepEqual(change?.moreSerious, [{ name: "delete_repo", kind: "destructive" }]);
   assert.equal(change?.summary, "1 tool added: delete_repo. 1 tool removed: list_repos. Description rewritten on get_file. Counted as able to do more: delete_repo (make changes that cannot be undone).");
   assert.deepEqual(server.checks.map((check) => check.split(" ")[1]), ["L", "U", "L", "L"]);
-  assert.deepEqual(server.kinds, { money: 0, destructive: 1, send: 0, write: 0, unclear: 0, read: 1 });
+  assert.deepEqual(server.kinds, { destructive: 1, read: 1 }, "a kind with no tools is left out, never 0");
 });
 
 test("a tool that keeps its name but is now counted as doing more is called out", () => {
@@ -124,8 +124,9 @@ test("a server's own words reach the summary only as tool-name identifiers", () 
 
 test("the feed counts coverage honestly and lists each server's latest change once", () => {
   const changed = endpoint("https://a.example.com/mcp", { outcome: "listed", lastChecked: now, lastListed: now, tools: 1, kinds: { money: 0, destructive: 0, send: 0, write: 1, unclear: 0, read: 0 } });
-  const change = { at: now, since: hoursBefore(24), added: ["x"], removed: [], changed: [], moreSerious: [], summary: "1 tool added: x." };
+  const change = { at: now, since: hoursBefore(24), added: ["x"], removed: [], changed: [], moreSerious: [], counts: { added: 1, removed: 0, changed: 0, moreSerious: 0 }, summary: "1 tool added: x." };
   changed.changes = [change, { ...change, at: hoursBefore(24), since: hoursBefore(48) }, { ...change, at: hoursBefore(24 * 40) }];
+  changed.checks = [`${hoursBefore(24 * 40)} L`, `${hoursBefore(48)} L`, `${hoursBefore(36)} U`, `${hoursBefore(24)} L`, `${now} L`];
   const endpoints = [
     changed,
     endpoint("https://b.example.com/mcp", { outcome: "sign-in-required", lastChecked: now }),
@@ -133,13 +134,15 @@ test("the feed counts coverage honestly and lists each server's latest change on
     endpoint("https://d.example.com/mcp", { outcome: "listed", lastChecked: now, lastListed: hoursBefore(72), tools: 0, kinds: { money: 0, destructive: 0, send: 0, write: 0, unclear: 0, read: 0 } }),
     endpoint("https://e.example.com/mcp", { inRegistry: false, outcome: "listed" }),
   ];
-  const registry = { readAt: now, complete: true, entries: 4, endpoints: 4 };
+  const registry = { readAt: now, complete: true, entries: 4, endpoints: 4, attemptedAt: now, attemptOk: true };
   const { feed, servers } = buildFeed(endpoints, new Map(), registry, now);
   assert.deepEqual(feed.coverage, { endpoints: 4, checked: 3, neverChecked: 1, listed: 2, signInRequired: 1, notUsable: 0, unreachable: 0, listedLast48Hours: 1 });
   assert.equal(feed.changes.length, 1);
   assert.equal(feed.changes[0]?.changesIn30Days, 2);
+  assert.deepEqual(feed.changes[0]?.watchIn30Days, { checks: 4, listed: 3 }, "a month is only as quiet as it was watched");
   assert.deepEqual(servers.map((server) => server.url), ["https://a.example.com/mcp", "https://d.example.com/mcp"]);
   assert.ok(!JSON.stringify(feed).includes("finding"));
+  assert.ok(!JSON.stringify(feed).includes("declaredName"), "a server's name for itself is not published");
 });
 
 test("checks run a few at a time, one at a time per host, hosts taking turns, and none starts after the deadline", async () => {
@@ -193,4 +196,55 @@ test("a run reads the registry, looks at the servers, saves fingerprints, and a 
   const lists = await readdir(path.join(dataDir, "lists"), { recursive: true });
   assert.equal(lists.filter((name) => String(name).endsWith(".json")).length, 1);
   assert.equal((await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n").length, 2);
+});
+
+test("a change to the scanner's own rules is not a change to the server", () => {
+  const tools = [{ name: "manage_account", ...readOnly }, { name: "get_page", ...readOnly }];
+  const before = printOf(takeSnapshot("s", tools, undefined, hoursBefore(24)));
+  const drifted = { ...before, tools: before.tools.map((tool) => ({ ...tool, kind: "destructive" as const })) };
+  assert.equal(listHashOf(drifted), listHashOf(before));
+  const server = endpoint("https://mcp.example.com/mcp", { lastListed: hoursBefore(24) });
+  assert.equal(recordCheck(server, listed(tools), now, drifted), null);
+  assert.equal(server.changes.length, 0);
+  // When the server does change one tool, a tool it left alone is not called out because the rules moved.
+  const after = printOf(takeSnapshot("s", [{ name: "manage_account", ...readOnly }, { name: "get_page", description: "Now with more words.", ...readOnly }], undefined, now));
+  assert.deepEqual(changeBetween(drifted, after, hoursBefore(24)).moreSerious, []);
+});
+
+test("a server that renames thousands of tools gets a short record with full counts", () => {
+  const before = printOf(takeSnapshot("s", [], undefined, hoursBefore(24)));
+  const after = printOf(takeSnapshot("s", Array.from({ length: 120 }, (_, index) => ({ name: `get_item_${String(index).padStart(3, "0")}`, ...readOnly })), undefined, now));
+  const change = changeBetween(before, after, hoursBefore(24));
+  assert.equal(change.added.length, keptNames);
+  assert.equal(change.counts.added, 120);
+  assert.match(change.summary, /^120 tools added: get_item_000, get_item_001, get_item_002, get_item_003, get_item_004 and 115 more\.$/);
+});
+
+test("subdomains of one site share one cap, and shared hosting keeps owners apart", () => {
+  assert.equal(siteOf("https://a.evil.com/mcp"), "evil.com");
+  assert.equal(siteOf("https://deep.b.evil.com/mcp"), "evil.com");
+  assert.equal(siteOf("https://mcp.example.co.uk/mcp"), "example.co.uk");
+  assert.equal(siteOf("https://one.workers.dev/mcp"), "one.workers.dev");
+  assert.equal(siteOf("https://x.one.workers.dev/mcp"), "one.workers.dev");
+  const plan = planChecks(["a", "b", "c"].map((sub) => endpoint(`https://${sub}.evil.com/mcp`)), now, { maxChecks: 10, perHost: 2 });
+  assert.equal(plan.length, 2);
+});
+
+test("a list the scanner cannot process fails that server only, and the run goes on", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
+  let deep: Record<string, unknown> = { type: "string" };
+  for (let level = 0; level < 300; level += 1) deep = { type: "object", properties: { x: deep } };
+  const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
+    const url = String(input);
+    if (url.startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: ["deep", "fine"].map((name) => ({ server: { name: `com.example/${name}`, remotes: [{ type: "streamable-http", url: `https://${name}.example.com/mcp` }] } })), metadata: {} });
+    const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
+    if (body.method === "initialize") return Response.json({ jsonrpc: "2.0", id: body.id, result: {} });
+    if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "get_x", inputSchema: url.includes("deep") ? deep : {} }] } });
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, environment: {}, fetchImpl });
+  assert.equal(summary.checked, 2);
+  const endpoints = (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Endpoint);
+  assert.deepEqual(endpoints.map((item) => [item.url, item.outcome]).sort(), [["https://deep.example.com/mcp", "not-usable"], ["https://fine.example.com/mcp", "listed"]]);
+  assert.equal(summary.registry.attemptOk, true);
 });

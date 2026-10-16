@@ -31,7 +31,8 @@ function refusal(result: SignedInScan): string | null {
 }
 
 export async function connect(vendors: string[], repository: string, deps: ConnectDeps): Promise<{ stored: string[]; skipped: string[] }> {
-  const { readSecret, storeSecret, print, scan = (vendor, environment) => scanSignedIn(vendor, environment) } = deps;
+  // The check that certificate checking is on reads this process's setting too, since Node obeys it whatever is passed.
+  const { readSecret, storeSecret, print, scan = (vendor, environment) => scanSignedIn(vendor, { NODE_TLS_REJECT_UNAUTHORIZED: process.env.NODE_TLS_REJECT_UNAUTHORIZED, ...environment }) } = deps;
   const stored: string[] = [], skipped: string[] = [];
   for (const vendor of vendors) {
     const server = Object.hasOwn(signedInServers, vendor) ? signedInServers[vendor] : undefined;

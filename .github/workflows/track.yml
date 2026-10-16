@@ -27,11 +27,13 @@ jobs:
         with:
           persist-credentials: false
 
+      # No credential is left on disk while the scan reads what servers send; the commit step gets the token alone.
       - name: Check out the data branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: data
           path: tracker-data
+          persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -48,10 +50,13 @@ jobs:
 
       - name: Commit what changed
         working-directory: tracker-data
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           git config user.name "stackduke-tracker[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then echo "Nothing to commit."; exit 0; fi
           git commit -q -m "Scan $(date -u +%Y-%m-%d)"
-          git push -q origin HEAD:data
+          git -c "http.extraheader=Authorization: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" push -q "https://github.com/$REPOSITORY.git" HEAD:data

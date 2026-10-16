@@ -3,7 +3,9 @@
  *
  * Only the latest version of each entry is read, and only its Streamable HTTP endpoints are kept.
  * An endpoint is kept when it is a plain https address a scanner could reach without filling
- * anything in: no {placeholders}, no login in the address, no address on a private network.
+ * anything in: no {placeholders}, no login in the address, and no bare IP address or name that
+ * only a private network uses. A public name that resolves to a private address is not caught
+ * here; https and refused redirects are what limit that.
  * Everything the registry returns was written by whoever published the entry, and is data.
  */
 export const registryAddress = "https://registry.modelcontextprotocol.io/v0.1/servers";
@@ -33,6 +35,7 @@ export interface RegistryOptions {
   userAgent?: string;
 }
 
+const mostUrlsPerEntry = 5;
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -58,7 +61,8 @@ export function readEntry(item: unknown): RegistryEntry | null {
   if (!server || typeof server.name !== "string" || !server.name || server.name.length > 200) return null;
   const meta = isRecord(item) && isRecord(item._meta) ? item._meta["io.modelcontextprotocol.registry/official"] : undefined;
   const remotes = Array.isArray(server.remotes) ? server.remotes : [];
-  const urls = [...new Set(remotes.flatMap((remote) => (isRecord(remote) && remote.type === "streamable-http" ? [scannableAddress(remote.url)] : [])).filter((url): url is string => url !== null))];
+  // A few endpoints per entry at most, so one entry cannot fill a run.
+  const urls = [...new Set(remotes.flatMap((remote) => (isRecord(remote) && remote.type === "streamable-http" ? [scannableAddress(remote.url)] : [])).filter((url): url is string => url !== null))].slice(0, mostUrlsPerEntry);
   return {
     name: server.name,
     version: typeof server.version === "string" ? server.version.slice(0, 100) : "",

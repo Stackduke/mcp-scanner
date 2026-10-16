@@ -28,6 +28,10 @@ export interface ListToolsOptions {
 const protocolVersion = "2025-06-18";
 export const userAgent = "stackduke-mcp-scanner/0.2 (+https://stackduke.com/tracker)";
 const maxBodyBytes = 4_000_000;
+/** Across every page of one list. Far more than any real server sends. */
+const maxListBytes = 8_000_000;
+const maxTools = 2_000;
+const longestName = 256;
 
 class ReplyTooLarge extends Error {}
 
@@ -81,6 +85,7 @@ export function readTool(value: unknown): ToolDefinition | null {
 
 export async function listTools(url: string, { fetchImpl = fetch, timeoutMs = 15_000, maxPages = 50, bearerToken }: ListToolsOptions = {}): Promise<ListToolsResult> {
   let sessionId: string | null = null;
+  let received = 0;
   if (bearerToken !== undefined && !/^https:\/\//i.test(url)) return { outcome: "not-usable", detail: "a token is only sent over https" };
 
   async function send(body: Record<string, unknown>): Promise<{ status: number; contentType: string; text: string }> {
@@ -94,7 +99,8 @@ export async function listTools(url: string, { fetchImpl = fetch, timeoutMs = 15
     if (bearerToken !== undefined) headers.Authorization = `Bearer ${bearerToken}`;
     const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs), redirect: "error" });
     sessionId = response.headers.get("Mcp-Session-Id") ?? sessionId;
-    const text = await readCapped(response, maxBodyBytes);
+    const text = await readCapped(response, Math.min(maxBodyBytes, maxListBytes - received));
+    received += text.length;
     return { status: response.status, contentType: response.headers.get("Content-Type") ?? "", text };
   }
 
@@ -119,6 +125,9 @@ export async function listTools(url: string, { fetchImpl = fetch, timeoutMs = 15
       if (!reply?.result) return { outcome: "not-usable", detail: reply?.error?.message ? "tools/list was refused" : "tools/list returned no result" };
       if (!Array.isArray(reply.result.tools)) return { outcome: "not-usable", detail: "tools/list returned no list of tools" };
       for (const item of reply.result.tools) { const tool = readTool(item); if (tool) tools.push(tool); }
+      // Past these, a list is not one a client could use, and keeping it would only cost the scan.
+      if (tools.length > maxTools) return { outcome: "not-usable", detail: `more than ${maxTools} tools` };
+      if (tools.some((tool) => tool.name.length > longestName)) return { outcome: "not-usable", detail: "a tool name longer than any client accepts" };
       cursor = typeof reply.result.nextCursor === "string" && reply.result.nextCursor ? reply.result.nextCursor : undefined;
       if (!cursor) return { outcome: "listed", server, tools };
     }

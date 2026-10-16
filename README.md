@@ -49,27 +49,30 @@ npm run check
 
 `track` is one run of the public tracker over a data folder. [`.github/workflows/track.yml`](.github/workflows/track.yml) runs it every day at 04:17 UTC and commits the folder to the `data` branch.
 
-**Which servers.** Every Streamable HTTP endpoint in the latest version of each registry entry, as long as it is a plain `https` address: no `{placeholders}`, no login in the address, and no bare IP address or private host name. The registry is read to the end each run. An endpoint that leaves the registry is looked at for 7 more days, then no longer. A read that stops early removes nothing.
+**Which servers.** Every Streamable HTTP endpoint (at most 5 per entry) in the latest version of each registry entry, as long as it is a plain `https` address: no `{placeholders}`, no login in the address, and no bare IP address or private host name. A public name that resolves to a private address is not caught; https and refused redirects are what limit that. The registry is read to the end each run. An endpoint that leaves the registry is looked at for 7 more days, then no longer. A read that stops early removes nothing, and `registry.json` records whether the last attempt succeeded.
 
 **How often, and how politely.**
 
 - Endpoints that listed tools last time are looked at daily. New endpoints come next. Endpoints that asked for a sign-in, failed, or answered in a way the scanner cannot use rest for 4 to 10 days, spread by address.
-- At most 24 checks run at once, never two on one host. Checks on one host start at least a second apart, and no host gets more than 30 checks in a run. A run stops starting checks after 55 minutes, and the oldest-checked endpoints go first next time.
+- At most 48 checks run at once, never two on one host. Checks on one host start at least a second apart, and no site (a domain and its subdomains, or one owner's space on shared hosting such as `workers.dev`) gets more than 30 checks in a run. A run stops starting checks after 55 minutes, and the oldest-checked endpoints go first next time.
+- A list with more than 2,000 tools, a tool name over 256 characters, more than 8 MB in all, or a definition the scanner cannot process counts as "not usable" for that server; the run goes on.
 - Each request times out after 15 seconds. The scanner identifies itself as `stackduke-mcp-scanner/0.2 (+https://stackduke.com/tracker)`. To have an endpoint left out, open an issue.
 
 **What is kept** (in the `data` branch):
 
 | Path | What |
 | --- | --- |
-| `endpoints.jsonl` | Every endpoint: registry names, its last 40 checks and their outcomes, its last 30 changes. |
+| `endpoints.jsonl` | Every endpoint: registry names, its last 40 checks and their outcomes, its last 30 changes (each naming at most 50 tools per list, with full counts). |
 | `lists/` | The latest tool list of each endpoint as fingerprints: each tool's name, what it is counted as doing, and a hash of each field. Rewritten only when something changes. |
 | `watched/` | The full definitions from servers scanned with a token, rewritten only when they change. |
-| `feed.json` | What the web page reads: coverage, the servers watched with a token, and the latest change on each server that changed in the last 30 days. |
-| `servers.json` | Every endpoint that listed tools, with its counts. |
+| `feed.json` | What the web page reads: coverage, the servers watched with a token, and the latest change on each server that changed in the last 30 days, with how many checks in those 30 days listed tools. |
+| `servers.json` | Every endpoint that listed tools, with its counts and the same 30-day coverage. |
+
+The `data` branch must exist before the first run; the workflow checks it out.
 
 Full definitions are kept only for the servers watched with a token. For the rest, the fingerprints say which tools and which fields changed. For the old wording itself, look at the server.
 
-**How a change is described.** Each change carries two times: the scan that saw it, and the last scan before it that listed tools. The change happened somewhere between them. Failed checks in between are kept, so the page can show which stretches were not watched. The same rules as the plain-language report apply: each tool is read the more serious way; nothing says a server is safe or lists what it cannot do; and the summary is written by the scanner, with tool names as the only words of the server's in it. Results of the text checks are not published. A finding goes to a person first, so that a vendor can be told privately.
+**How a change is described.** Each change carries two times: the scan that saw it, and the last scan before it that listed tools. The change happened somewhere between them. Failed checks in between are kept, so the page can show which stretches were not watched. A change is a change in what the server sent: the fingerprints cover names and fields, not the scanner's reading of them, so an update to the scanner's rules is not reported as a change to a server. The same rules as the plain-language report apply: each tool is read the more serious way; a count is given only for kinds that have tools, never as 0; nothing says a server is safe or lists what it cannot do; a server's name for itself is not published; and the summary is written by the scanner, with tool names as the only words of the server's in it. Results of the text checks are not published. A finding goes to a person first, so that a vendor can be told privately.
 
 ## Signed-in servers
 
@@ -77,7 +80,7 @@ Big vendors' servers ask for a sign-in, so the tracker watches them with tokens 
 
 - A token is read from an environment variable (`STACKDUKE_SCAN_<VENDOR>_TOKEN`), never from an argument, and is sent only to that vendor's fixed address. `scan <url>` cannot send one. The older name `AETHIS_SCAN_GITHUB_TOKEN` is still read.
 - It is sent over https only, not at all if certificate checking is switched off, and redirects are refused. It is never printed, saved or included in an error. If a server sends the token back, nothing from that reply is kept.
-- The list that comes back is what that token may see, so one token per server is kept for a series of scans.
+- The list that comes back is what that token may see, so one token per server is kept for a series of scans. The full definitions are published under `watched/`, so the account behind a token should hold nothing of its own. The check that a server did not send the token back catches the exact token only.
 - `npm run scan -- connect` adds tokens to the tracker in one sitting. For each vendor it says where to make the token and what to make, asks for it at a hidden prompt, checks that the vendor's server lists its tools with it, and stores it as a repository secret with `gh secret set`, passing it on standard input. Run it at a terminal signed in to `gh` with admin rights on the repository.
 
 ## Layout
