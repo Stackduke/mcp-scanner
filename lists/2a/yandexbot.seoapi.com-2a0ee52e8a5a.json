@@ -1,1 +1,1 @@
-{"source":"https://yandexbot.seoapi.com/mcp","takenAt":"2026-10-16T18:02:29.845Z","server":{"name":"yandexbot","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"09fbc6d5a59b9ebc","description":"d30f52a5e85643ee","inputSchema":"65e830a91c0abb8e"}}]}
+{"source":"https://yandexbot.seoapi.com/mcp","takenAt":"2026-10-16T18:28:57.466Z","server":{"name":"yandexbot","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"09fbc6d5a59b9ebc","description":"d30f52a5e85643ee","inputSchema":"65e830a91c0abb8e"}}]}

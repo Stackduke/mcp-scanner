@@ -1,1 +1,1 @@
-{"source":"https://stripecheckup.vercel.app/api/mcp","takenAt":"2026-10-16T17:58:30.764Z","server":{"name":"stripecheckup","version":"1.0.0"},"tools":[{"name":"check_stripe_code","kind":"money","fields":{"description":"b109ad640f128a2a","inputSchema":"f8f2d1d989c3ea29"}}]}
+{"source":"https://stripecheckup.vercel.app/api/mcp","takenAt":"2026-10-16T18:25:47.760Z","server":{"name":"stripecheckup","version":"1.0.0"},"tools":[{"name":"check_stripe_code","kind":"money","fields":{"description":"b109ad640f128a2a","inputSchema":"f8f2d1d989c3ea29"}}]}

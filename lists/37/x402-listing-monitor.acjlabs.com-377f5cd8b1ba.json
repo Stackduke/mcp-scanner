@@ -1,1 +1,1 @@
-{"source":"https://x402-listing-monitor.acjlabs.com/mcp","takenAt":"2026-10-16T18:02:23.832Z","server":{"name":"x402-listing-monitor","version":"0.1.0"},"tools":[{"name":"check_listing_health","kind":"read","fields":{"description":"a4444aede62da8a8","inputSchema":"e031d91835ae372d"}}]}
+{"source":"https://x402-listing-monitor.acjlabs.com/mcp","takenAt":"2026-10-16T18:28:52.467Z","server":{"name":"x402-listing-monitor","version":"0.1.0"},"tools":[{"name":"check_listing_health","kind":"read","fields":{"description":"a4444aede62da8a8","inputSchema":"e031d91835ae372d"}}]}

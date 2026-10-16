@@ -1,1 +1,1 @@
-{"source":"https://bingbot.seoapi.com/mcp","takenAt":"2026-10-16T17:41:29.810Z","server":{"name":"bingbot","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"281e7fa7314d9fdb","description":"3e810a2c44baa80c","inputSchema":"65e830a91c0abb8e"}}]}
+{"source":"https://bingbot.seoapi.com/mcp","takenAt":"2026-10-16T18:13:12.222Z","server":{"name":"bingbot","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"281e7fa7314d9fdb","description":"3e810a2c44baa80c","inputSchema":"65e830a91c0abb8e"}}]}

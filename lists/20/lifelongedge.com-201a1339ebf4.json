@@ -1,1 +1,1 @@
-{"source":"https://lifelongedge.com/mcp","takenAt":"2026-10-16T17:46:31.602Z","server":{"name":"edge-lab","version":"0.1.0"},"tools":[{"name":"list_studies","kind":"read","fields":{"title":"5925d29975799f26","description":"ddb0b1af8a0dda9c","inputSchema":"99334726611ccf58"}}]}
+{"source":"https://lifelongedge.com/mcp","takenAt":"2026-10-16T18:17:08.598Z","server":{"name":"edge-lab","version":"0.1.0"},"tools":[{"name":"list_studies","kind":"read","fields":{"title":"5925d29975799f26","description":"ddb0b1af8a0dda9c","inputSchema":"99334726611ccf58"}}]}

@@ -1,1 +1,1 @@
-{"source":"https://agentrisk.dev/mcp/manifest","takenAt":"2026-10-16T17:37:34.999Z","server":{"name":"AgentRisk M2M","version":"1.0.0"},"tools":[{"name":"check_token_risk","kind":"read","fields":{"description":"69b3e76a20b0f9d1","inputSchema":"a83bb2575a25fe44"}}]}
+{"source":"https://agentrisk.dev/mcp/manifest","takenAt":"2026-10-16T18:10:02.639Z","server":{"name":"AgentRisk M2M","version":"1.0.0"},"tools":[{"name":"check_token_risk","kind":"read","fields":{"description":"69b3e76a20b0f9d1","inputSchema":"a83bb2575a25fe44"}}]}

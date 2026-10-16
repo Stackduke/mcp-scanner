@@ -1,1 +1,1 @@
-{"source":"https://domain-liveness-mcp.ottobot2025.workers.dev/mcp","takenAt":"2026-10-16T17:43:14.188Z","server":{"name":"domain-liveness","version":"0.1.1"},"tools":[{"name":"check_domain_live","kind":"read","fields":{"description":"c6a80795e9b07489","inputSchema":"f48e1a14bcb69ea5"}}]}
+{"source":"https://domain-liveness-mcp.ottobot2025.workers.dev/mcp","takenAt":"2026-10-16T18:14:37.685Z","server":{"name":"domain-liveness","version":"0.1.1"},"tools":[{"name":"check_domain_live","kind":"read","fields":{"description":"c6a80795e9b07489","inputSchema":"f48e1a14bcb69ea5"}}]}

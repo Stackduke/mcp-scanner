@@ -1,1 +1,1 @@
-{"source":"https://jp-addr.streamfront.net/mcp","takenAt":"2026-10-16T17:45:50.434Z","server":{"name":"jp-address-mcp","version":"0.1.0"},"tools":[{"name":"normalize_jp_address","kind":"unclear","fields":{"description":"d99209705392fd9e","inputSchema":"e9b25f9ab4216756"}}]}
+{"source":"https://jp-addr.streamfront.net/mcp","takenAt":"2026-10-16T18:16:37.372Z","server":{"name":"jp-address-mcp","version":"0.1.0"},"tools":[{"name":"normalize_jp_address","kind":"unclear","fields":{"description":"d99209705392fd9e","inputSchema":"e9b25f9ab4216756"}}]}

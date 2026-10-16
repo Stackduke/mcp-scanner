@@ -1,0 +1,1 @@
+{"source":"https://tanod.dev/mcp/bank-statement","takenAt":"2026-10-16T18:29:49.484Z","server":{"name":"tanod-bank-statement","version":"0.1.0"},"tools":[{"name":"convert_bank_statement","kind":"money","fields":{"title":"2379c511025409d3","description":"2a0ed2852abf32af","inputSchema":"7b50af06e1bd39b6","outputSchema":"0bcd516df31f436f","annotations":"f7dc60d0b765aea6"}}]}

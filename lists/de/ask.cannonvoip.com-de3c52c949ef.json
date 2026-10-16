@@ -1,1 +1,1 @@
-{"source":"https://ask.cannonvoip.com/mcp","takenAt":"2026-10-16T17:41:06.494Z","server":{"name":"Search Agent","version":"1.0.0"},"tools":[{"name":"ask","kind":"read","fields":{"description":"2e62e33f08debfe6","inputSchema":"ad85230be7b2e46d"}}]}
+{"source":"https://ask.cannonvoip.com/mcp","takenAt":"2026-10-16T18:12:53.206Z","server":{"name":"Search Agent","version":"1.0.0"},"tools":[{"name":"ask","kind":"read","fields":{"description":"2e62e33f08debfe6","inputSchema":"ad85230be7b2e46d"}}]}

@@ -1,1 +1,1 @@
-{"source":"https://perplexitybot.seoapi.com/mcp","takenAt":"2026-10-16T17:55:30.050Z","server":{"name":"perplexitybot","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"3ae51c7193bb9ff7","description":"b790a580051b975d","inputSchema":"65e830a91c0abb8e"}}]}
+{"source":"https://perplexitybot.seoapi.com/mcp","takenAt":"2026-10-16T18:23:34.609Z","server":{"name":"perplexitybot","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"3ae51c7193bb9ff7","description":"b790a580051b975d","inputSchema":"65e830a91c0abb8e"}}]}

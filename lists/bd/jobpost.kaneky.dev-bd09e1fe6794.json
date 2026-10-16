@@ -1,1 +1,1 @@
-{"source":"https://jobpost.kaneky.dev/mcp","takenAt":"2026-10-16T17:45:46.959Z","server":{"name":"jobpost","version":"0.1.1"},"tools":[{"name":"extract_job_posting","kind":"read","fields":{"description":"26c123ae5da2d5ef","inputSchema":"dd07bf6b68fa663c"}}]}
+{"source":"https://jobpost.kaneky.dev/mcp","takenAt":"2026-10-16T18:16:35.520Z","server":{"name":"jobpost","version":"0.1.1"},"tools":[{"name":"extract_job_posting","kind":"read","fields":{"description":"26c123ae5da2d5ef","inputSchema":"dd07bf6b68fa663c"}}]}

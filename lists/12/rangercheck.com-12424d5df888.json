@@ -1,1 +1,1 @@
-{"source":"https://rangercheck.com/api/mcp","takenAt":"2026-10-16T17:56:25.111Z","server":{"name":"rangercheck","version":"1.0.0"},"tools":[{"name":"scan_security","kind":"read","fields":{"description":"741cde5adf5e760a","inputSchema":"d29e62ff50c7e9be"}}]}
+{"source":"https://rangercheck.com/api/mcp","takenAt":"2026-10-16T18:24:17.331Z","server":{"name":"rangercheck","version":"1.0.0"},"tools":[{"name":"scan_security","kind":"read","fields":{"description":"741cde5adf5e760a","inputSchema":"d29e62ff50c7e9be"}}]}

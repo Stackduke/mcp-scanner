@@ -1,1 +1,1 @@
-{"source":"https://mcp.gradientdecisions.com/mcp","takenAt":"2026-10-16T17:49:26.992Z","server":{"name":"merchant-check-mcp","version":"0.1.0"},"tools":[{"name":"check_merchant","kind":"read","fields":{"description":"317695c2ac2c1a84","inputSchema":"9be45d5425606c32"}}]}
+{"source":"https://mcp.gradientdecisions.com/mcp","takenAt":"2026-10-16T18:19:18.685Z","server":{"name":"merchant-check-mcp","version":"0.1.0"},"tools":[{"name":"check_merchant","kind":"read","fields":{"description":"317695c2ac2c1a84","inputSchema":"9be45d5425606c32"}}]}

@@ -1,1 +1,1 @@
-{"source":"https://agents.tamer-ai.ir/mcp","takenAt":"2026-10-16T17:37:38.209Z","server":{"name":"tamer-marketplace","version":"1.0.0"},"tools":[{"name":"list_tamer_prompts","kind":"read","fields":{"description":"251c695fcc1c7fc8","inputSchema":"7a014b717a77aac9"}}]}
+{"source":"https://agents.tamer-ai.ir/mcp","takenAt":"2026-10-16T18:10:04.923Z","server":{"name":"tamer-marketplace","version":"1.0.0"},"tools":[{"name":"list_tamer_prompts","kind":"read","fields":{"description":"251c695fcc1c7fc8","inputSchema":"7a014b717a77aac9"}}]}

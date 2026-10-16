@@ -1,1 +1,1 @@
-{"source":"https://app.asalsold.com/api/mcp","takenAt":"2026-10-16T17:40:22.014Z","server":{"name":"canadian-mortgage-deadlines","version":"0.1.0"},"tools":[{"name":"rate_hold_deadline","kind":"money","fields":{"description":"4159952900da26aa","inputSchema":"1fd5940d6507a66b"}}]}
+{"source":"https://app.asalsold.com/api/mcp","takenAt":"2026-10-16T18:12:19.683Z","server":{"name":"canadian-mortgage-deadlines","version":"0.1.0"},"tools":[{"name":"rate_hold_deadline","kind":"money","fields":{"description":"4159952900da26aa","inputSchema":"1fd5940d6507a66b"}}]}

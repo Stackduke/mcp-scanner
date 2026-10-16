@@ -1,1 +1,1 @@
-{"source":"https://purchaseiq.io/api/mcp","takenAt":"2026-10-16T17:56:13.238Z","server":{"name":"purchaseiq","version":"0.1.0"},"tools":[{"name":"analyze_purchase","kind":"money","fields":{"description":"f6aab21df87e9acb","inputSchema":"76423b3de602ba7b"}}]}
+{"source":"https://purchaseiq.io/api/mcp","takenAt":"2026-10-16T18:24:08.658Z","server":{"name":"purchaseiq","version":"0.1.0"},"tools":[{"name":"analyze_purchase","kind":"money","fields":{"description":"f6aab21df87e9acb","inputSchema":"76423b3de602ba7b"}}]}

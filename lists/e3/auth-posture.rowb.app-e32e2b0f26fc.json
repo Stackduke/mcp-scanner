@@ -1,1 +1,1 @@
-{"source":"https://auth-posture.rowb.app/mcp","takenAt":"2026-10-16T17:41:13.386Z","server":{"name":"auth-posture","version":"1.0.0"},"tools":[{"name":"audit_domain","kind":"read","fields":{"description":"697ebd2d3fb16210","inputSchema":"e1b214f62d56cdb5"}}]}
+{"source":"https://auth-posture.rowb.app/mcp","takenAt":"2026-10-16T18:13:00.056Z","server":{"name":"auth-posture","version":"1.0.0"},"tools":[{"name":"audit_domain","kind":"read","fields":{"description":"697ebd2d3fb16210","inputSchema":"e1b214f62d56cdb5"}}]}

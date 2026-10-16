@@ -1,1 +1,1 @@
-{"source":"https://www.adufloridainfo.com/api/mcp","takenAt":"2026-10-16T18:00:46.984Z","server":{"name":"adu-zoning-mcp","version":"1.0.0"},"tools":[{"name":"check_adu_eligibility","kind":"read","fields":{"description":"df188d07bffc6c5f","inputSchema":"95cbe24e0325a08b"}}]}
+{"source":"https://www.adufloridainfo.com/api/mcp","takenAt":"2026-10-16T18:27:25.098Z","server":{"name":"adu-zoning-mcp","version":"1.0.0"},"tools":[{"name":"check_adu_eligibility","kind":"read","fields":{"description":"df188d07bffc6c5f","inputSchema":"95cbe24e0325a08b"}}]}

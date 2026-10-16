@@ -1,1 +1,1 @@
-{"source":"https://naverbot.seoapi.com/mcp","takenAt":"2026-10-16T17:54:24.546Z","server":{"name":"naverbot","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"130a9f326f38a386","description":"cfe5d4260494f71d","inputSchema":"65e830a91c0abb8e"}}]}
+{"source":"https://naverbot.seoapi.com/mcp","takenAt":"2026-10-16T18:22:47.561Z","server":{"name":"naverbot","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"130a9f326f38a386","description":"cfe5d4260494f71d","inputSchema":"65e830a91c0abb8e"}}]}

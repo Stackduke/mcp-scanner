@@ -1,1 +1,1 @@
-{"source":"https://mcp.verixid.com/","takenAt":"2026-10-16T17:53:12.489Z","server":{"name":"VerixID Verifier","version":"1.0.0"},"tools":[{"name":"verixid_verify","kind":"read","fields":{"description":"55458992e4c787f9","inputSchema":"63b253ecf0662310"}}]}
+{"source":"https://mcp.verixid.com/","takenAt":"2026-10-16T18:21:56.671Z","server":{"name":"VerixID Verifier","version":"1.0.0"},"tools":[{"name":"verixid_verify","kind":"read","fields":{"description":"55458992e4c787f9","inputSchema":"63b253ecf0662310"}}]}

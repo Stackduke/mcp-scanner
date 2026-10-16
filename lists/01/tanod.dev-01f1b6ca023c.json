@@ -1,0 +1,1 @@
+{"source":"https://tanod.dev/mcp/pdf-to-word","takenAt":"2026-10-16T18:30:18.070Z","server":{"name":"tanod-pdf-to-word","version":"0.1.0"},"tools":[{"name":"convert_pdf_to_word","kind":"write","fields":{"title":"084c7bd8a329cb77","description":"d596b2cd2431533c","inputSchema":"73c733b9b794c5d4","outputSchema":"40f4f9d5190ba07d","annotations":"c51930e23ab62453"}}]}

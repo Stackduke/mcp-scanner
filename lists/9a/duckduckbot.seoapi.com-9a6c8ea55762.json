@@ -1,1 +1,1 @@
-{"source":"https://duckduckbot.seoapi.com/mcp","takenAt":"2026-10-16T17:43:20.065Z","server":{"name":"duckduckbot","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"6cc2dc1a2d14e78d","description":"81211e1f9faee63e","inputSchema":"65e830a91c0abb8e"}}]}
+{"source":"https://duckduckbot.seoapi.com/mcp","takenAt":"2026-10-16T18:14:42.808Z","server":{"name":"duckduckbot","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"6cc2dc1a2d14e78d","description":"81211e1f9faee63e","inputSchema":"65e830a91c0abb8e"}}]}

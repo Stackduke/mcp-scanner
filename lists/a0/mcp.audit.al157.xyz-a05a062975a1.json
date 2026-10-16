@@ -1,1 +1,1 @@
-{"source":"https://mcp.audit.al157.xyz/mcp","takenAt":"2026-10-16T17:47:45.386Z","server":{"name":"audit-mcp","version":"1.0.0"},"tools":[{"name":"getSiteOverview","kind":"read","fields":{"description":"b38c23b9c49a00fe","inputSchema":"efddc7bd8bbcef73","annotations":"8803fb4b4971327e"}}]}
+{"source":"https://mcp.audit.al157.xyz/mcp","takenAt":"2026-10-16T18:18:05.483Z","server":{"name":"audit-mcp","version":"1.0.0"},"tools":[{"name":"getSiteOverview","kind":"read","fields":{"description":"b38c23b9c49a00fe","inputSchema":"efddc7bd8bbcef73","annotations":"8803fb4b4971327e"}}]}

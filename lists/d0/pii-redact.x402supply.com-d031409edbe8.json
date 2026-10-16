@@ -1,1 +1,1 @@
-{"source":"https://pii-redact.x402supply.com/mcp","takenAt":"2026-10-16T17:55:34.956Z","server":{"name":"pii-redact","version":"0.1.0"},"tools":[{"name":"redact","kind":"unclear","fields":{"description":"414f7a26153892f3","inputSchema":"03c2c4a786112cda"}}]}
+{"source":"https://pii-redact.x402supply.com/mcp","takenAt":"2026-10-16T18:23:39.003Z","server":{"name":"pii-redact","version":"0.1.0"},"tools":[{"name":"redact","kind":"unclear","fields":{"description":"414f7a26153892f3","inputSchema":"03c2c4a786112cda"}}]}

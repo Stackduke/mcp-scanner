@@ -1,1 +1,1 @@
-{"source":"https://royashbrook.com/hush","takenAt":"2026-10-16T17:56:57.993Z","server":{"name":"hush","version":"1.0.0"},"tools":[{"name":"get_skill","kind":"read","fields":{"description":"51ee1027323dde59","inputSchema":"99334726611ccf58"}}]}
+{"source":"https://royashbrook.com/hush","takenAt":"2026-10-16T18:24:40.100Z","server":{"name":"hush","version":"1.0.0"},"tools":[{"name":"get_skill","kind":"read","fields":{"description":"51ee1027323dde59","inputSchema":"99334726611ccf58"}}]}

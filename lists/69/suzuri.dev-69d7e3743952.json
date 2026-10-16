@@ -1,1 +1,1 @@
-{"source":"https://suzuri.dev/mcp","takenAt":"2026-10-16T17:58:40.744Z","server":{"name":"suzuri-mcp","version":"0.1.0"},"tools":[{"name":"search_japan_white_papers","kind":"read","fields":{"description":"cf2cbcbdd00eeb95","inputSchema":"ffed57045a4ae08e"}}]}
+{"source":"https://suzuri.dev/mcp","takenAt":"2026-10-16T18:25:54.559Z","server":{"name":"suzuri-mcp","version":"0.1.0"},"tools":[{"name":"search_japan_white_papers","kind":"read","fields":{"description":"cf2cbcbdd00eeb95","inputSchema":"ffed57045a4ae08e"}}]}

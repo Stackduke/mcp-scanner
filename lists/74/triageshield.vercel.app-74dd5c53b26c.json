@@ -1,1 +1,1 @@
-{"source":"https://triageshield.vercel.app/api/mcp","takenAt":"2026-10-16T17:59:29.687Z","server":{"name":"triageshield","version":"1.0.0"},"tools":[{"name":"check_vuln_report","kind":"read","fields":{"description":"b4f4993188fe73d4","inputSchema":"06b4d42a4784e0b1"}}]}
+{"source":"https://triageshield.vercel.app/api/mcp","takenAt":"2026-10-16T18:26:32.705Z","server":{"name":"triageshield","version":"1.0.0"},"tools":[{"name":"check_vuln_report","kind":"read","fields":{"description":"b4f4993188fe73d4","inputSchema":"06b4d42a4784e0b1"}}]}

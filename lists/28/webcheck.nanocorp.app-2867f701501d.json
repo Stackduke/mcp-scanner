@@ -1,1 +1,1 @@
-{"source":"https://webcheck.nanocorp.app/mcp","takenAt":"2026-10-16T18:00:27.259Z","server":{"name":"webcheck","version":"1.0.0"},"tools":[{"name":"check_site","kind":"read","fields":{"description":"562a990d66bbddcc","inputSchema":"8ef62b3389dc3571"}}]}
+{"source":"https://webcheck.nanocorp.app/mcp","takenAt":"2026-10-16T18:27:13.501Z","server":{"name":"webcheck","version":"1.0.0"},"tools":[{"name":"check_site","kind":"read","fields":{"description":"562a990d66bbddcc","inputSchema":"8ef62b3389dc3571"}}]}

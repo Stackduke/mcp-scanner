@@ -1,1 +1,1 @@
-{"source":"https://api.kcaldata.com/mcp-server/mcp","takenAt":"2026-10-16T17:39:01.243Z","server":{"name":"kcaldata","version":"3.4.4"},"tools":[{"name":"lookup_calories","kind":"read","fields":{"description":"29190838851eb603","inputSchema":"10798ac8d2df2a31"}}]}
+{"source":"https://api.kcaldata.com/mcp-server/mcp","takenAt":"2026-10-16T18:11:14.616Z","server":{"name":"kcaldata","version":"3.4.4"},"tools":[{"name":"lookup_calories","kind":"read","fields":{"description":"29190838851eb603","inputSchema":"10798ac8d2df2a31"}}]}

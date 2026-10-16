@@ -1,1 +1,1 @@
-{"source":"https://depcheck.kaneky.dev/mcp","takenAt":"2026-10-16T17:42:59.781Z","server":{"name":"depcheck","version":"0.1.0"},"tools":[{"name":"check_packages","kind":"read","fields":{"description":"1c85cec5a8641fb7","inputSchema":"e4260d194977687a"}}]}
+{"source":"https://depcheck.kaneky.dev/mcp","takenAt":"2026-10-16T18:14:25.837Z","server":{"name":"depcheck","version":"0.1.0"},"tools":[{"name":"check_packages","kind":"read","fields":{"description":"1c85cec5a8641fb7","inputSchema":"e4260d194977687a"}}]}

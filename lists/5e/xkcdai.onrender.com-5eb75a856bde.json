@@ -1,1 +1,1 @@
-{"source":"https://xkcdai.onrender.com/mcp","takenAt":"2026-10-16T18:02:26.986Z","server":{"name":"xkcdai","version":"1.29.0"},"tools":[{"name":"find_xkcd","kind":"read","fields":{"description":"9fc62691775eabe2","inputSchema":"6c30951e495519a3"}}]}
+{"source":"https://xkcdai.onrender.com/mcp","takenAt":"2026-10-16T18:28:55.270Z","server":{"name":"xkcdai","version":"1.29.0"},"tools":[{"name":"find_xkcd","kind":"read","fields":{"description":"9fc62691775eabe2","inputSchema":"6c30951e495519a3"}}]}

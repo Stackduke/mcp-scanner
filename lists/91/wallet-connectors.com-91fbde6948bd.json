@@ -1,1 +1,1 @@
-{"source":"https://wallet-connectors.com/mcp","takenAt":"2026-10-16T18:00:19.868Z","server":{"name":"MCP server for data wallet","version":"1.4.0"},"tools":[{"name":"create_account","kind":"write","fields":{"description":"0f1e98aa364c2967","inputSchema":"956212a5e601c3f8"}}]}
+{"source":"https://wallet-connectors.com/mcp","takenAt":"2026-10-16T18:27:08.662Z","server":{"name":"MCP server for data wallet","version":"1.4.0"},"tools":[{"name":"create_account","kind":"write","fields":{"description":"0f1e98aa364c2967","inputSchema":"956212a5e601c3f8"}}]}

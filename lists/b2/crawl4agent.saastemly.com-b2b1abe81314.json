@@ -1,1 +1,1 @@
-{"source":"https://crawl4agent.saastemly.com/mcp","takenAt":"2026-10-16T17:42:39.457Z","server":{"name":"crawl4agent","version":"1.0.0"},"tools":[{"name":"md","kind":"destructive","fields":{"title":"94e3f372132865f3","description":"3cf6ecab5bc6eb10","inputSchema":"83f6031441c60763"}}]}
+{"source":"https://crawl4agent.saastemly.com/mcp","takenAt":"2026-10-16T18:14:10.635Z","server":{"name":"crawl4agent","version":"1.0.0"},"tools":[{"name":"md","kind":"destructive","fields":{"title":"94e3f372132865f3","description":"3cf6ecab5bc6eb10","inputSchema":"83f6031441c60763"}}]}

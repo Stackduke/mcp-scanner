@@ -1,1 +1,1 @@
-{"source":"https://google-maps-mcp-server.vercel.app/mcp","takenAt":"2026-10-16T17:44:42.088Z","server":{"name":"google-maps-mcp-server","version":"0.1.0"},"tools":[{"name":"search_google_maps","kind":"read","fields":{"description":"1812befaaf0d94f2","inputSchema":"50f9b85a229548d5"}}]}
+{"source":"https://google-maps-mcp-server.vercel.app/mcp","takenAt":"2026-10-16T18:15:48.977Z","server":{"name":"google-maps-mcp-server","version":"0.1.0"},"tools":[{"name":"search_google_maps","kind":"read","fields":{"description":"1812befaaf0d94f2","inputSchema":"50f9b85a229548d5"}}]}

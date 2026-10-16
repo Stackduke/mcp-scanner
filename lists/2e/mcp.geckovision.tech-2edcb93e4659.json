@@ -1,1 +1,1 @@
-{"source":"https://mcp.geckovision.tech/mcp","takenAt":"2026-10-16T17:49:16.084Z","server":{"name":"gecko","version":"0.12.0"},"tools":[{"name":"list_surfaces","kind":"read","fields":{"description":"53f42d07ed25a665","inputSchema":"99334726611ccf58","annotations":"266cbce9c54b00b5"}}]}
+{"source":"https://mcp.geckovision.tech/mcp","takenAt":"2026-10-16T18:19:11.968Z","server":{"name":"gecko","version":"0.12.0"},"tools":[{"name":"list_surfaces","kind":"read","fields":{"description":"53f42d07ed25a665","inputSchema":"99334726611ccf58","annotations":"266cbce9c54b00b5"}}]}

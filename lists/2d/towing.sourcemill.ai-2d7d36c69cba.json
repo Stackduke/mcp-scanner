@@ -1,1 +1,1 @@
-{"source":"https://towing.sourcemill.ai/mcp","takenAt":"2026-10-16T17:59:22.067Z","server":{"name":"au-towing-legality","version":"0.1.0"},"tools":[{"name":"check_towing","kind":"read","fields":{"description":"cf16ed0ef8971dee","inputSchema":"e777685aadd33749"}}]}
+{"source":"https://towing.sourcemill.ai/mcp","takenAt":"2026-10-16T18:26:27.139Z","server":{"name":"au-towing-legality","version":"0.1.0"},"tools":[{"name":"check_towing","kind":"read","fields":{"description":"cf16ed0ef8971dee","inputSchema":"e777685aadd33749"}}]}

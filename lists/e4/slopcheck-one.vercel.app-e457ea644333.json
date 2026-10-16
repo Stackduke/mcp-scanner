@@ -1,1 +1,1 @@
-{"source":"https://slopcheck-one.vercel.app/api/mcp","takenAt":"2026-10-16T17:57:58.841Z","server":{"name":"slopcheck","version":"1.0.0"},"tools":[{"name":"check_channel_slop_risk","kind":"read","fields":{"description":"15ece2eac9563eae","inputSchema":"aa32621dbe107a43"}}]}
+{"source":"https://slopcheck-one.vercel.app/api/mcp","takenAt":"2026-10-16T18:25:24.597Z","server":{"name":"slopcheck","version":"1.0.0"},"tools":[{"name":"check_channel_slop_risk","kind":"read","fields":{"description":"15ece2eac9563eae","inputSchema":"aa32621dbe107a43"}}]}

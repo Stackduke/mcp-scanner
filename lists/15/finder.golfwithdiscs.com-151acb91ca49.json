@@ -1,1 +1,1 @@
-{"source":"https://finder.golfwithdiscs.com/mcp","takenAt":"2026-10-16T17:43:58.903Z","server":{"name":"golfwithdiscs-finder","version":"1.0.0"},"tools":[{"name":"find_retailer_stock","kind":"read","fields":{"description":"19e15d098e6fd2b0","inputSchema":"b365de0f79e743ef"}}]}
+{"source":"https://finder.golfwithdiscs.com/mcp","takenAt":"2026-10-16T18:15:18.252Z","server":{"name":"golfwithdiscs-finder","version":"1.0.0"},"tools":[{"name":"find_retailer_stock","kind":"read","fields":{"description":"19e15d098e6fd2b0","inputSchema":"b365de0f79e743ef"}}]}

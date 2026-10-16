@@ -1,1 +1,1 @@
-{"source":"https://mcp.agentfabric.dev/","takenAt":"2026-10-16T17:47:25.029Z","server":{"name":"agentfabric","version":"0.1.0"},"tools":[{"name":"create_tenant","kind":"write","fields":{"description":"607e670dbadaa25b","inputSchema":"cfded99a7b0e011f"}}]}
+{"source":"https://mcp.agentfabric.dev/","takenAt":"2026-10-16T18:17:48.650Z","server":{"name":"agentfabric","version":"0.1.0"},"tools":[{"name":"create_tenant","kind":"write","fields":{"description":"607e670dbadaa25b","inputSchema":"cfded99a7b0e011f"}}]}

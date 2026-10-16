@@ -1,1 +1,1 @@
-{"source":"https://cassandra.dropwatchhq.com/mcp","takenAt":"2026-10-16T17:42:00.165Z","server":{"name":"cassandra-recall","version":"1.0.0"},"tools":[{"name":"recall_risk","kind":"unclear","fields":{"description":"ec38f6c1c9ab8318","inputSchema":"f0a36902a464925e"}}]}
+{"source":"https://cassandra.dropwatchhq.com/mcp","takenAt":"2026-10-16T18:13:38.394Z","server":{"name":"cassandra-recall","version":"1.0.0"},"tools":[{"name":"recall_risk","kind":"unclear","fields":{"description":"ec38f6c1c9ab8318","inputSchema":"f0a36902a464925e"}}]}

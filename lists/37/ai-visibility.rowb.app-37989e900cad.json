@@ -1,1 +1,1 @@
-{"source":"https://ai-visibility.rowb.app/mcp","takenAt":"2026-10-16T17:37:45.357Z","server":{"name":"ai-visibility","version":"1.0.0"},"tools":[{"name":"audit_website","kind":"read","fields":{"description":"31d5be740d106f0e","inputSchema":"bb29639b54ed0371"}}]}
+{"source":"https://ai-visibility.rowb.app/mcp","takenAt":"2026-10-16T18:10:11.123Z","server":{"name":"ai-visibility","version":"1.0.0"},"tools":[{"name":"audit_website","kind":"read","fields":{"description":"31d5be740d106f0e","inputSchema":"bb29639b54ed0371"}}]}

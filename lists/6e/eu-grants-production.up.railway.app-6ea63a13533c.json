@@ -1,1 +1,1 @@
-{"source":"https://eu-grants-production.up.railway.app/mcp","takenAt":"2026-10-16T17:43:39.305Z","server":{"name":"eu-grants","version":"0.1.0"},"tools":[{"name":"search_eu_grants","kind":"read","fields":{"description":"78ea8c4b60c15075","inputSchema":"fdcc88315625b080"}}]}
+{"source":"https://eu-grants-production.up.railway.app/mcp","takenAt":"2026-10-16T18:14:59.434Z","server":{"name":"eu-grants","version":"0.1.0"},"tools":[{"name":"search_eu_grants","kind":"read","fields":{"description":"78ea8c4b60c15075","inputSchema":"fdcc88315625b080"}}]}

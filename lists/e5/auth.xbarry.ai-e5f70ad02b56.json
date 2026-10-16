@@ -1,1 +1,1 @@
-{"source":"https://auth.xbarry.ai/api/mcp/token-safety","takenAt":"2026-10-16T17:41:13.747Z","server":{"name":"tachyo-token-safety","version":"1.27.2"},"tools":[{"name":"check_token_safety","kind":"money","fields":{"description":"536325067e0a69c8","inputSchema":"0a81adf6167bda32"}}]}
+{"source":"https://auth.xbarry.ai/api/mcp/token-safety","takenAt":"2026-10-16T18:13:00.401Z","server":{"name":"tachyo-token-safety","version":"1.27.2"},"tools":[{"name":"check_token_safety","kind":"money","fields":{"description":"536325067e0a69c8","inputSchema":"0a81adf6167bda32"}}]}

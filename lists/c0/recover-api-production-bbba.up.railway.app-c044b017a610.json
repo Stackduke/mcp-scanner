@@ -1,1 +1,1 @@
-{"source":"https://recover-api-production-bbba.up.railway.app/mcp","takenAt":"2026-10-16T17:56:31.620Z","server":{"name":"RECOVER","version":"0.1.2"},"tools":[{"name":"recover_decide","kind":"write","fields":{"description":"e1ca58d42c764288","inputSchema":"0bda775de7f54474"}}]}
+{"source":"https://recover-api-production-bbba.up.railway.app/mcp","takenAt":"2026-10-16T18:24:22.694Z","server":{"name":"RECOVER","version":"0.1.2"},"tools":[{"name":"recover_decide","kind":"write","fields":{"description":"e1ca58d42c764288","inputSchema":"0bda775de7f54474"}}]}

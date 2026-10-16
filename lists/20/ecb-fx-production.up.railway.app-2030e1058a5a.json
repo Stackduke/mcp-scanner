@@ -1,1 +1,1 @@
-{"source":"https://ecb-fx-production.up.railway.app/mcp","takenAt":"2026-10-16T17:43:21.683Z","server":{"name":"ecb-fx","version":"0.1.0"},"tools":[{"name":"ecb_fx_rates","kind":"unclear","fields":{"description":"eff1b7c04c80784f","inputSchema":"c3b3aa7e150d3bae"}}]}
+{"source":"https://ecb-fx-production.up.railway.app/mcp","takenAt":"2026-10-16T18:14:44.539Z","server":{"name":"ecb-fx","version":"0.1.0"},"tools":[{"name":"ecb_fx_rates","kind":"unclear","fields":{"description":"eff1b7c04c80784f","inputSchema":"c3b3aa7e150d3bae"}}]}

@@ -1,1 +1,1 @@
-{"source":"https://pohjola-api.nousulabs.workers.dev/mcp","takenAt":"2026-10-16T17:55:47.859Z","server":{"name":"pohjola-api","version":"0.4.0"},"tools":[{"name":"ytj_company_lookup","kind":"read","fields":{"description":"782113ce24bbbca1","inputSchema":"ad48c1b4f3764744"}}]}
+{"source":"https://pohjola-api.nousulabs.workers.dev/mcp","takenAt":"2026-10-16T18:23:48.241Z","server":{"name":"pohjola-api","version":"0.4.0"},"tools":[{"name":"ytj_company_lookup","kind":"read","fields":{"description":"782113ce24bbbca1","inputSchema":"ad48c1b4f3764744"}}]}

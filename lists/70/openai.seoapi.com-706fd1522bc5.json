@@ -1,1 +1,1 @@
-{"source":"https://openai.seoapi.com/mcp","takenAt":"2026-10-16T17:54:58.565Z","server":{"name":"openai","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"96559d85e6063f19","description":"f93e06d182aec14e","inputSchema":"65e830a91c0abb8e"}}]}
+{"source":"https://openai.seoapi.com/mcp","takenAt":"2026-10-16T18:23:10.383Z","server":{"name":"openai","version":"1.0.0"},"tools":[{"name":"validate_ip","kind":"read","fields":{"title":"96559d85e6063f19","description":"f93e06d182aec14e","inputSchema":"65e830a91c0abb8e"}}]}

@@ -1,1 +1,1 @@
-{"source":"https://company-lookup-production-5a48.up.railway.app/mcp","takenAt":"2026-10-16T17:42:25.840Z","server":{"name":"company-lookup","version":"0.1.0"},"tools":[{"name":"lookup_company","kind":"read","fields":{"description":"a142a27f1aba8eb2","inputSchema":"88febdfe2cee2057"}}]}
+{"source":"https://company-lookup-production-5a48.up.railway.app/mcp","takenAt":"2026-10-16T18:13:59.194Z","server":{"name":"company-lookup","version":"0.1.0"},"tools":[{"name":"lookup_company","kind":"read","fields":{"description":"a142a27f1aba8eb2","inputSchema":"88febdfe2cee2057"}}]}

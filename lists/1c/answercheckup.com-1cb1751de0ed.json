@@ -1,1 +1,1 @@
-{"source":"https://answercheckup.com/mcp","takenAt":"2026-10-16T17:38:05.907Z","server":{"name":"answercheckup","version":"0.2.0"},"tools":[{"name":"scan_site","kind":"read","fields":{"title":"7be763bcdc431ea6","description":"8089234c6f1d6c79","inputSchema":"b55599ccfa1b8f65"}}]}
+{"source":"https://answercheckup.com/mcp","takenAt":"2026-10-16T18:10:28.847Z","server":{"name":"answercheckup","version":"0.2.0"},"tools":[{"name":"scan_site","kind":"read","fields":{"title":"7be763bcdc431ea6","description":"8089234c6f1d6c79","inputSchema":"b55599ccfa1b8f65"}}]}

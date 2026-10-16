@@ -1,1 +1,1 @@
-{"source":"https://agentready.agentready.workers.dev/mcp","takenAt":"2026-10-16T17:37:34.739Z","server":{"name":"agentready","version":"1.0.0"},"tools":[{"name":"check_website","kind":"read","fields":{"description":"6a39ed593b64416e","inputSchema":"d4fb808cf67c979d"}}]}
+{"source":"https://agentready.agentready.workers.dev/mcp","takenAt":"2026-10-16T18:10:02.317Z","server":{"name":"agentready","version":"1.0.0"},"tools":[{"name":"check_website","kind":"read","fields":{"description":"6a39ed593b64416e","inputSchema":"d4fb808cf67c979d"}}]}

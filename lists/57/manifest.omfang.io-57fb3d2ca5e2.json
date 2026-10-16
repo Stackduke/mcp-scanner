@@ -1,1 +1,1 @@
-{"source":"https://manifest.omfang.io/mcp","takenAt":"2026-10-16T17:46:54.838Z","server":{"name":"manifest-api","version":"1.28.1"},"tools":[{"name":"get_manifest","kind":"read","fields":{"description":"0e9ca409c2fbebd1","inputSchema":"03db89022efe0387"}}]}
+{"source":"https://manifest.omfang.io/mcp","takenAt":"2026-10-16T18:17:26.142Z","server":{"name":"manifest-api","version":"1.28.1"},"tools":[{"name":"get_manifest","kind":"read","fields":{"description":"0e9ca409c2fbebd1","inputSchema":"03db89022efe0387"}}]}

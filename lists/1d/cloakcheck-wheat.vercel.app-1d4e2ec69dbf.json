@@ -1,1 +1,1 @@
-{"source":"https://cloakcheck-wheat.vercel.app/api/mcp","takenAt":"2026-10-16T17:42:17.879Z","server":{"name":"cloakcheck","version":"1.0.0"},"tools":[{"name":"check_page_for_injection","kind":"read","fields":{"description":"b5f0f99b399ab5d0","inputSchema":"01f0f6ce6edb8d79"}}]}
+{"source":"https://cloakcheck-wheat.vercel.app/api/mcp","takenAt":"2026-10-16T18:13:52.516Z","server":{"name":"cloakcheck","version":"1.0.0"},"tools":[{"name":"check_page_for_injection","kind":"read","fields":{"description":"b5f0f99b399ab5d0","inputSchema":"01f0f6ce6edb8d79"}}]}

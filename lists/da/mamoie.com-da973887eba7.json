@@ -1,1 +1,1 @@
-{"source":"https://mamoie.com/api/mcp","takenAt":"2026-10-16T17:46:53.871Z","server":{"name":"mamoie","version":"1.0.0"},"tools":[{"name":"check_home_disaster_risk","kind":"read","fields":{"description":"8e551b7906f499ec","inputSchema":"ccba645d91a7a3db"}}]}
+{"source":"https://mamoie.com/api/mcp","takenAt":"2026-10-16T18:17:25.487Z","server":{"name":"mamoie","version":"1.0.0"},"tools":[{"name":"check_home_disaster_risk","kind":"read","fields":{"description":"8e551b7906f499ec","inputSchema":"ccba645d91a7a3db"}}]}

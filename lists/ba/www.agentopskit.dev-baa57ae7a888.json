@@ -1,1 +1,1 @@
-{"source":"https://www.agentopskit.dev/mcp","takenAt":"2026-10-16T18:00:48.404Z","server":{"name":"constitution-lint","version":"1.2.0"},"tools":[{"name":"lint_constitution","kind":"unclear","fields":{"description":"9e74b7a9ce7490e0","inputSchema":"92789a8da5ab79e0"}}]}
+{"source":"https://www.agentopskit.dev/mcp","takenAt":"2026-10-16T18:27:26.593Z","server":{"name":"constitution-lint","version":"1.2.0"},"tools":[{"name":"lint_constitution","kind":"unclear","fields":{"description":"9e74b7a9ce7490e0","inputSchema":"92789a8da5ab79e0"}}]}

@@ -1,1 +1,1 @@
-{"source":"https://mcp.agentgauge.ai/mcp","takenAt":"2026-10-16T17:47:25.059Z","server":{"name":"agentgauge","version":"1.0.0"},"tools":[{"name":"scan_website","kind":"write","fields":{"title":"26e76cb1c8fe45d1","description":"9cde73ff79040b43","inputSchema":"be08041c2c7318b2"}}]}
+{"source":"https://mcp.agentgauge.ai/mcp","takenAt":"2026-10-16T18:17:48.696Z","server":{"name":"agentgauge","version":"1.0.0"},"tools":[{"name":"scan_website","kind":"write","fields":{"title":"26e76cb1c8fe45d1","description":"9cde73ff79040b43","inputSchema":"be08041c2c7318b2"}}]}

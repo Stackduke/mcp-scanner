@@ -1,1 +1,1 @@
-{"source":"https://bottled.email/api/mcp/mcp","takenAt":"2026-10-16T17:41:43.072Z","server":{"name":"bottled","version":"1.7.0"},"tools":[{"name":"check_domain_setup","kind":"send","fields":{"description":"94a42f671b89a7c4","inputSchema":"82cda4999cd0bf10"}}]}
+{"source":"https://bottled.email/api/mcp/mcp","takenAt":"2026-10-16T18:13:23.511Z","server":{"name":"bottled","version":"1.7.0"},"tools":[{"name":"check_domain_setup","kind":"send","fields":{"description":"94a42f671b89a7c4","inputSchema":"82cda4999cd0bf10"}}]}
