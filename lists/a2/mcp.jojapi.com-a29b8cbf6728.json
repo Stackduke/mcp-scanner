@@ -1,0 +1,1 @@
+{"source":"https://mcp.jojapi.com/verify-the-email-instantly","takenAt":"2026-10-17T08:44:46.479Z","server":{"name":"jojapi-verify-the-email-instantly","version":"1.0.0"},"tools":[{"name":"get_email","kind":"read","fields":{"title":"db06cc36f96004f6","description":"406f31ff29ef6746","inputSchema":"977367926cd5e4a1"}}]}
