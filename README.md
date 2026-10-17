@@ -74,7 +74,7 @@ There is no lockfile yet, the server cannot be listed, or the arguments are wron
 After a person has reviewed the change, run the same check with `--update` and commit the lockfile it writes:
 
 ```sh
-npx stackduke-mcp-scanner check --update -- node dist/server.js
+npx @stackduke/mcp-scanner check --update -- node dist/server.js
 ```
 
 `--update` writes nothing while a finding nobody has accepted is present, so approving a tool change does not also approve, in passing, a description that tells the model to ignore its instructions. A finding that a person has checked and judged a false alarm is approved with `--update --accept-findings`. It is recorded under that tool's `accepted` in the lockfile, as `rule@where`, where reviewers see it in the diff, and it counts only while that tool's definition stays exactly the same.
@@ -85,11 +85,11 @@ The lockfile is written to be read in a diff: tools sorted by name, each tool's 
 
 ```sh
 # A server that runs as a local program, speaking MCP over standard input and output:
-npx stackduke-mcp-scanner check -- node dist/server.js
-npx stackduke-mcp-scanner check --command="node dist/server.js --stdio"
+npx @stackduke/mcp-scanner check -- node dist/server.js
+npx @stackduke/mcp-scanner check --command="node dist/server.js --stdio"
 
 # A server at a web address: https, or http on this machine for one started earlier in the job:
-npx stackduke-mcp-scanner check http://localhost:3000/mcp
+npx @stackduke/mcp-scanner check http://localhost:3000/mcp
 
 # Options:
 #   --lockfile=stackduke.lock.json   where the approved list is
@@ -100,7 +100,7 @@ npx stackduke-mcp-scanner check http://localhost:3000/mcp
 
 Everything after `--` is the program and its arguments, passed as they are. `--command` takes the same as one line, split the way a shell splits plain words and quotes, with no variables, globs, pipes or redirection; it is what the GitHub Action uses.
 
-The package is not on npm yet, so `npx stackduke-mcp-scanner` does not work today. Until it is published, run it from a copy of this repository: `git clone --depth 1 https://github.com/Stackduke/mcp-scanner` and then `node mcp-scanner/src/cli.ts check ...`, with Node 22.18 or later. The package is built for npm with `npm run build` (run by `npm pack` and `npm publish`), because Node does not run TypeScript from inside `node_modules`.
+The package is [`@stackduke/mcp-scanner`](https://www.npmjs.com/package/@stackduke/mcp-scanner) on npm, and installs a command named `stackduke-mcp-scanner`. It needs Node 22.18 or later. It can also run from a copy of this repository: `git clone --depth 1 https://github.com/Stackduke/mcp-scanner`, then `node mcp-scanner/src/cli.ts check ...`. The npm package is built to JavaScript with `npm run build` (run by `npm pack` and `npm publish`), because Node does not run TypeScript from inside `node_modules`.
 
 The summary is Markdown, written to standard output and, with `--summary`, to a file: what changed, what failed, and how to approve. Lists stop at 30 rows and the whole summary at 60,000 characters, so it fits in a comment; the lockfile's diff has everything. The `--update` example in the summary names the command as `stackduke-mcp-scanner`, not `npx`, so a reader who copies it runs the copy they already use rather than whatever an npm name resolves to. It follows the plain-language report's rules. Every sentence is the scanner's, tool names appear only as identifiers in code spans, a server's descriptions are never quoted, and a server is named only by its host or as "the local program given". The command is never shown or stored, since its arguments may hold a secret. When a program fails to start, the end of its error output is printed in the job log, each line marked `program stderr |`, and kept out of the summary.
 
@@ -124,7 +124,7 @@ jobs:
         with:
           persist-credentials: false # keeps the job's token off the disk the server's program can read
       - run: npm ci && npm run build
-      - uses: Stackduke/mcp-scanner@main # pin to a release or commit once one is tagged
+      - uses: Stackduke/mcp-scanner@v0 # or a release such as @v0.3.0, or a commit
         with:
           command: node dist/server.js
           comment: "true"
@@ -132,6 +132,7 @@ jobs:
 
 Inputs: `url` or `command` (one of them), `lockfile` (default `stackduke.lock.json`), `working-directory`, `timeout`, `comment` (default `"false"`) and `github-token` (default: the job's own token). The output `result` is `passed`, `failed` or `error`.
 
+- `@v0` follows the latest 0.x release; `@v0.3.0` stays fixed.
 - The action runs the scanner from its own copy with Node 22.18 or later, and sets up Node 22 only when the runner has nothing recent enough.
 - With `comment: "true"` it posts the summary on the pull request and updates that one comment on later runs, one comment for each lockfile. The default token is enough, given `pull-requests: write`. On a pull request from a fork that token can only read, so the comment fails; the job summary is still written and the check still decides the job.
 - The token is in the environment of the comment step only. The scanner also starts the server's program without GitHub's workflow command files (`GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_OUTPUT`, `GITHUB_STATE`, `GITHUB_STEP_SUMMARY`), so it cannot set variables or a PATH for the later step that holds the token, and without the runner's own tokens, `GITHUB_TOKEN` and `GH_TOKEN` (and in GitLab, `CI_JOB_TOKEN` and the registry and deploy passwords). This narrows what the program can reach; it is not a sandbox. The program runs as the same user on the same machine, as the build step before it did.
@@ -147,9 +148,8 @@ mcp-tools:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - npm ci && npm run build
-    # Once the package is on npm:
-    - npx --yes stackduke-mcp-scanner@0.2 check --summary=mcp-tools.md -- node dist/server.js
-    # Until then, from a copy of the repository:
+    - npx --yes @stackduke/mcp-scanner@0.3 check --summary=mcp-tools.md -- node dist/server.js
+    # Or from a copy of the repository:
     # - git clone --depth 1 https://github.com/Stackduke/mcp-scanner /tmp/mcp-scanner
     # - node /tmp/mcp-scanner/src/cli.ts check --summary=mcp-tools.md -- node dist/server.js
   artifacts:
