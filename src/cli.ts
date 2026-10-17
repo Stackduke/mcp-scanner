@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { authorityOf, describeAuthority, shownSource } from "./authority.ts";
@@ -12,7 +13,13 @@ import { discover } from "./oauth.ts";
 import { printable } from "./text.ts";
 import { trySignIn } from "./try-sign-in.ts";
 import { createInterface } from "node:readline/promises";
-import { readSnapshot, save } from "./files.ts";
+import { readSnapshot, save, writeWhole } from "./files.ts";
+import { describeCheck, describeUnreachable, repeatedNames, runCheck, updateLockfile } from "./check.ts";
+import { lockfileName, readLockfile } from "./lockfile.ts";
+import type { Lockfile } from "./lockfile.ts";
+import { listToolsStdio, programEnvironment, splitCommand } from "./stdio.ts";
+import { confined } from "./authority.ts";
+import { stat } from "node:fs/promises";
 import { describeReview, review } from "./review.ts";
 import { takeSnapshot } from "./snapshot.ts";
 import { track } from "./track.ts";
@@ -22,6 +29,13 @@ import type { Snapshot } from "./types.ts";
 const usage = `Usage:
   npm run scan -- scan <https-url> [--save]         List a server's tools, label them, and check their text.
   npm run scan -- signed-in <name> [--save]         The same, for a server that wants a sign-in (${Object.keys(signedInServers).join(", ")}).
+  npm run scan -- check <url> [options]             Compare a server's tools with the approved list in stackduke.lock.json,
+  npm run scan -- check [options] -- <program> [args...]
+                                                    for a server reached at a web address or run as a local program.
+                                                    Fails when a tool changed and the lockfile was not updated, when a text
+                                                    check fires, or when a tool that changes things has no risk annotation.
+                                                    --lockfile=stackduke.lock.json --update --accept-findings
+                                                    --summary=<file> (Markdown) --timeout=<seconds> --command="<program> [args]"
   npm run scan -- authority <snapshot.json>...      What an agent can do through these servers, in plain words.
   npm run scan -- digest <snapshot-folder>...       The week's changes on the servers saved there, as an email's text.
                                                     --days=7 and --until=YYYY-MM-DD set the period, in UTC.
@@ -44,13 +58,115 @@ const usage = `Usage:
                                                     Add vendor tokens to the tracker's repository secrets, one hidden
                                                     prompt each, each tested first. Default: every vendor, Stackduke/mcp-scanner.
 
-Nothing here calls a tool. scan, discover and catalog send no credential. signed-in reads a token from an environment
+Nothing here calls a tool. scan, check, discover and catalog send no credential. check runs the program it is
+given, with this environment, so give it only a server you would run anyway. signed-in reads a token from an environment
 variable and sends it only to that server's fixed address; the token is never printed or saved.
 --save writes the snapshot under data/snapshots/<source>/. history sends GITHUB_TOKEN, if set, to
 api.github.com only.`;
 
+/** A loopback address, where plain http is allowed: a server started for the check on the same machine. */
+const isLoopback = (host: string) => host === "localhost" || /^127(?:\.\d{1,3}){3}$/.test(host) || host === "[::1]";
+
+async function check(rest: string[]): Promise<number> {
+  // Everything after "--" is the program to run and its arguments, untouched.
+  const split = rest.indexOf("--");
+  const before = split === -1 ? rest : rest.slice(0, split);
+  let program = split === -1 ? [] : rest.slice(split + 1);
+  const options = new Map<string, string>();
+  const positional: string[] = [];
+  for (const item of before) {
+    if (!item.startsWith("--")) { positional.push(item); continue; }
+    const match = /^--(lockfile|summary|timeout|command)=(.*)$|^--(update|accept-findings)$/s.exec(item);
+    const name = match?.[1] ?? match?.[3];
+    if (!name || options.has(name)) { console.error(`check does not take ${item.split("=")[0]}, or took it twice.`); return 2; }
+    options.set(name, match?.[2] ?? "");
+  }
+  if (options.has("command")) {
+    const parts = splitCommand(options.get("command") as string);
+    if (!parts?.[0]) { console.error("--command needs a program, with any quotes closed."); return 2; }
+    if (program.length) { console.error("Give the program either after -- or with --command, not both."); return 2; }
+    program = parts;
+  }
+  const url = positional[0];
+  if (program.length && !program[0]) { console.error("The program after -- has no name."); return 2; }
+  if (positional.length > 1 || (url && program.length) || (!url && !program.length)) { console.error("check takes one server: a web address, or a program after --."); return 2; }
+  if (options.has("accept-findings") && !options.has("update")) { console.error("--accept-findings is only used with --update."); return 2; }
+  const timeoutText = options.get("timeout");
+  if (timeoutText !== undefined && !(/^\d{1,3}$/.test(timeoutText) && Number(timeoutText) >= 1 && Number(timeoutText) <= 600)) { console.error("--timeout takes a whole number of seconds from 1 to 600."); return 2; }
+
+  let target: string;
+  if (url) {
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { console.error("That is not a web address."); return 2; }
+    if (parsed.username || parsed.password) { console.error("A web address with a user name or password in it is refused. check sends no credential."); return 2; }
+    if (!(parsed.protocol === "https:" || (parsed.protocol === "http:" && isLoopback(parsed.hostname)))) { console.error("check reads https:// addresses, and http:// only on this machine (localhost)."); return 2; }
+    // Only the host is shown: a path or query may hold something private.
+    target = `the server at \`${confined(parsed.host, /[^A-Za-z0-9.:[\]-]+/g, 80) || "?"}\``;
+  } else {
+    // The command is never shown or stored: its arguments may hold a secret.
+    target = "the local program given";
+  }
+
+  const lockfilePath = options.get("lockfile") || lockfileName;
+  const relative = path.relative(process.cwd(), path.resolve(lockfilePath));
+  const shownLockfile = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : lockfilePath;
+  const summaryPath = options.get("summary");
+  const finish = async (markdown: string, code: number) => {
+    console.log(markdown);
+    if (summaryPath) await writeWhole(summaryPath, markdown);
+    return code;
+  };
+
+  let lockfile: Lockfile | null = null;
+  try {
+    if ((await stat(lockfilePath)).size > 16_000_000) { console.error(`${printable(lockfilePath)} is larger than a lockfile should be.`); return 2; }
+    const read = readLockfile(await readFile(lockfilePath, "utf8"));
+    if (!read.ok) { console.error(`${printable(lockfilePath)} could not be read: ${read.reason}.`); return 2; }
+    lockfile = read.lockfile;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") { console.error(`${printable(lockfilePath)} could not be opened.`); return 2; }
+  }
+
+  const timeoutMs = timeoutText === undefined ? undefined : Number(timeoutText) * 1000;
+  const result = url
+    ? await listTools(url, timeoutMs ? { timeoutMs } : {})
+    : await listToolsStdio(program, { env: programEnvironment(process.env), ...(timeoutMs ? { timeoutMs } : {}) });
+  if (result.outcome !== "listed") {
+    const tail = (result as { stderrTail?: string }).stderrTail;
+    if (tail) {
+      console.error("The program's last error output, as it wrote it:");
+      for (const line of tail.split(/\r?\n/).filter((text) => text.trim())) console.error(`  program stderr | ${printable(line, 300)}`);
+    }
+    const why = result.outcome === "sign-in-required" ? `it asks for a sign-in (HTTP ${result.status}), and check sends no credential` : `${result.outcome}, ${printable(result.detail)}`;
+    return finish(describeUnreachable(target, why, shownLockfile), result.outcome === "sign-in-required" ? 3 : 4);
+  }
+
+  const summary = { target, lockfilePath: shownLockfile, serverArgs: url ? "<the same address>" : "-- <the same command>" };
+  const repeated = repeatedNames(result.tools);
+  let live: Snapshot, update: ReturnType<typeof updateLockfile> | null = null;
+  try {
+    live = takeSnapshot(url ?? "local program", result.tools, result.server);
+    if (options.has("update")) update = updateLockfile(live, lockfile, options.has("accept-findings"), repeated);
+  } catch {
+    // A definition nested past what can be compared. The list is not one this check can use.
+    return finish(describeUnreachable(target, "not-usable, a tool definition is nested too deeply to read", shownLockfile), 4);
+  }
+
+  if (update) {
+    if (!update.written) return finish(describeCheck(update.result, { ...summary, update: "refused" }), 1);
+    let current: string | null = null;
+    try { current = await readFile(lockfilePath, "utf8"); } catch { /* not there yet */ }
+    if (current === update.text) return finish(describeCheck(update.result, { ...summary, update: "unchanged" }), 0);
+    await writeWhole(lockfilePath, update.text);
+    return finish(describeCheck(update.result, { ...summary, update: "written" }), 0);
+  }
+  const checked = runCheck(live, lockfile, repeated);
+  return finish(describeCheck(checked, summary), checked.passed ? 0 : 1);
+}
+
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
+  if (command === "check") return check(rest);
   const flags = new Set(rest.filter((value) => value.startsWith("--")));
   const args = rest.filter((value) => !value.startsWith("--"));
 
