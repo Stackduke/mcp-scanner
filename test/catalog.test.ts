@@ -4,7 +4,7 @@ import { catalog, catalogProblems, readCatalog } from "../src/catalog.ts";
 import { signedInServers, signedInServersOf } from "../src/signed-in.ts";
 
 const server = (changes: Record<string, unknown> = {}) => ({
-  id: "demo", name: "Demo", url: "https://mcp.demo.example/mcp", site: "https://demo.example",
+  id: "demo", name: "Demo", url: "https://mcp.demo.example/mcp", site: "https://demo.example", category: "Developer tools",
   signIn: "oauth-dcr", signInCheckedOn: "2026-10-17", termsCheckedOn: "2026-10-17",
   tracker: { publish: true, access: { kind: "api-key", tokenVariable: "STACKDUKE_SCAN_DEMO_TOKEN", keyPage: "https://demo.example/keys", keyAdvice: "Read only." } },
   ...changes,
@@ -70,6 +70,7 @@ test("an id that could reach an object's built-in properties is refused", () => 
 
 test("unknown sign-in methods, bad dates and bad token variable names are refused", () => {
   assert.ok(problemsOf(server({ signIn: "password" }))[0]?.includes("signIn must be one of"));
+  assert.ok(problemsOf(server({ category: "Misc" }))[0]?.includes("category must be one of"));
   assert.ok(problemsOf(server({ signInCheckedOn: "17 Oct" }))[0]?.includes("signInCheckedOn"));
   const badVariable = server({ tracker: { publish: true, access: { kind: "api-key", tokenVariable: "PATH", keyPage: "https://demo.example/keys", keyAdvice: "Read only." } } });
   assert.ok(problemsOf(badVariable)[0]?.includes("its token variable must be STACKDUKE_SCAN_DEMO_TOKEN"));

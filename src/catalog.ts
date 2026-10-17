@@ -22,6 +22,10 @@ export type SignIn =
   /** A key the customer makes and pastes. */
   | "api-key";
 
+/** The group a server is listed under when there are many to choose from. */
+export const categories = ["Developer tools", "Payments", "Data and infrastructure", "Work apps"] as const;
+export type Category = (typeof categories)[number];
+
 /** How the tracker reaches the server with Stackduke's own account. */
 export interface TrackerApiKey {
   kind: "api-key";
@@ -49,6 +53,7 @@ export interface CatalogServer {
   name: string;
   url: string;
   site: string;
+  category: Category;
   signIn: SignIn;
   /** When someone last confirmed how the server signs in, as YYYY-MM-DD. */
   signInCheckedOn: string;
@@ -89,6 +94,7 @@ export function catalogProblems(value: unknown): string[] {
     if (!isPlainHttps(server.url)) problem("url must be a plain https address");
     else if (urls.has((server.url as string).replace(/\/$/, ""))) problem("url is used twice"); else urls.add((server.url as string).replace(/\/$/, ""));
     if (!isPlainHttps(server.site)) problem("site must be a plain https address");
+    if (typeof server.category !== "string" || !(categories as readonly string[]).includes(server.category)) problem(`category must be one of ${categories.join(", ")}`);
     if (typeof server.signIn !== "string" || !signIns.includes(server.signIn)) problem(`signIn must be one of ${signIns.join(", ")}`);
     if (!isDay(server.signInCheckedOn)) problem("signInCheckedOn must be a date, YYYY-MM-DD");
     if (server.termsCheckedOn !== null && !isDay(server.termsCheckedOn)) problem("termsCheckedOn must be a date or null");
