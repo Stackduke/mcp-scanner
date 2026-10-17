@@ -390,6 +390,8 @@ export interface Feed {
     unreachable: number;
     /** Endpoints whose tools were listed in the last 48 hours: the ones whose changes are being followed closely. */
     listedLast48Hours: number;
+    /** Tools listed by the endpoints whose latest check listed them. */
+    toolsListed: number;
   };
   watched: FeedWatched[];
   /** The latest change on each endpoint that changed in the last 30 days, newest first, as many as fit. */
@@ -473,6 +475,7 @@ export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, Aut
       neverChecked: public_.filter((endpoint) => !endpoint.lastChecked).length,
       listed: count("listed"), signInRequired: count("sign-in-required"), notUsable: count("not-usable"), unreachable: count("unreachable"),
       listedLast48Hours: public_.filter((endpoint) => age(endpoint.lastListed, at) <= 48 * hour).length,
+      toolsListed: public_.filter((endpoint) => endpoint.outcome === "listed").reduce((sum, endpoint) => sum + (endpoint.tools ?? 0), 0),
     },
     watched,
     changes,

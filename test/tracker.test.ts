@@ -136,7 +136,7 @@ test("the feed counts coverage honestly and lists each server's latest change on
   ];
   const registry = { readAt: now, complete: true, entries: 4, endpoints: 4, attemptedAt: now, attemptOk: true };
   const { feed, servers } = buildFeed(endpoints, new Map(), registry, now);
-  assert.deepEqual(feed.coverage, { endpoints: 4, checked: 3, neverChecked: 1, listed: 2, signInRequired: 1, notUsable: 0, unreachable: 0, listedLast48Hours: 1 });
+  assert.deepEqual(feed.coverage, { endpoints: 4, checked: 3, neverChecked: 1, listed: 2, signInRequired: 1, notUsable: 0, unreachable: 0, listedLast48Hours: 1, toolsListed: 1 });
   assert.equal(feed.changes.length, 1);
   assert.equal(feed.changes[0]?.changesIn30Days, 2);
   assert.equal(feed.changesTotal, 1);
