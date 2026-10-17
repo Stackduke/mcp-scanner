@@ -12,15 +12,16 @@ A connected MCP server can change what an agent can do without anyone on the age
 
 ## What it does
 
-- **Lists a server's tools** over the Streamable HTTP transport: the handshake, then `tools/list`. It never calls a tool. It sends no credential to an open server. For a server that needs a sign-in it can send a token, under the rules in [Signed-in servers](#signed-in-servers).
+- **Lists a server's tools** over the Streamable HTTP transport, or over standard input and output for a server that runs as a local program: the handshake, then `tools/list`. It never calls a tool. It sends no credential to an open server. For a server that needs a sign-in it can send a token, under the rules in [Signed-in servers](#signed-in-servers).
 - **Labels each tool**: read, write, send, money, destructive, and "broad" for a free-form target such as SQL or a shell command. A label comes from the server's own annotations when it gives them. Otherwise it is a guess from the words in the tool's name, or failing that from the first sentence of its description, and the report marks the guess and shows the words it rests on.
 - **Checks the text a model would read** for signs of tool poisoning: instructions aimed at the model, invisible characters, pointers to credential stores, requests to send data elsewhere, and annotations that contradict a tool's name.
 - **Compares two looks**: tools added, removed and changed; for each changed field, whether it appeared, disappeared or was rewritten; and tools now counted as able to do more.
 - **Says what a server lets an agent do, in plain words**, for a reader who is not an engineer, and writes a weekly digest of changes. See [docs/reports.md](docs/reports.md).
+- **Checks a server before it ships**: in a repository's own CI, its tools are compared with an approved list kept beside its code, `stackduke.lock.json`, and the pull request fails until a person approves a change. See [Pre-deploy check](#pre-deploy-check).
 
 ## What it does not do
 
-- It does not run MCP server packages from npm, PyPI or Docker. Scanning those would mean running third-party code, which needs a sandbox.
+- The tracker and `scan` do not run MCP server packages from npm, PyPI or Docker. Scanning those would mean running third-party code, which needs a sandbox. `check` starts a local program only when given its command, in the pipeline of the person who chose it.
 - It cannot sign in through a browser. A server that takes only a browser sign-in cannot be scanned.
 - The text checks are pattern checks. They find text worth a person's attention; they cannot tell intent, they flag some honest descriptions, and careful wording gets past them. "Nothing matched" does not mean "safe".
 - A label guessed from a name can be wrong in either direction. Names are read as English words split at underscores, hyphens and capitals, so `rm_user` or `supprimer_compte` is not understood. Wherever the server's label, the name and the description disagree, the scanner goes with whichever says most.
@@ -43,10 +44,142 @@ npm run track -- --data=tracker-data --max-checks=200
 npm run scan -- discover https://mcp.linear.app/mcp
 npm run scan -- catalog
 npm run scan -- try-sign-in https://mcp.notion.com/mcp
+npm run scan -- check --lockfile=examples/sample-server/stackduke.lock.json -- node examples/sample-server/server.ts
 npm run check
 ```
 
+`npm run check` runs this repository's typecheck and tests. The pre-deploy check is the `check` command, `npm run scan -- check`.
+
 `--save` writes a snapshot under `data/snapshots/<source>/`, which git ignores. `history` reads the tool definitions a project publishes as files at two tags, one request to GitHub's API per tag, sending `GITHUB_TOKEN` to `api.github.com` only if it is set.
+
+## Pre-deploy check
+
+Added on 2026-10-17. `check` works like a lockfile for an MCP server's tools. The approved tool list is kept in the server's repository as `stackduke.lock.json`, and the check runs in that repository's own CI (GitHub Actions or GitLab), on its own runners. Nothing is sent to Stackduke.
+
+A pull request that changes what the server offers then shows the change twice: as a failed check with a summary of what changed, and, once approved, as a diff of the lockfile that reviewers read like any other code.
+
+### What fails the check
+
+The check exits with code 1 when:
+
+- a tool was added, removed or changed and the lockfile was not updated. "Changed" covers the six fields the scanner reads: name, title, description, input schema, output schema and annotations. `_meta` and `icons` are not compared. A renamed tool counts as one removed and one added;
+- a tool name is listed more than once, since only the first definition could be compared;
+- a tool's text trips a high or medium text check, the same checks the scanner uses everywhere (instructions aimed at the model, invisible characters, pointers to credential stores, requests to send data elsewhere, annotations that contradict the name, and so on). Low findings are listed as notes and never fail it;
+- a tool counted as able to change things, or one whose name says nothing the scanner understands, carries no risk annotation: neither `readOnlyHint` nor `destructiveHint`. Either one is enough, because without `destructiveHint` the protocol already says to assume a tool may destroy. A tool counted as only reading needs neither.
+
+There is no lockfile yet, the server cannot be listed, or the arguments are wrong: those fail too, with exit code 1, 4 (3 when the server asks for a sign-in) and 2.
+
+### Approving a change
+
+After a person has reviewed the change, run the same check with `--update` and commit the lockfile it writes:
+
+```sh
+npx stackduke-mcp-scanner check --update -- node dist/server.js
+```
+
+`--update` writes nothing while a finding nobody has accepted is present, so approving a tool change does not also approve, in passing, a description that tells the model to ignore its instructions. A finding that a person has checked and judged a false alarm is approved with `--update --accept-findings`. It is recorded under that tool's `accepted` in the lockfile, as `rule@where`, where reviewers see it in the diff, and it counts only while that tool's definition stays exactly the same.
+
+The lockfile is written to be read in a diff: tools sorted by name, each tool's fields in a fixed order, keys inside schemas sorted, one field to a line, and no timestamp, so the same tools always give the same bytes. It is read strictly: a field the scanner does not know, at the top or in a tool, a repeated tool or a wrong version stops the check instead of being skipped. See [`examples/sample-server/stackduke.lock.json`](examples/sample-server/stackduke.lock.json).
+
+### Running it
+
+```sh
+# A server that runs as a local program, speaking MCP over standard input and output:
+npx stackduke-mcp-scanner check -- node dist/server.js
+npx stackduke-mcp-scanner check --command="node dist/server.js --stdio"
+
+# A server at a web address: https, or http on this machine for one started earlier in the job:
+npx stackduke-mcp-scanner check http://localhost:3000/mcp
+
+# Options:
+#   --lockfile=stackduke.lock.json   where the approved list is
+#   --summary=check.md               also write the Markdown summary to a file
+#   --timeout=60                     seconds to wait for each reply (default 60 for a program, 15 for an address)
+#   --update [--accept-findings]     approve the current tools, see above
+```
+
+Everything after `--` is the program and its arguments, passed as they are. `--command` takes the same as one line, split the way a shell splits plain words and quotes, with no variables, globs, pipes or redirection; it is what the GitHub Action uses.
+
+The package is not on npm yet, so `npx stackduke-mcp-scanner` does not work today. Until it is published, run it from a copy of this repository: `git clone --depth 1 https://github.com/Stackduke/mcp-scanner` and then `node mcp-scanner/src/cli.ts check ...`, with Node 22.18 or later. The package is built for npm with `npm run build` (run by `npm pack` and `npm publish`), because Node does not run TypeScript from inside `node_modules`.
+
+The summary is Markdown, written to standard output and, with `--summary`, to a file: what changed, what failed, and how to approve. Lists stop at 30 rows and the whole summary at 60,000 characters, so it fits in a comment; the lockfile's diff has everything. The `--update` example in the summary names the command as `stackduke-mcp-scanner`, not `npx`, so a reader who copies it runs the copy they already use rather than whatever an npm name resolves to. It follows the plain-language report's rules. Every sentence is the scanner's, tool names appear only as identifiers in code spans, a server's descriptions are never quoted, and a server is named only by its host or as "the local program given". The command is never shown or stored, since its arguments may hold a secret. When a program fails to start, the end of its error output is printed in the job log, each line marked `program stderr |`, and kept out of the summary.
+
+### GitHub Actions
+
+This repository is also a GitHub Action ([`action.yml`](action.yml)). It runs the check, writes the summary to the job summary, and fails the job when the check fails:
+
+```yaml
+name: MCP tools
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write # only for comment: "true"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false # keeps the job's token off the disk the server's program can read
+      - run: npm ci && npm run build
+      - uses: Stackduke/mcp-scanner@main # pin to a release or commit once one is tagged
+        with:
+          command: node dist/server.js
+          comment: "true"
+```
+
+Inputs: `url` or `command` (one of them), `lockfile` (default `stackduke.lock.json`), `working-directory`, `timeout`, `comment` (default `"false"`) and `github-token` (default: the job's own token). The output `result` is `passed`, `failed` or `error`.
+
+- The action runs the scanner from its own copy with Node 22.18 or later, and sets up Node 22 only when the runner has nothing recent enough.
+- With `comment: "true"` it posts the summary on the pull request and updates that one comment on later runs, one comment for each lockfile. The default token is enough, given `pull-requests: write`. On a pull request from a fork that token can only read, so the comment fails; the job summary is still written and the check still decides the job.
+- The token is in the environment of the comment step only. The scanner also starts the server's program without GitHub's workflow command files (`GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_OUTPUT`, `GITHUB_STATE`, `GITHUB_STEP_SUMMARY`), so it cannot set variables or a PATH for the later step that holds the token, and without the runner's own tokens, `GITHUB_TOKEN` and `GH_TOKEN` (and in GitLab, `CI_JOB_TOKEN` and the registry and deploy passwords). This narrows what the program can reach; it is not a sandbox. The program runs as the same user on the same machine, as the build step before it did.
+- Do not run the check on `pull_request_target` to get comments on pull requests from forks. That event gives a pull request's code a token that can write, and this action runs that code.
+- [`.github/workflows/action-test.yml`](.github/workflows/action-test.yml) runs the action against the sample server, once where it must pass and once where it must fail.
+
+### GitLab CI
+
+```yaml
+mcp-tools:
+  image: node:22
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - npm ci && npm run build
+    # Once the package is on npm:
+    - npx --yes stackduke-mcp-scanner@0.2 check --summary=mcp-tools.md -- node dist/server.js
+    # Until then, from a copy of the repository:
+    # - git clone --depth 1 https://github.com/Stackduke/mcp-scanner /tmp/mcp-scanner
+    # - node /tmp/mcp-scanner/src/cli.ts check --summary=mcp-tools.md -- node dist/server.js
+  artifacts:
+    when: always
+    paths: [mcp-tools.md]
+```
+
+The job fails when the check does, and blocks the merge request when the project requires pipelines to pass. The summary is kept as an artifact; posting it as a merge-request note is not built.
+
+### Try it on the sample server
+
+[`examples/sample-server/server.ts`](examples/sample-server/server.ts) is a small MCP server that runs as a local program and offers three note-taking tools. `SAMPLE_SERVER_VARIANT=changed` rewrites a description and adds a tool with no risk annotation; `SAMPLE_SERVER_VARIANT=poisoned` plants an instruction in a description.
+
+```sh
+npm run scan -- check --lockfile=examples/sample-server/stackduke.lock.json -- node examples/sample-server/server.ts
+SAMPLE_SERVER_VARIANT=changed npm run scan -- check --lockfile=examples/sample-server/stackduke.lock.json -- node examples/sample-server/server.ts
+```
+
+The first passes. The second fails, naming the new tool, the rewritten description and the missing annotation.
+
+### Limits
+
+- `check` runs the program it is given, with the environment of the job less the CI files and tokens listed above, as any build step does. Give it only a server you would run anyway.
+- It makes changes visible to reviewers; it does not stop someone who means harm. The author of a pull request controls the server's code, so they can make it list whatever they like during the check, and they can edit the lockfile in the same pull request. Both show in the diff, which is what the check is for.
+- It sends no credential. A server at an address that asks for a sign-in stops the check with exit code 3. A local program gets whatever the job's environment holds, as it would anywhere else.
+- It sees the tools a server lists at start-up with the configuration the job gives it. Tools that a server adds later, or only for some accounts or settings, are not seen.
+- The text checks are pattern checks, and a label guessed from a name can be wrong. A pass means nothing changed and nothing matched, not that the server is safe.
+- One lockfile holds one server. A repository with several runs the check once for each, with `--lockfile`.
+- If the job is cancelled while the server's program runs, the program is left to the runner to stop.
+- The optional upload of results to the Stackduke dashboard is not part of this.
 
 ## The tracker
 
@@ -110,7 +243,8 @@ Big vendors' servers ask for a sign-in, so the tracker watches them with tokens 
 
 ## Layout
 
-- `src/client.ts`: the handshake and the tool list.
+- `src/client.ts`, `src/stdio.ts`: the handshake and the tool list, over HTTP and over a local program's standard input and output.
+- `src/check.ts`, `src/lockfile.ts`, `action.yml`: the pre-deploy check, its lockfile and its GitHub Action. `examples/sample-server/`: a small server to try it on.
 - `src/snapshot.ts`, `src/diff.ts`, `src/files.ts`: fingerprints, snapshots, comparisons, and reading and writing them.
 - `src/risk.ts`: capability labels. `src/findings.ts`: the text checks. `src/text.ts`: making untrusted text safe to print.
 - `src/authority.ts`, `src/digest.ts`, `src/report.ts`: the plain-language report, the weekly digest and the technical report.
@@ -119,7 +253,7 @@ Big vendors' servers ask for a sign-in, so the tracker watches them with tokens 
 - `src/oauth.ts`, `src/try-sign-in.ts`: signing in the standard way, and a test sign-in.
 - `src/signed-in.ts`, `src/connect.ts`: the servers a token may be sent to, and adding tokens.
 - `src/sources/github-snapshots.ts`: definitions a repository publishes as files.
-- `src/cli.ts`: the commands. `test/`: the tests, none of which touches the network.
+- `src/cli.ts`: the commands. `test/`: the tests. None reaches another machine: the check's tests start the sample server as a program, and one serves it on 127.0.0.1.
 - `docs/`: [the reports](docs/reports.md) and [what the first look found](docs/first-look.md).
 
 ## Others doing this

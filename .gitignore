@@ -4,3 +4,4 @@ data/snapshots/
 .env.*
 *.log
 tracker-data/
+dist/

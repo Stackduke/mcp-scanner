@@ -1,0 +1,43 @@
+name: Action test
+
+# Runs this repository's action against the sample server: once as approved, where it must pass,
+# and once with a changed tool list, where it must fail.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  action:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: The approved sample passes
+        uses: ./
+        with:
+          command: node examples/sample-server/server.ts
+          lockfile: examples/sample-server/stackduke.lock.json
+
+      - name: A changed sample fails
+        id: changed
+        uses: ./
+        continue-on-error: true
+        env:
+          SAMPLE_SERVER_VARIANT: changed
+        with:
+          command: node examples/sample-server/server.ts
+          lockfile: examples/sample-server/stackduke.lock.json
+
+      - name: The changed sample was reported as failed
+        shell: bash
+        env:
+          RESULT: ${{ steps.changed.outputs.result }}
+        run: test "$RESULT" = failed

@@ -4,6 +4,15 @@
   "private": true,
   "description": "Lists what an MCP server lets an agent do, labels the risky tools, and reports what changed between two looks. It never calls a tool.",
   "type": "module",
+  "bin": {
+    "stackduke-mcp-scanner": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "catalog",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22.18"
   },
@@ -12,7 +21,9 @@
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test",
-    "track": "node src/cli.ts track"
+    "track": "node src/cli.ts track",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
