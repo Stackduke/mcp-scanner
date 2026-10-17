@@ -45,6 +45,11 @@ test("the parts of a Bearer challenge are read, quoted or not, and the first of 
   assert.deepEqual(readChallenge(null), {});
   assert.deepEqual(readChallenge(`Basic realm="x", Bearer resource_metadata="${describedAt}"`), { resource_metadata: describedAt }, "the Bearer challenge is found after another");
   assert.deepEqual(readChallenge(`Bearer scope="read", Basic realm="other"`), { scope: "read" }, "another scheme's parameters are not read");
+  assert.deepEqual(readChallenge(`Bearer realm="mcp", x-request-id="abc", resource_metadata="https://ok.example/p"`), { realm: "mcp", "x-request-id": "abc", resource_metadata: "https://ok.example/p" }, "a hyphenated name does not end the reading");
+  assert.deepEqual(readChallenge(`Bearer realm="a",resource_metadata2="x", scope="s"`), { realm: "a", resource_metadata2: "x", scope: "s" });
+  const started = Date.now();
+  readChallenge(`Bearer realm="a"${" ".repeat(65_000)}x`);
+  assert.ok(Date.now() - started < 200, "a long run of spaces is read in linear time");
 });
 
 test("the description addresses are tried in the spec's order", () => {
@@ -157,7 +162,7 @@ test("nothing is sent when certificate checking is switched off", async () => {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   try {
     const { fetchImpl, sent } = web({ [`${issuer}/token`]: json({ access_token: "a", token_type: "Bearer" }) });
-    assert.deepEqual(await exchangeCode(signInServer, { clientId: "c", clientSecret: "made-up-secret" }, { code: "x", verifier: "v", redirectUri: "http://localhost/cb", resource: server }, { fetchImpl }), { outcome: "refused", status: 0 });
+    assert.deepEqual(await exchangeCode(signInServer, { clientId: "c", clientSecret: "made-up-secret" }, { code: "x", verifier: "v", redirectUri: "http://localhost/cb", resource: server }, { fetchImpl }), { outcome: "refused", status: 0, error: "not_sent" });
     assert.deepEqual(await discover(server, { fetchImpl }), { outcome: "not-usable", detail: "certificate checking is switched off here" });
     assert.equal(sent.length, 0);
   } finally {

@@ -296,13 +296,14 @@ test("what servers say about their own tools is counted from their labels alone,
   assert.deepEqual(lookupOf(servers)[0], ["", "https://a.example.com/mcp", 3, now.slice(0, 10), 0, { read: 3 }]);
 });
 
-test("a server the catalog keeps off the tracker is neither contacted nor kept, wherever the registry lists it", async () => {
+test("no address on the sites of a vendor whose terms forbid publishing is contacted or kept, and other kept-off servers are listed as usual", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
   const contacted: string[] = [];
   const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
     const url = String(input);
-    if (url.startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: [{ server: { name: "io.github.getsentry/sentry-mcp", remotes: [{ type: "streamable-http", url: "https://mcp.sentry.dev/mcp" }] } }, { server: { name: "com.example/open", remotes: [{ type: "streamable-http", url: "https://open.example.com/mcp" }] } }], metadata: {} });
+    if (url.startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: [{ server: { name: "io.github.getsentry/sentry-mcp", remotes: [{ type: "streamable-http", url: "https://mcp.sentry.dev/mcp" }] } }, { server: { name: "io.sentry/eu", remotes: [{ type: "streamable-http", url: "https://eu.sentry.io/mcp" }] } }, { server: { name: "com.notion/mcp", remotes: [{ type: "streamable-http", url: "https://mcp.notion.com/mcp" }] } }, { server: { name: "com.example/open", remotes: [{ type: "streamable-http", url: "https://open.example.com/mcp" }] } }], metadata: {} });
     contacted.push(url);
+    if (url === "https://mcp.notion.com/mcp") return new Response(null, { status: 401 });
     const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
     if (body.method === "initialize") return Response.json({ jsonrpc: "2.0", id: body.id, result: { serverInfo: { name: "Open" } } });
     if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "get_page", ...readOnly }] } });
@@ -313,5 +314,17 @@ test("a server the catalog keeps off the tracker is neither contacted nor kept, 
   const kept = await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8");
   assert.ok(!kept.includes("sentry"));
   assert.ok(kept.includes("open.example.com"));
+  assert.ok(kept.includes("mcp.notion.com"), "kept off only until its terms are read, it is listed like any other address");
+  const registry = JSON.parse(await readFile(path.join(dataDir, "registry.json"), "utf8")) as { endpoints: number };
+  assert.equal(registry.endpoints, 2, "the registry count leaves out what is kept off");
   for (const file of ["feed.json", "servers.json", "lookup.json"]) assert.ok(!(await readFile(path.join(dataDir, file), "utf8")).includes("sentry"), file);
+});
+
+test("a watched server in the feed carries its catalog name and website, and one outside the catalog carries neither", () => {
+  const registry = { readAt: now, complete: true, entries: 0, endpoints: 0, attemptedAt: now, attemptOk: true };
+  const { feed } = buildFeed([endpoint("https://api.githubcopilot.com/mcp/", { signedIn: "github", inRegistry: false }), endpoint("https://signed.test/a", { signedIn: "unlisted", inRegistry: false })], new Map(), registry, now);
+  const byVendor = Object.fromEntries(feed.watched.map((entry) => [entry.vendor, entry]));
+  assert.equal(byVendor.github?.name, "GitHub");
+  assert.equal(byVendor.github?.site, "https://github.com");
+  assert.equal(byVendor.unlisted?.name, undefined);
 });

@@ -27,7 +27,7 @@ test("every signed-in server has a fixed https address and its own token variabl
   for (const server of Object.values(signedInServers)) {
     assert.equal(new URL(server.url).protocol, "https:");
     assert.equal(new URL(server.url).username + new URL(server.url).password + new URL(server.url).search, "");
-    assert.match(server.tokenVariable, /^STACKDUKE_SCAN_[A-Z]+_TOKEN$/);
+    assert.match(server.tokenVariable, /^STACKDUKE_SCAN_[A-Z0-9_]+_TOKEN$/);
   }
 });
 

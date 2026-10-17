@@ -89,6 +89,19 @@ test("a server that sends the token back has nothing it returned used", async ()
   assert.deepEqual(await trySignIn(server, { ...vendor({ echo: true }), ...person() }), { outcome: "stopped", at: "tools", detail: "the server sent a token back" });
 });
 
+test("a test sign-in sends nothing when certificate checking is switched off", async () => {
+  const before = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  try {
+    const { fetchImpl, seen } = vendor();
+    const result = await trySignIn(server, { fetchImpl, ...person() });
+    assert.deepEqual(result, { outcome: "stopped", at: "discover", detail: "certificate checking is switched off here, so nothing was sent" });
+    assert.equal(seen.length, 0);
+  } finally {
+    if (before === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED; else process.env.NODE_TLS_REJECT_UNAUTHORIZED = before;
+  }
+});
+
 test("what a server says about itself becomes a catalog sign-in method", () => {
   const signInServer = { issuer, authorizationEndpoint: `${issuer}/a`, tokenEndpoint: `${issuer}/t`, metadataDocuments: false, authMethods: ["none"], sendsIssuer: false };
   const oauth = (changes: object): Discovery => ({ outcome: "oauth", resource: server, scopes: [], olderDiscovery: false, authorizationServer: { ...signInServer, ...changes } });

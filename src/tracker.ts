@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { assessTool, authorityOf, canDo, confined, plural, seriousFirst, shownName } from "./authority.ts";
 import type { AuthorityKind, AuthorityReport } from "./authority.ts";
 import type { ListToolsResult } from "./client.ts";
+import { catalog } from "./catalog.ts";
 import type { ChangedField } from "./diff.ts";
 import type { RegistryRead } from "./registry.ts";
 import { canonical, takeSnapshot, toolKey } from "./snapshot.ts";
@@ -347,9 +348,18 @@ export interface FeedServer {
   lastChange?: string;
 }
 
+/** What the catalog says about a watched server that a reader needs: its name and website. */
+function catalogFacts(vendor: string): { name?: string; site?: string } {
+  const entry = catalog.servers.find((server) => server.id === vendor);
+  return entry ? { name: entry.name, site: entry.site } : {};
+}
+
 export interface FeedWatched {
   id: string;
   vendor: string;
+  /** The vendor's name and website, from the catalog, for a page about this server. */
+  name?: string;
+  site?: string;
   url: string;
   firstSeen: string;
   lastChecked?: string;
@@ -443,7 +453,7 @@ export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, Aut
   const watched: FeedWatched[] = endpoints.filter((endpoint) => endpoint.signedIn).map((endpoint) => {
     const report = watchedReports.get(endpoint.id);
     return {
-      id: endpoint.id, vendor: endpoint.signedIn as string, url: endpoint.url, firstSeen: endpoint.firstSeen,
+      id: endpoint.id, vendor: endpoint.signedIn as string, ...catalogFacts(endpoint.signedIn as string), url: endpoint.url, firstSeen: endpoint.firstSeen,
       ...(endpoint.lastChecked ? { lastChecked: endpoint.lastChecked } : {}),
       ...(endpoint.lastListed ? { lastListed: endpoint.lastListed } : {}),
       ...(endpoint.outcome ? { outcome: endpoint.outcome } : {}),

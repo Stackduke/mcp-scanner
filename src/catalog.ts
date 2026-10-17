@@ -36,8 +36,12 @@ export interface TrackerApiKey {
 
 export type TrackerEntry =
   | { publish: true; access: TrackerApiKey }
-  /** Not watched, and nothing about it is published. The reason says why. */
-  | { publish: false; reason: string };
+  /**
+   * Not watched with an account. The reason says why. `forbidden` means the vendor's terms forbid
+   * publishing about the service, so no address on its sites is checked or kept, wherever the
+   * registry lists one. Without it, the registry's addresses are treated as any other.
+   */
+  | { publish: false; reason: string; forbidden?: boolean };
 
 export interface CatalogServer {
   /** Short and stable: used in file names, addresses and the tracker's data. */
@@ -92,6 +96,8 @@ export function catalogProblems(value: unknown): string[] {
     if (!isRecord(tracker) || typeof tracker.publish !== "boolean") return problem("tracker must say whether it is published");
     if (!tracker.publish) {
       if (!isText(tracker.reason, 300)) problem("a server the tracker does not publish needs a reason");
+      if (tracker.forbidden !== undefined && typeof tracker.forbidden !== "boolean") problem("forbidden must be true or false");
+      if (tracker.forbidden === true && server.termsCheckedOn === null) problem("is marked forbidden, but nobody has read its terms");
       return;
     }
     // Publishing is the one thing a vendor's terms can forbid, so nobody publishes before reading them.

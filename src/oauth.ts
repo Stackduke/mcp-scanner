@@ -122,7 +122,8 @@ export function readChallenge(header: string | null): Record<string, string> {
   // A header may hold several challenges; only the Bearer one's parameters are read, up to the next scheme.
   const start = /(?:^|,)\s*bearer(?=\s|$|,)/i.exec(header);
   if (!start) return found;
-  const pattern = /\s*,?\s*([a-z_]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s,"]+))/giy;
+  // Names are RFC 7235 tokens. A token not followed by "=" is the next scheme, where reading stops.
+  const pattern = /[\s,]*([A-Za-z0-9!#$%&'*+.^_`|~-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s,"]+))/y;
   pattern.lastIndex = start.index + start[0].length;
   for (let match = pattern.exec(header); match; match = pattern.exec(header)) {
     const name = (match[1] as string).toLowerCase();
@@ -274,7 +275,9 @@ export async function registerClient(server: AuthorizationServer, { clientName, 
     const granted = typeof value.token_endpoint_auth_method === "string" && /^[a-z_]{1,40}$/.test(value.token_endpoint_auth_method) ? value.token_endpoint_auth_method : method;
     return { outcome: "registered", client: { clientId: value.client_id, authMethod: granted, ...(typeof value.client_secret === "string" && value.client_secret ? { clientSecret: value.client_secret } : {}) } };
   } catch (error) {
-    if (error instanceof Refused) return { outcome: "refused", status: 0 };
+    // "not_sent": refused before sending, for an address that is not https, certificate checking
+    // switched off, or a reply too large to read.
+    if (error instanceof Refused) return { outcome: "refused", status: 0, error: "not_sent" };
     return { outcome: "unreachable", detail: error instanceof Error ? error.name : "unknown" };
   }
 }
@@ -363,7 +366,7 @@ async function tokenRequest(server: AuthorizationServer, client: Client, fields:
       },
     };
   } catch (error) {
-    if (error instanceof Refused) return { outcome: "refused", status: 0 };
+    if (error instanceof Refused) return { outcome: "refused", status: 0, error: "not_sent" };
     return { outcome: "unreachable", detail: error instanceof Error ? error.name : "unknown" };
   }
 }

@@ -32,8 +32,9 @@ test("a server the tracker does not publish is never given a token", () => {
   for (const quiet of catalog.servers.filter((entry) => !entry.tracker.publish)) assert.ok(!Object.hasOwn(signedInServers, quiet.id));
 });
 
-test("Sentry and Intercom are in the catalog and are never published", () => {
-  for (const id of ["sentry", "intercom"]) assert.equal(catalog.servers.find((entry) => entry.id === id)?.tracker.publish, false);
+test("Sentry and Intercom are in the catalog, never published, and marked as forbidden by their terms", () => {
+  for (const id of ["sentry", "intercom"]) assert.deepEqual(catalog.servers.find((entry) => entry.id === id)?.tracker, { ...catalog.servers.find((entry) => entry.id === id)?.tracker, publish: false, forbidden: true });
+  assert.deepEqual(problemsOf(server({ termsCheckedOn: null, tracker: { publish: false, reason: "Forbidden.", forbidden: true } })), ["demo: is marked forbidden, but nobody has read its terms"]);
 });
 
 test("a well-formed server has no problems", () => {

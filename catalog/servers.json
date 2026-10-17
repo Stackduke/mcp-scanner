@@ -136,7 +136,8 @@
       "termsCheckedOn": "2026-10-17",
       "tracker": {
         "publish": false,
-        "reason": "Sentry's terms (section 2.3(g)) forbid publishing benchmarks or performance information about the service, and treat any technical information about it as confidential."
+        "reason": "Sentry's terms (section 2.3(g)) forbid publishing benchmarks or performance information about the service, and treat any technical information about it as confidential.",
+        "forbidden": true
       }
     },
     {
@@ -149,7 +150,8 @@
       "termsCheckedOn": "2026-10-16",
       "tracker": {
         "publish": false,
-        "reason": "Intercom's terms forbid publishing performance information about the service."
+        "reason": "Intercom's terms forbid publishing performance information about the service.",
+        "forbidden": true
       }
     }
   ]

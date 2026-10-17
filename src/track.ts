@@ -9,7 +9,7 @@ import { readRegistry } from "./registry.ts";
 import type { RegistryRead } from "./registry.ts";
 import { catalog } from "./catalog.ts";
 import { scanSignedIn, signedInServers, tokenFor } from "./signed-in.ts";
-import { buildFeed, lookupOf, mergeRegistry, planChecks, readPrint, recordCheck, watchedEndpoint } from "./tracker.ts";
+import { buildFeed, lookupOf, mergeRegistry, planChecks, readPrint, recordCheck, siteOf, watchedEndpoint } from "./tracker.ts";
 import type { CheckResult, Endpoint, RegistryState } from "./tracker.ts";
 
 /**
@@ -77,11 +77,16 @@ async function withinTime(check: Promise<CheckResult>, ms: number): Promise<Chec
 }
 
 /**
- * Hosts of servers the catalog keeps off the tracker, most because the vendor's terms forbid
- * publishing about the service. Wherever the registry lists them, they are neither checked nor kept.
+ * Sites of vendors whose terms forbid publishing about their service, from the catalog: the site of
+ * the MCP server's address and of the vendor's website. No address on them is checked or kept,
+ * wherever the registry lists it.
  */
-export function keptOffHosts(servers = catalog.servers): Set<string> {
-  return new Set(servers.filter((server) => !server.tracker.publish).map((server) => new URL(server.url).host));
+export function keptOffSites(servers = catalog.servers): Set<string> {
+  return new Set(servers.flatMap((server) => (!server.tracker.publish && server.tracker.forbidden ? [siteOf(server.url), siteOf(server.site)] : [])));
+}
+
+function keptOff(url: string, sites: Set<string>): boolean {
+  try { return sites.has(siteOf(url)); } catch { return false; }
 }
 
 const byId = (a: Endpoint, b: Endpoint) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -96,6 +101,7 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   const byUrl = new Map(all.filter((endpoint) => !endpoint.signedIn).map((endpoint) => [endpoint.url, endpoint]));
   const watched = new Map(all.filter((endpoint) => endpoint.signedIn).map((endpoint) => [endpoint.signedIn as string, endpoint]));
 
+  const sites = keptOffSites();
   const none: RegistryState = { readAt: "", complete: false, entries: 0, endpoints: 0, attemptedAt: "", attemptOk: false };
   let registry: RegistryState = { ...none, ...(await readJson<Partial<RegistryState>>(file("registry.json"))) };
   if (options.readRegistry) {
@@ -105,16 +111,12 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     registry = { ...registry, attemptedAt: startedAt, attemptOk: read.entries.length > 0 && read.complete };
     if (read.entries.length) {
       mergeRegistry(byUrl, read, startedAt);
-      registry = { ...registry, readAt: startedAt, complete: read.complete, entries: read.entries.length, endpoints: new Set(read.entries.flatMap((entry) => entry.urls)).size };
+      // The count leaves out addresses kept off the tracker, so it matches what the feed covers.
+      registry = { ...registry, readAt: startedAt, complete: read.complete, entries: read.entries.length, endpoints: new Set(read.entries.flatMap((entry) => entry.urls).filter((url) => !keptOff(url, sites))).size };
     }
   }
 
-  const keptOff = keptOffHosts();
-  for (const [url, endpoint] of byUrl) {
-    let host = "";
-    try { host = new URL(endpoint.url).host; } catch { /* an address the registry got wrong is planned as any other */ }
-    if (keptOff.has(host)) byUrl.delete(url);
-  }
+  for (const [url, endpoint] of byUrl) if (keptOff(endpoint.url, sites)) byUrl.delete(url);
 
   let changed = 0, failed = 0;
   /** Records one check. A list the scanner cannot handle (one nested too deeply, say) is that server's failure, not the run's. */
