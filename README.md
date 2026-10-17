@@ -40,6 +40,9 @@ npm run scan -- authority data/snapshots/<a>.json [more.json ...]
 npm run scan -- digest data/snapshots/<server-folder> [more folders ...] --days=7
 npm run scan -- history github/github-mcp-server v1.14.0 v2.0.0
 npm run track -- --data=tracker-data --max-checks=200
+npm run scan -- discover https://mcp.linear.app/mcp
+npm run scan -- catalog
+npm run scan -- try-sign-in https://mcp.notion.com/mcp
 npm run check
 ```
 
@@ -77,9 +80,28 @@ Full definitions are kept only for the servers watched with a token. For the res
 
 **How a change is described.** Each change carries two times: the scan that saw it, and the last scan before it that listed tools. The change happened somewhere between them. Failed checks in between are kept, so the page can show which stretches were not watched. A change is a change in what the server sent: the fingerprints cover names and fields, not the scanner's reading of them, so an update to the scanner's rules is not reported as a change to a server. The same rules as the plain-language report apply: each tool is read the more serious way; a count is given only for kinds that have tools, never as 0; nothing says a server is safe or lists what it cannot do; a server's name for itself is not published; and the summary is written by the scanner, with tool names as the only words of the server's in it. Results of the text checks are not published. A finding goes to a person first, so that a vendor can be told privately.
 
+## The catalog
+
+[`catalog/servers.json`](catalog/servers.json) lists the servers Stackduke supports officially: name, address, how a customer signs in, when that and the vendor's terms were last checked, and whether the tracker may publish anything about it. The Stackduke dashboard keeps a reviewed copy of it for its list of servers to connect. The file is checked when it is loaded, and a mistake in it stops the scanner: an address must be plain https, ids are used once, each token variable is named after its server, and a server is published only once someone has read its terms. A server the catalog keeps off the tracker is neither checked nor kept, wherever the registry lists it. Sentry and Intercom are kept off this way, because their terms forbid publishing information about their service.
+
+To add a server, run `npm run scan -- discover <url>`. It asks the server how it signs in, sending no credential, and prints what its `signIn` should be:
+
+- `oauth-metadata-doc`: standard OAuth, and it takes Stackduke's client metadata document as a client ID.
+- `oauth-dcr`: standard OAuth with automatic client registration.
+- `oauth-app`: standard OAuth, but Stackduke must register an app with the vendor first (GitHub today).
+- `api-key`: it wants a login but says nothing about OAuth.
+
+Then add an entry and run `npm run check`. `npm run scan -- catalog` asks every server in the file again and says where an answer no longer matches it.
+
+## Signing in
+
+[`src/oauth.ts`](src/oauth.ts) signs in to an MCP server the standard way, the MCP authorization spec of 2025-11-25, with no code for any one vendor. It reads the server's 401, its description and its sign-in server's description, including the older way some servers still use (Atlassian). It registers with an app made in advance (used only with the exact sign-in server it was made for, so its secret cannot be sent elsewhere), a client metadata document or automatic registration, in that order, and signs in with PKCE (S256 only) and the `resource` parameter. Then it swaps the code for tokens and renews them, keeping the new refresh token each time. Every address must be https, nothing is sent when certificate checking is switched off, no request follows a redirect, replies are read only up to a limit, and an error passes on the server's error code but never its own words.
+
+`npm run scan -- try-sign-in <url>` proves a sign-in works. It prints the vendor's sign-in page, the person approves in any browser and pastes back the address the browser lands on, and the scanner lists the server's tools once with the new token. The tokens are never printed or saved and are dropped at the end. `--scopes="a b"` asks for fewer scopes than the server suggests, such as read-only ones. It uses automatic registration only: Stackduke has no client metadata document published yet, nor an app registered with GitHub, so GitHub stops before the browser. Nothing keeps these tokens yet: that comes with the tracker job for servers that take only a browser sign-in.
+
 ## Signed-in servers
 
-Big vendors' servers ask for a sign-in, so the tracker watches them with tokens from accounts made for the purpose, holding nothing of value. The servers it may send a token to are fixed in [`src/signed-in.ts`](src/signed-in.ts): GitHub, Linear, Stripe (sandbox) and Supabase so far.
+Big vendors' servers ask for a sign-in, so the tracker watches them with tokens from accounts made for the purpose, holding nothing of value. The servers it may send a token to are the catalog's published servers with a key, built in [`src/signed-in.ts`](src/signed-in.ts): GitHub, Linear, Stripe (sandbox) and Supabase so far.
 
 - A token is read from an environment variable (`STACKDUKE_SCAN_<VENDOR>_TOKEN`), never from an argument, and is sent only to that vendor's fixed address. `scan <url>` cannot send one. The older name `AETHIS_SCAN_GITHUB_TOKEN` is still read.
 - It is sent over https only, not at all if certificate checking is switched off, and redirects are refused. It is never printed, saved or included in an error. If a server sends the token back, nothing from that reply is kept.
@@ -93,6 +115,8 @@ Big vendors' servers ask for a sign-in, so the tracker watches them with tokens 
 - `src/risk.ts`: capability labels. `src/findings.ts`: the text checks. `src/text.ts`: making untrusted text safe to print.
 - `src/authority.ts`, `src/digest.ts`, `src/report.ts`: the plain-language report, the weekly digest and the technical report.
 - `src/registry.ts`, `src/tracker.ts`, `src/crawl.ts`, `src/track.ts`: the tracker: reading the registry, planning and recording checks, running them politely, and one run end to end.
+- `catalog/servers.json`, `src/catalog.ts`: the servers supported officially, and checking the file.
+- `src/oauth.ts`, `src/try-sign-in.ts`: signing in the standard way, and a test sign-in.
 - `src/signed-in.ts`, `src/connect.ts`: the servers a token may be sent to, and adding tokens.
 - `src/sources/github-snapshots.ts`: definitions a repository publishes as files.
 - `src/cli.ts`: the commands. `test/`: the tests, none of which touches the network.

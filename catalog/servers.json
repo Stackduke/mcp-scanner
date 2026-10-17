@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "servers": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "site": "https://github.com",
+      "signIn": "oauth-app",
+      "signInCheckedOn": "2026-10-17",
+      "termsCheckedOn": "2026-10-16",
+      "tracker": {
+        "publish": true,
+        "access": {
+          "kind": "api-key",
+          "tokenVariable": "STACKDUKE_SCAN_GITHUB_TOKEN",
+          "formerVariable": "AETHIS_SCAN_GITHUB_TOKEN",
+          "keyPage": "https://github.com/settings/personal-access-tokens/new",
+          "keyAdvice": "A fine-grained token with read-only access to public repositories and no other permissions."
+        }
+      }
+    },
+    {
+      "id": "linear",
+      "name": "Linear",
+      "url": "https://mcp.linear.app/mcp",
+      "site": "https://linear.app",
+      "signIn": "oauth-metadata-doc",
+      "signInCheckedOn": "2026-10-17",
+      "termsCheckedOn": "2026-10-16",
+      "tracker": {
+        "publish": true,
+        "access": {
+          "kind": "api-key",
+          "tokenVariable": "STACKDUKE_SCAN_LINEAR_TOKEN",
+          "keyPage": "https://linear.app/settings/account/security",
+          "keyAdvice": "A personal API key with Read only, in a workspace that holds nothing."
+        }
+      }
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "url": "https://mcp.stripe.com/",
+      "site": "https://stripe.com",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-17",
+      "termsCheckedOn": "2026-10-16",
+      "tracker": {
+        "publish": true,
+        "access": {
+          "kind": "api-key",
+          "tokenVariable": "STACKDUKE_SCAN_STRIPE_TOKEN",
+          "keyPage": "https://dashboard.stripe.com/test/apikeys",
+          "keyAdvice": "A restricted key in a sandbox (test mode), made for agent access, with every resource on Read or None. It starts rk_test_."
+        }
+      }
+    },
+    {
+      "id": "supabase",
+      "name": "Supabase",
+      "url": "https://mcp.supabase.com/mcp",
+      "site": "https://supabase.com",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-17",
+      "termsCheckedOn": "2026-10-16",
+      "tracker": {
+        "publish": true,
+        "access": {
+          "kind": "api-key",
+          "tokenVariable": "STACKDUKE_SCAN_SUPABASE_TOKEN",
+          "keyPage": "https://supabase.com/dashboard/account/tokens",
+          "keyAdvice": "A personal access token. It reaches the whole account, so use an account with one empty project."
+        }
+      }
+    },
+    {
+      "id": "notion",
+      "name": "Notion",
+      "url": "https://mcp.notion.com/mcp",
+      "site": "https://www.notion.com",
+      "signIn": "oauth-metadata-doc",
+      "signInCheckedOn": "2026-10-17",
+      "termsCheckedOn": null,
+      "tracker": {
+        "publish": false,
+        "reason": "Its terms pages need a browser to read and have not been read yet, and its server takes only a browser sign-in."
+      }
+    },
+    {
+      "id": "paypal",
+      "name": "PayPal",
+      "url": "https://mcp.paypal.com/mcp",
+      "site": "https://www.paypal.com",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-17",
+      "termsCheckedOn": "2026-10-17",
+      "tracker": {
+        "publish": false,
+        "reason": "No clause against publishing was found in PayPal's Developer Testing Agreement or User Agreement on 2026-10-17, but no terms specific to its MCP server were found either. Its tokens last only hours, so it waits for a tracker job that renews a browser sign-in."
+      }
+    },
+    {
+      "id": "atlassian",
+      "name": "Atlassian",
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "site": "https://www.atlassian.com",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-17",
+      "termsCheckedOn": "2026-10-17",
+      "tracker": {
+        "publish": false,
+        "reason": "The Atlassian Customer Agreement (section 2.4) forbids publishing assessments of free or beta products, and a tracker account would be free. Paid products may be assessed in public only with everything needed to repeat the assessment."
+      }
+    },
+    {
+      "id": "cloudflare-bindings",
+      "name": "Cloudflare Workers Bindings",
+      "url": "https://bindings.mcp.cloudflare.com/mcp",
+      "site": "https://www.cloudflare.com",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-17",
+      "termsCheckedOn": "2026-10-17",
+      "tracker": {
+        "publish": false,
+        "reason": "Cloudflare's terms allow publishing benchmarks with everything needed to repeat them (section 2.2.2), but treat anything learned about a beta service as confidential (section 5). Whether this server is beta has not been checked, and it takes only a browser sign-in."
+      }
+    },
+    {
+      "id": "sentry",
+      "name": "Sentry",
+      "url": "https://mcp.sentry.dev/mcp",
+      "site": "https://sentry.io",
+      "signIn": "oauth-metadata-doc",
+      "signInCheckedOn": "2026-10-17",
+      "termsCheckedOn": "2026-10-17",
+      "tracker": {
+        "publish": false,
+        "reason": "Sentry's terms (section 2.3(g)) forbid publishing benchmarks or performance information about the service, and treat any technical information about it as confidential."
+      }
+    },
+    {
+      "id": "intercom",
+      "name": "Intercom",
+      "url": "https://mcp.intercom.com/mcp",
+      "site": "https://www.intercom.com",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-17",
+      "termsCheckedOn": "2026-10-16",
+      "tracker": {
+        "publish": false,
+        "reason": "Intercom's terms forbid publishing performance information about the service."
+      }
+    }
+  ]
+}

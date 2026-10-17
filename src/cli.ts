@@ -7,6 +7,11 @@ import { connect, ghSecretSet, readHidden } from "./connect.ts";
 import { describeDigest, periodOf } from "./digest.ts";
 import { describeDiff, describeSnapshot } from "./report.ts";
 import { scanSignedIn, signedInServers } from "./signed-in.ts";
+import { catalog, signInFrom } from "./catalog.ts";
+import { discover } from "./oauth.ts";
+import { printable } from "./text.ts";
+import { trySignIn } from "./try-sign-in.ts";
+import { createInterface } from "node:readline/promises";
 import { readSnapshot, save } from "./files.ts";
 import { describeReview, review } from "./review.ts";
 import { takeSnapshot } from "./snapshot.ts";
@@ -29,11 +34,17 @@ const usage = `Usage:
   npm run scan -- review [--data=tracker-data] [--days=2]
                                                     Look again, live, at servers the tracker found new or changed, and print
                                                     what the text checks find. For a person; it writes nothing.
+  npm run scan -- discover <https-url>              How a server signs in: what its catalog entry's signIn should be.
+  npm run scan -- catalog                           Ask every server in catalog/servers.json how it signs in, and
+                                                    say where the answer no longer matches the file.
+  npm run scan -- try-sign-in <https-url> [--scopes="a b"]
+                                                    Sign in to a server in a browser, as a test: the tokens are used
+                                                    to list its tools once, never printed or saved, and then dropped.
   npm run scan -- connect [vendor...] [--repo=owner/name]
                                                     Add vendor tokens to the tracker's repository secrets, one hidden
                                                     prompt each, each tested first. Default: every vendor, Stackduke/mcp-scanner.
 
-Nothing here calls a tool. scan sends no credential. signed-in reads a token from an environment
+Nothing here calls a tool. scan, discover and catalog send no credential. signed-in reads a token from an environment
 variable and sends it only to that server's fixed address; the token is never printed or saved.
 --save writes the snapshot under data/snapshots/<source>/. history sends GITHUB_TOKEN, if set, to
 api.github.com only.`;
@@ -74,6 +85,52 @@ async function main(argv: string[]): Promise<number> {
     console.log("\nThis is the list this token is allowed to see. Another account, or a token with other permissions, may be shown more or fewer tools.");
     if (flags.has("--save")) console.log(`\nSaved to ${await save(snapshot)}`);
     return 0;
+  }
+
+  if (command === "discover" && args[0] && !flags.size) {
+    const found = await discover(args[0]);
+    const method = signInFrom(found);
+    if (found.outcome === "oauth") {
+      const server = found.authorizationServer;
+      console.log([
+        `${printable(args[0])}: ${method}`,
+        `  sign-in server: ${printable(server.issuer)}${found.olderDiscovery ? " (found the older way: the server does not describe itself)" : ""}`,
+        `  automatic registration: ${server.registrationEndpoint ? "yes" : "no"}; client metadata documents: ${server.metadataDocuments ? "yes" : "no"}`,
+        `  client without a secret allowed: ${server.authMethods.includes("none") ? "yes" : "no"}`,
+        `  scopes it suggests: ${printable(found.scopes.join(" ")) || "none named"}`,
+      ].join("\n"));
+    } else {
+      console.log(`${printable(args[0])}: ${method}${"detail" in found ? ` (${found.detail})` : ""}`);
+    }
+    return found.outcome === "oauth" || found.outcome === "no-oauth" || found.outcome === "open" ? 0 : 4;
+  }
+
+  if (command === "catalog" && !args.length && !flags.size) {
+    let differing = 0;
+    for (const entry of catalog.servers) {
+      const method = signInFrom(await discover(entry.url));
+      const same = method === entry.signIn;
+      if (!same) differing += 1;
+      console.log(`${entry.id}: ${same ? `${method}, as recorded` : `now ${method}, recorded ${entry.signIn} on ${entry.signInCheckedOn}`}`);
+    }
+    console.log(differing ? `\n${differing} differ. Check them by hand before changing the file.` : "\nAll match the file.");
+    return differing ? 1 : 0;
+  }
+
+  if (command === "try-sign-in" && args[0] && args.length === 1) {
+    const scopeFlags = [...flags].map((flag) => /^--scopes=([\w:.\- /]*)$/.exec(flag));
+    if (scopeFlags.some((match) => !match) || scopeFlags.length > 1) { console.error("try-sign-in takes only --scopes=\"a b\"."); return 2; }
+    if (!args[0].startsWith("https://")) { console.error("Only https:// servers are signed in to."); return 2; }
+    const lines = createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      const scopes = scopeFlags[0]?.[1]?.split(/\s+/).filter(Boolean);
+      const result = await trySignIn(args[0], { ask: (prompt) => lines.question(prompt), print: (...text) => console.log(text.join("\n")), ...(scopes ? { scopes } : {}) });
+      if (result.outcome !== "listed") { console.log(`\nStopped at ${result.at}: ${result.detail}.`); return 3; }
+      console.log(`\nIt works: the server listed ${result.tools} tools with the new sign-in${result.scope ? `, granted ${result.scope}` : ""}. The tokens have been dropped; remove the sign-in in the vendor's settings if it is not needed.`);
+      return 0;
+    } finally {
+      lines.close();
+    }
   }
 
   if (command === "authority" && args[0]) {

@@ -295,3 +295,23 @@ test("what servers say about their own tools is counted from their labels alone,
   assert.equal(feed.trackingSince, hoursBefore(30));
   assert.deepEqual(lookupOf(servers)[0], ["", "https://a.example.com/mcp", 3, now.slice(0, 10), 0, { read: 3 }]);
 });
+
+test("a server the catalog keeps off the tracker is neither contacted nor kept, wherever the registry lists it", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
+  const contacted: string[] = [];
+  const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
+    const url = String(input);
+    if (url.startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: [{ server: { name: "io.github.getsentry/sentry-mcp", remotes: [{ type: "streamable-http", url: "https://mcp.sentry.dev/mcp" }] } }, { server: { name: "com.example/open", remotes: [{ type: "streamable-http", url: "https://open.example.com/mcp" }] } }], metadata: {} });
+    contacted.push(url);
+    const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
+    if (body.method === "initialize") return Response.json({ jsonrpc: "2.0", id: body.id, result: { serverInfo: { name: "Open" } } });
+    if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "get_page", ...readOnly }] } });
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+  await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, environment: {}, fetchImpl, now: () => new Date(now) });
+  assert.ok(!contacted.some((url) => url.includes("sentry.dev")));
+  const kept = await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8");
+  assert.ok(!kept.includes("sentry"));
+  assert.ok(kept.includes("open.example.com"));
+  for (const file of ["feed.json", "servers.json", "lookup.json"]) assert.ok(!(await readFile(path.join(dataDir, file), "utf8")).includes("sentry"), file);
+});

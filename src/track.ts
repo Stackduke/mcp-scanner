@@ -7,6 +7,7 @@ import { crawl } from "./crawl.ts";
 import { readSnapshot, snapshotText, writeWhole } from "./files.ts";
 import { readRegistry } from "./registry.ts";
 import type { RegistryRead } from "./registry.ts";
+import { catalog } from "./catalog.ts";
 import { scanSignedIn, signedInServers, tokenFor } from "./signed-in.ts";
 import { buildFeed, lookupOf, mergeRegistry, planChecks, readPrint, recordCheck, watchedEndpoint } from "./tracker.ts";
 import type { CheckResult, Endpoint, RegistryState } from "./tracker.ts";
@@ -75,6 +76,14 @@ async function withinTime(check: Promise<CheckResult>, ms: number): Promise<Chec
   finally { clearTimeout(timer); }
 }
 
+/**
+ * Hosts of servers the catalog keeps off the tracker, most because the vendor's terms forbid
+ * publishing about the service. Wherever the registry lists them, they are neither checked nor kept.
+ */
+export function keptOffHosts(servers = catalog.servers): Set<string> {
+  return new Set(servers.filter((server) => !server.tracker.publish).map((server) => new URL(server.url).host));
+}
+
 const byId = (a: Endpoint, b: Endpoint) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 export async function track(options: TrackOptions): Promise<TrackSummary> {
@@ -98,6 +107,13 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
       mergeRegistry(byUrl, read, startedAt);
       registry = { ...registry, readAt: startedAt, complete: read.complete, entries: read.entries.length, endpoints: new Set(read.entries.flatMap((entry) => entry.urls)).size };
     }
+  }
+
+  const keptOff = keptOffHosts();
+  for (const [url, endpoint] of byUrl) {
+    let host = "";
+    try { host = new URL(endpoint.url).host; } catch { /* an address the registry got wrong is planned as any other */ }
+    if (keptOff.has(host)) byUrl.delete(url);
   }
 
   let changed = 0, failed = 0;

@@ -1,8 +1,10 @@
 import { listTools } from "./client.ts";
 import type { ListToolsResult } from "./client.ts";
+import { catalog } from "./catalog.ts";
+import type { CatalogServer } from "./catalog.ts";
 
 /**
- * The servers this scanner may send a credential to.
+ * The servers this scanner may send a credential to, from `catalog/servers.json`.
  *
  * A token is only ever paired with the address written here. No command-line argument can point
  * a token at another host, and the client refuses redirects, so a server cannot pass it on either.
@@ -19,33 +21,21 @@ export interface SignedInServer {
 }
 
 /**
- * Each token should belong to an account made for the tracker that holds nothing of value: the
- * server shows the tools that token may see, and the token sits in the tracker's secrets.
- * Checked against each vendor's documentation on 2026-10-16. Vendors whose servers take only a
- * browser sign-in, or whose terms need reading first, are not here yet.
+ * The servers in the catalog that the tracker watches with a key and publishes. Each token should
+ * belong to an account made for the tracker that holds nothing of value: the server shows the tools
+ * that token may see, and the token sits in the tracker's secrets. A server whose terms forbid
+ * publishing, or that takes only a browser sign-in, is in the catalog but not here.
  */
-export const signedInServers: Readonly<Record<string, SignedInServer>> = {
-  github: {
-    url: "https://api.githubcopilot.com/mcp/", tokenVariable: "STACKDUKE_SCAN_GITHUB_TOKEN", formerVariable: "AETHIS_SCAN_GITHUB_TOKEN",
-    keyPage: "https://github.com/settings/personal-access-tokens/new",
-    keyAdvice: "A fine-grained token with read-only access to public repositories and no other permissions.",
-  },
-  linear: {
-    url: "https://mcp.linear.app/mcp", tokenVariable: "STACKDUKE_SCAN_LINEAR_TOKEN",
-    keyPage: "https://linear.app/settings/account/security",
-    keyAdvice: "A personal API key with Read only, in a workspace that holds nothing.",
-  },
-  stripe: {
-    url: "https://mcp.stripe.com/", tokenVariable: "STACKDUKE_SCAN_STRIPE_TOKEN",
-    keyPage: "https://dashboard.stripe.com/test/apikeys",
-    keyAdvice: "A restricted key in a sandbox (test mode), made for agent access, with every resource on Read or None. It starts rk_test_.",
-  },
-  supabase: {
-    url: "https://mcp.supabase.com/mcp", tokenVariable: "STACKDUKE_SCAN_SUPABASE_TOKEN",
-    keyPage: "https://supabase.com/dashboard/account/tokens",
-    keyAdvice: "A personal access token. It reaches the whole account, so use an account with one empty project.",
-  },
-};
+export function signedInServersOf(servers: readonly CatalogServer[]): Readonly<Record<string, SignedInServer>> {
+  const entries = servers.flatMap((server) => {
+    if (!server.tracker.publish) return [];
+    const { tokenVariable, formerVariable, keyPage, keyAdvice } = server.tracker.access;
+    return [[server.id, Object.freeze({ url: server.url, tokenVariable, ...(formerVariable ? { formerVariable } : {}), keyPage, keyAdvice })] as const];
+  });
+  return Object.freeze(Object.fromEntries(entries));
+}
+
+export const signedInServers: Readonly<Record<string, SignedInServer>> = signedInServersOf(catalog.servers);
 
 /** The token for a server, from its variable or, when that is unset or empty, the variable's former name. */
 export function tokenFor(server: SignedInServer, environment: Record<string, string | undefined>): string | undefined {
