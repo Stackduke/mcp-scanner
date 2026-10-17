@@ -39,6 +39,13 @@ jobs:
         with:
           node-version: "22"
 
+      # The private notice needs watched/ as it was before this scan, to tell new findings from known ones.
+      # The copy is kept outside tracker-data, so it is never committed.
+      - name: Keep the watched definitions from before the scan
+        run: |
+          mkdir -p "$RUNNER_TEMP/watched-before"
+          if [ -d tracker-data/watched ]; then cp -R tracker-data/watched/. "$RUNNER_TEMP/watched-before/"; fi
+
       - name: Scan
         # No install step: the scanner has no runtime dependencies.
         run: node src/cli.ts track --data=tracker-data --budget-minutes=55
@@ -47,6 +54,15 @@ jobs:
           STACKDUKE_SCAN_LINEAR_TOKEN: ${{ secrets.STACKDUKE_SCAN_LINEAR_TOKEN }}
           STACKDUKE_SCAN_STRIPE_TOKEN: ${{ secrets.STACKDUKE_SCAN_STRIPE_TOKEN }}
           STACKDUKE_SCAN_SUPABASE_TOKEN: ${{ secrets.STACKDUKE_SCAN_SUPABASE_TOKEN }}
+
+      # Findings go to Stackduke's maintainer alone, through Stackduke's endpoint. The request is made on every run, empty or not, and
+      # the step prints only fixed lines and never fails, so this public log says nothing about what was found.
+      # The notice token is handed to this step only.
+      - name: Private notice
+        run: node src/cli.ts notice --before="$RUNNER_TEMP/watched-before" --data=tracker-data
+        env:
+          STACKDUKE_NOTICE_URL: ${{ secrets.STACKDUKE_NOTICE_URL }}
+          STACKDUKE_NOTICE_TOKEN: ${{ secrets.STACKDUKE_NOTICE_TOKEN }}
 
       - name: Commit what changed
         working-directory: tracker-data

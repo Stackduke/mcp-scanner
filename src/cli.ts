@@ -14,6 +14,7 @@ import { trySignIn } from "./try-sign-in.ts";
 import { createInterface } from "node:readline/promises";
 import { readSnapshot, save } from "./files.ts";
 import { describeReview, review } from "./review.ts";
+import { notice } from "./notice.ts";
 import { takeSnapshot } from "./snapshot.ts";
 import { track } from "./track.ts";
 import { snapshotFromRepository } from "./sources/github-snapshots.ts";
@@ -34,6 +35,10 @@ const usage = `Usage:
   npm run scan -- review [--data=tracker-data] [--days=2]
                                                     Look again, live, at servers the tracker found new or changed, and print
                                                     what the text checks find. For a person; it writes nothing.
+  npm run scan -- notice --before=<folder> --data=<folder>
+                                                    Send Stackduke's maintainer, privately, what the text checks newly find on the servers watched
+                                                    with a token: --before holds watched/ as it was before the scan. Needs
+                                                    STACKDUKE_NOTICE_URL and STACKDUKE_NOTICE_TOKEN; prints nothing about findings.
   npm run scan -- discover <https-url>              How a server signs in: what its catalog entry's signIn should be.
   npm run scan -- catalog                           Ask every server in catalog/servers.json how it signs in, and
                                                     say where the answer no longer matches the file.
@@ -225,6 +230,15 @@ async function main(argv: string[]): Promise<number> {
     const days = given.get("days") ?? "2";
     if ([...given.keys()].some((name) => name !== "data" && name !== "days") || given.size !== flags.size || !/^\d{1,3}$/.test(days) || Number(days) < 1) { console.error("review takes --data=<folder> and --days=N, each at most once."); return 2; }
     console.log(describeReview(await review({ dataDir: given.get("data") ?? "tracker-data", days: Number(days), concurrency: 16, hostGapMs: 1000, budgetMinutes: 60 })));
+    return 0;
+  }
+
+  if (command === "notice" && !args.length) {
+    const given = new Map([...flags].map((flag) => { const match = /^--(before|data)=(.+)$/.exec(flag); return [match?.[1] ?? flag, match?.[2] ?? ""] as const; }));
+    const before = given.get("before"), data = given.get("data");
+    if (given.size !== flags.size || given.size !== 2 || !before || !data) { console.error("notice takes --before=<folder> and --data=<folder>, once each."); return 2; }
+    // The log is public: whatever was found, and whether it arrived, the command ends the same way.
+    await notice(before, data, { environment: process.env, print: (line) => console.log(line) });
     return 0;
   }
 
