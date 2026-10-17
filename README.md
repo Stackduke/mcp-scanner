@@ -67,8 +67,11 @@ npm run check
 | `watched/` | The full definitions from servers scanned with a token, rewritten only when they change. |
 | `feed.json` | What the web page reads: coverage, the servers watched with a token, and the latest change on each server that changed in the last 30 days (at most 300, within 1 MB, with the total), with how many checks in those 30 days listed tools. |
 | `servers.json` | Every endpoint that listed tools, with its counts and the same 30-day coverage. |
+| `lookup.json` | The same endpoints, cut down for a web page to search. |
 
 The `data` branch must exist before the first run; the workflow checks it out.
+
+The feed also adds up what servers say about their own tools: how many are marked read-only, marked destructive, marked as changing things, or carry no such label. Those are the servers' claims, so they can be added up; the scanner's own cautious reading (which counts a tool as able to do the most its name, label or description suggests) is given per server and is not added up, because it overcounts on purpose.
 
 Full definitions are kept only for the servers watched with a token. For the rest, the fingerprints say which tools and which fields changed. For the old wording itself, look at the server.
 

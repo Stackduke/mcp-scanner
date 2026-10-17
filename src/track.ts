@@ -8,7 +8,7 @@ import { readSnapshot, snapshotText, writeWhole } from "./files.ts";
 import { readRegistry } from "./registry.ts";
 import type { RegistryRead } from "./registry.ts";
 import { scanSignedIn, signedInServers, tokenFor } from "./signed-in.ts";
-import { buildFeed, mergeRegistry, planChecks, readPrint, recordCheck, watchedEndpoint } from "./tracker.ts";
+import { buildFeed, lookupOf, mergeRegistry, planChecks, readPrint, recordCheck, watchedEndpoint } from "./tracker.ts";
 import type { CheckResult, Endpoint, RegistryState } from "./tracker.ts";
 
 /**
@@ -156,6 +156,7 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   await writeWhole(file("registry.json"), `${JSON.stringify(registry, null, 2)}\n`);
   await writeWhole(file("feed.json"), `${JSON.stringify(feed)}\n`);
   await writeWhole(file("servers.json"), `${JSON.stringify(servers)}\n`);
+  await writeWhole(file("lookup.json"), `${JSON.stringify({ version: 1, generatedAt: feed.generatedAt, rows: lookupOf(servers) })}\n`);
 
   return {
     registry, planned: plan.length, checked: done.length, notStarted: notStarted.length, changed,

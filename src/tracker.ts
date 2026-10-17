@@ -25,6 +25,25 @@ export type CheckOutcome = "listed" | "sign-in-required" | "not-usable" | "unrea
 const outcomeCode: Record<CheckOutcome, string> = { listed: "L", "sign-in-required": "S", "not-usable": "N", unreachable: "U", "no-token": "T" };
 const codeOutcome = Object.fromEntries(Object.entries(outcomeCode).map(([outcome, code]) => [code, outcome])) as Record<string, CheckOutcome>;
 
+/**
+ * What a server says about its own tools, from the annotations it sends: marked read-only, marked
+ * destructive, marked as changing things without being destructive, or given no such label.
+ * These are the server's claims, not the scanner's reading, so they can be added up across servers.
+ */
+export interface Labels { readOnly: number; changes: number; destructive: number; none: number }
+
+export function labelsOf(tools: Array<{ annotations?: Record<string, unknown> }>): Labels {
+  const labels: Labels = { readOnly: 0, changes: 0, destructive: 0, none: 0 };
+  for (const { annotations = {} } of tools) {
+    const { readOnlyHint, destructiveHint } = annotations;
+    if (readOnlyHint === true) labels.readOnly += 1;
+    else if (destructiveHint === true) labels.destructive += 1;
+    else if (typeof readOnlyHint === "boolean" || typeof destructiveHint === "boolean") labels.changes += 1;
+    else labels.none += 1;
+  }
+  return labels;
+}
+
 /** How many tools are counted under each kind. A kind with none is left out: a 0 would read as "cannot". */
 export type KindCounts = Partial<Record<AuthorityKind, number>>;
 
@@ -63,6 +82,7 @@ export interface Endpoint {
   listHash?: string;
   tools?: number;
   kinds?: KindCounts;
+  labels?: Labels;
   /** Where the latest tool list is kept, relative to the data folder. */
   file?: string;
   /** The most recent checks, newest last, as `<time> <code>`. */
@@ -273,7 +293,7 @@ export function recordCheck(endpoint: Endpoint, result: CheckResult, now: string
   const listed = result.outcome === "listed" ? (() => {
     const snapshot = takeSnapshot(endpoint.url, result.tools, result.server, now);
     const print = printOf(snapshot);
-    return { snapshot, print, listHash: listHashOf(print), kinds: kindCounts(authorityOf(snapshot)) };
+    return { snapshot, print, listHash: listHashOf(print), kinds: kindCounts(authorityOf(snapshot)), labels: labelsOf(snapshot.tools) };
   })() : null;
 
   endpoint.checks = [...endpoint.checks, `${now} ${outcomeCode[result.outcome]}`].slice(-keptChecks);
@@ -290,6 +310,7 @@ export function recordCheck(endpoint: Endpoint, result: CheckResult, now: string
   endpoint.lastListed = now;
   endpoint.tools = listed.snapshot.tools.length;
   endpoint.kinds = listed.kinds;
+  endpoint.labels = listed.labels;
   endpoint.file = printFile(endpoint);
   return unchanged && !reread ? null : { snapshot: listed.snapshot, print: listed.print };
 }
@@ -375,6 +396,13 @@ export interface Feed {
   changes: FeedChange[];
   /** How many endpoints changed in the last 30 days, shown or not. */
   changesTotal: number;
+  /** When the first endpoint was checked: changes can only have been seen since then. */
+  trackingSince: string;
+  /**
+   * What servers say about their own tools, added up over the endpoints whose labels are known
+   * (those listed since labels were first recorded). `servers` says how many that is.
+   */
+  across: { servers: number; tools: number; labels: Labels };
 }
 
 const mostChanges = 300;
@@ -449,9 +477,30 @@ export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, Aut
     watched,
     changes,
     changesTotal: allChanges.length,
+    trackingSince: public_.reduce((first, endpoint) => (endpoint.checks[0] && (!first || endpoint.checks[0] < first) ? endpoint.checks[0].split(" ")[0] as string : first), ""),
+    across: acrossOf(public_.filter((endpoint) => endpoint.outcome === "listed")),
   };
   return { feed, servers };
 }
+
+function acrossOf(listing: Endpoint[]): Feed["across"] {
+  const labels: Labels = { readOnly: 0, changes: 0, destructive: 0, none: 0 };
+  let servers = 0, tools = 0;
+  for (const endpoint of listing) {
+    if (!endpoint.labels) continue;
+    servers += 1;
+    tools += endpoint.tools ?? 0;
+    for (const key of Object.keys(labels) as Array<keyof Labels>) labels[key] += endpoint.labels[key];
+  }
+  return { servers, tools, labels };
+}
+
+/**
+ * Every endpoint that listed tools, small enough for a web page to search: registry name, address,
+ * tool count, the day it last listed them, changes in 30 days, and what its tools are counted as doing.
+ */
+export type LookupRow = [name: string, url: string, tools: number, lastListed: string, changesIn30Days: number, kinds: KindCounts];
+export const lookupOf = (servers: FeedServer[]): LookupRow[] => servers.map((server) => [server.names[0] ?? "", server.url, server.tools, server.lastListed.slice(0, 10), server.changesIn30Days, server.kinds]);
 
 /** Starts the record of a server scanned with a token. */
 export function watchedEndpoint(vendor: string, url: string, now: string): Endpoint {

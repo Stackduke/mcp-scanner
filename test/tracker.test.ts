@@ -7,7 +7,7 @@ import { crawl } from "../src/crawl.ts";
 import { readEntry, readRegistry, scannableAddress } from "../src/registry.ts";
 import { takeSnapshot } from "../src/snapshot.ts";
 import { track } from "../src/track.ts";
-import { buildFeed, changeBetween, keptNames, listHashOf, mergeRegistry, planChecks, printOf, recordCheck, siteOf } from "../src/tracker.ts";
+import { buildFeed, changeBetween, keptNames, labelsOf, listHashOf, lookupOf, mergeRegistry, planChecks, printOf, recordCheck, siteOf } from "../src/tracker.ts";
 import type { Endpoint, Feed } from "../src/tracker.ts";
 import type { ToolDefinition } from "../src/types.ts";
 
@@ -277,4 +277,21 @@ test("a run whose checks stall still finishes and writes its files", async () =>
   const [line] = (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n");
   assert.equal((JSON.parse(line ?? "{}") as Endpoint).outcome, "unreachable");
   assert.ok((await readdir(dataDir)).includes("feed.json"));
+  assert.ok((await readdir(dataDir)).includes("lookup.json"));
+});
+
+test("what servers say about their own tools is counted from their labels alone, and added up only where known", () => {
+  assert.deepEqual(labelsOf([
+    { annotations: { readOnlyHint: true } },
+    { annotations: { readOnlyHint: false, destructiveHint: true } },
+    { annotations: { readOnlyHint: false } },
+    { annotations: { title: "x" } },
+    {},
+  ]), { readOnly: 1, changes: 1, destructive: 1, none: 2 });
+  const labelled = endpoint("https://a.example.com/mcp", { outcome: "listed", lastListed: now, lastChecked: now, tools: 3, kinds: { read: 3 }, labels: { readOnly: 2, changes: 0, destructive: 0, none: 1 }, checks: [`${hoursBefore(5)} L`] });
+  const older = endpoint("https://b.example.com/mcp", { outcome: "listed", lastListed: now, lastChecked: now, tools: 9, kinds: { write: 9 }, checks: [`${hoursBefore(30)} L`] });
+  const { feed, servers } = buildFeed([labelled, older], new Map(), { readAt: now, complete: true, entries: 2, endpoints: 2, attemptedAt: now, attemptOk: true }, now);
+  assert.deepEqual(feed.across, { servers: 1, tools: 3, labels: { readOnly: 2, changes: 0, destructive: 0, none: 1 } });
+  assert.equal(feed.trackingSince, hoursBefore(30));
+  assert.deepEqual(lookupOf(servers)[0], ["", "https://a.example.com/mcp", 3, now.slice(0, 10), 0, { read: 3 }]);
 });
