@@ -2,7 +2,13 @@
 # and commit what changed to the `data` branch. stackduke.com/tracker reads data/feed.json from there.
 #
 # Nothing here calls a tool or runs a server's code. Each vendor token is a repository secret, handed
-# only to the scan step, read from the environment and sent only to that vendor's fixed address.
+# only to the step that needs it, read from the environment and sent only to that vendor's fixed address.
+#
+# A browser sign-in is one secret, STACKDUKE_OAUTH_<VENDOR>: the client that registered itself and
+# its tokens. The renew step renews each and writes it straight back, with a key from a GitHub App
+# that may do nothing but set this repository's secrets. Every token is hidden from this log, which
+# is public, before anything could print it. The renewed access tokens reach the later steps in a
+# folder outside the checkout, readable by the runner's user only, deleted when the job ends.
 name: Track
 
 on:
@@ -12,6 +18,8 @@ on:
 
 permissions:
   contents: write
+  # For an issue when a sign-in needs a person, and to close it once the server is read again.
+  issues: write
 
 concurrency:
   group: track
@@ -46,25 +54,59 @@ jobs:
           mkdir -p "$RUNNER_TEMP/watched-before"
           if [ -d tracker-data/watched ]; then cp -R tracker-data/watched/. "$RUNNER_TEMP/watched-before/"; fi
 
-      - name: Scan
+      # The key is made for the renew step alone, limited to this repository's secrets, and revoked when
+      # the job ends. Until the app is set up this step fails, and the renew step renews nothing.
+      - name: Key for saving renewed sign-ins
+        id: sign-in-key
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.STACKDUKE_SIGN_IN_APP_CLIENT_ID }}
+          private-key: ${{ secrets.STACKDUKE_SIGN_IN_APP_KEY }}
+          permission-secrets: write
+
+      # Talks to the vendors' sign-in servers and to GitHub, never to an MCP server.
+      - name: Renew sign-ins
         # No install step: the scanner has no runtime dependencies.
-        run: node src/cli.ts track --data=tracker-data --budget-minutes=55
+        run: node src/cli.ts renew-sign-ins --dir="$RUNNER_TEMP/sign-ins" --repo="$REPOSITORY"
+        env:
+          GH_TOKEN: ${{ steps.sign-in-key.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          STACKDUKE_OAUTH_AIRTABLE: ${{ secrets.STACKDUKE_OAUTH_AIRTABLE }}
+          STACKDUKE_OAUTH_DROPBOX: ${{ secrets.STACKDUKE_OAUTH_DROPBOX }}
+          STACKDUKE_OAUTH_ZAPIER: ${{ secrets.STACKDUKE_OAUTH_ZAPIER }}
+          STACKDUKE_OAUTH_CONTENTFUL: ${{ secrets.STACKDUKE_OAUTH_CONTENTFUL }}
+          STACKDUKE_OAUTH_GRAFANA: ${{ secrets.STACKDUKE_OAUTH_GRAFANA }}
+          STACKDUKE_OAUTH_CIRCLECI: ${{ secrets.STACKDUKE_OAUTH_CIRCLECI }}
+
+      # Reads what servers send, so it holds no GitHub key. It keeps only whether each answered.
+      - name: Check sign-ins
+        run: node src/cli.ts check-sign-ins --dir="$RUNNER_TEMP/sign-ins"
+
+      - name: Scan
+        id: scan
+        if: ${{ !cancelled() }}
+        run: node src/cli.ts track --data=tracker-data --budget-minutes=55 --sign-ins="$RUNNER_TEMP/sign-ins"
         env:
           STACKDUKE_SCAN_GITHUB_TOKEN: ${{ secrets.STACKDUKE_SCAN_GITHUB_TOKEN }}
           STACKDUKE_SCAN_LINEAR_TOKEN: ${{ secrets.STACKDUKE_SCAN_LINEAR_TOKEN }}
           STACKDUKE_SCAN_STRIPE_TOKEN: ${{ secrets.STACKDUKE_SCAN_STRIPE_TOKEN }}
           STACKDUKE_SCAN_SUPABASE_TOKEN: ${{ secrets.STACKDUKE_SCAN_SUPABASE_TOKEN }}
 
-      # Findings go to Stackduke's maintainer alone, through Stackduke's endpoint. The request is made on every run, empty or not, and
-      # the step prints only fixed lines and never fails, so this public log says nothing about what was found.
+      # Findings go to Stackduke's maintainer alone, through Stackduke's endpoint. The request is made on every
+      # run, empty or not, and the step prints only fixed lines and never fails, so this public log says nothing
+      # about what was found.
       # The notice token is handed to this step only.
       - name: Private notice
+        # Runs whenever the scan did, as the commit step does, whatever happened to the sign-in steps.
+        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
         run: node src/cli.ts notice --before="$RUNNER_TEMP/watched-before" --data=tracker-data
         env:
           STACKDUKE_NOTICE_URL: ${{ secrets.STACKDUKE_NOTICE_URL }}
           STACKDUKE_NOTICE_TOKEN: ${{ secrets.STACKDUKE_NOTICE_TOKEN }}
 
       - name: Commit what changed
+        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
         working-directory: tracker-data
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -76,3 +118,15 @@ jobs:
           if git diff --cached --quiet; then echo "Nothing to commit."; exit 0; fi
           git commit -q -m "Scan $(date -u +%Y-%m-%d)"
           git -c "http.extraheader=Authorization: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" push -q "https://github.com/$REPOSITORY.git" HEAD:data
+
+      # Runs whatever happened above, so a lost sign-in, or sign-in steps that did not finish, reach a person.
+      - name: Tell a person about sign-ins
+        if: ${{ !cancelled() }}
+        run: node src/cli.ts sign-in-issues --dir="$RUNNER_TEMP/sign-ins" --repo="$REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+
+      - name: Forget the sign-ins
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/sign-ins"

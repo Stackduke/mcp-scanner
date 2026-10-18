@@ -163,6 +163,149 @@
         "reason": "Intercom's terms forbid publishing performance information about the service.",
         "forbidden": true
       }
+    },
+    {
+      "id": "airtable",
+      "name": "Airtable",
+      "url": "https://mcp.airtable.com/mcp",
+      "site": "https://airtable.com",
+      "category": "Work apps",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-18",
+      "termsCheckedOn": null,
+      "tracker": {
+        "publish": false,
+        "reason": "Signed in with the tracker's own account, but not published until someone has read its terms in full.",
+        "access": {
+          "kind": "oauth",
+          "signInSecret": "STACKDUKE_OAUTH_AIRTABLE",
+          "issuer": "https://airtable.com/oauth2/v1",
+          "scopes": [
+            "data.records:read",
+            "schema.bases:read",
+            "data.recordComments:read",
+            "workspacesAndBases:read"
+          ],
+          "scopeAdvice": "Sign in as tracker+airtable@stackduke.com, an account that holds nothing. Only the read scopes are asked for."
+        }
+      }
+    },
+    {
+      "id": "dropbox",
+      "name": "Dropbox",
+      "url": "https://mcp.dropbox.com/claude_app_mcp",
+      "site": "https://www.dropbox.com",
+      "category": "Work apps",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-18",
+      "termsCheckedOn": null,
+      "tracker": {
+        "publish": false,
+        "reason": "Signed in with the tracker's own account, but not published until someone has read its terms in full.",
+        "access": {
+          "kind": "oauth",
+          "signInSecret": "STACKDUKE_OAUTH_DROPBOX",
+          "issuer": "https://www.dropbox.com",
+          "scopes": [
+            "account_info.read",
+            "files.metadata.read",
+            "files.content.read",
+            "sharing.read",
+            "file_requests.read"
+          ],
+          "scopeAdvice": "Sign in as tracker+dropbox@stackduke.com, an account that holds nothing. Only the read scopes are asked for."
+        }
+      }
+    },
+    {
+      "id": "zapier",
+      "name": "Zapier",
+      "url": "https://mcp.zapier.com/api/v1/connect",
+      "site": "https://zapier.com",
+      "category": "Work apps",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-18",
+      "termsCheckedOn": null,
+      "tracker": {
+        "publish": false,
+        "reason": "Signed in with the tracker's own account, but not published until someone has read its terms in full.",
+        "access": {
+          "kind": "oauth",
+          "signInSecret": "STACKDUKE_OAUTH_ZAPIER",
+          "issuer": "https://mcp.zapier.com",
+          "scopes": [
+            "openid",
+            "profile",
+            "email"
+          ],
+          "scopeAdvice": "Sign in as tracker+zapier@stackduke.com, an account that holds nothing. Zapier offers no read-only scope; these name the account only. Set up no actions in it."
+        }
+      }
+    },
+    {
+      "id": "contentful",
+      "name": "Contentful",
+      "url": "https://mcp.contentful.com/mcp",
+      "site": "https://www.contentful.com",
+      "category": "Developer tools",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-18",
+      "termsCheckedOn": null,
+      "tracker": {
+        "publish": false,
+        "reason": "Signed in with the tracker's own account, but not published until someone has read its terms in full.",
+        "access": {
+          "kind": "oauth",
+          "signInSecret": "STACKDUKE_OAUTH_CONTENTFUL",
+          "issuer": "https://mcp.contentful.com",
+          "scopes": [],
+          "scopeAdvice": "Sign in as tracker+contentful@stackduke.com, an account that holds nothing. Contentful names no scopes, so it decides; keep the space empty."
+        }
+      }
+    },
+    {
+      "id": "grafana",
+      "name": "Grafana",
+      "url": "https://mcp.grafana.com/mcp",
+      "site": "https://grafana.com",
+      "category": "Data and infrastructure",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-18",
+      "termsCheckedOn": null,
+      "tracker": {
+        "publish": false,
+        "reason": "Signed in with the tracker's own account, but not published until someone has read its terms in full.",
+        "access": {
+          "kind": "oauth",
+          "signInSecret": "STACKDUKE_OAUTH_GRAFANA",
+          "issuer": "https://mcp.grafana.com/mcp",
+          "scopes": [
+            "grafana:read"
+          ],
+          "scopeAdvice": "Sign in as tracker+grafana@stackduke.com, an account that holds nothing. Only grafana:read is asked for, not query or write."
+        }
+      }
+    },
+    {
+      "id": "circleci",
+      "name": "CircleCI",
+      "url": "https://mcp.circleci.com/v1/mcp",
+      "site": "https://circleci.com",
+      "category": "Developer tools",
+      "signIn": "oauth-dcr",
+      "signInCheckedOn": "2026-10-18",
+      "termsCheckedOn": null,
+      "tracker": {
+        "publish": false,
+        "reason": "Signed in with the tracker's own account, but not published until someone has read its terms in full.",
+        "access": {
+          "kind": "oauth",
+          "signInSecret": "STACKDUKE_OAUTH_CIRCLECI",
+          "issuer": "https://app.circleci.com",
+          "scopes": [],
+          "scopeAdvice": "Sign in as tracker+circleci@stackduke.com, an account that holds nothing. CircleCI names no scopes, so it decides; follow no projects with it."
+        }
+      }
     }
   ]
 }

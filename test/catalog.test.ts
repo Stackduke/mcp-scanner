@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { catalog, catalogProblems, readCatalog } from "../src/catalog.ts";
-import { signedInServers, signedInServersOf } from "../src/signed-in.ts";
+import { oauthServers, oauthServersOf, signedInServers, signedInServersOf } from "../src/signed-in.ts";
 
 const server = (changes: Record<string, unknown> = {}) => ({
   id: "demo", name: "Demo", url: "https://mcp.demo.example/mcp", site: "https://demo.example", category: "Developer tools",
@@ -95,4 +95,38 @@ test("text the console will show has no control or invisible characters, and an 
 test("a catalog with problems is not loaded", () => {
   assert.throws(() => readCatalog(JSON.stringify({ version: 1, servers: [server({ url: "http://x" })] })), /not usable/);
   assert.throws(() => readCatalog(JSON.stringify({ servers: [] })), /not usable/);
+});
+
+const oauth = (changes: Record<string, unknown> = {}) => ({ kind: "oauth", signInSecret: "STACKDUKE_OAUTH_DEMO", issuer: "https://auth.demo.example", scopes: ["things:read"], scopeAdvice: "The tracker's own account.", ...changes });
+
+test("a browser sign-in may be kept for a server that is not published yet, and it is still never published", () => {
+  assert.deepEqual(problemsOf(server({ termsCheckedOn: null, tracker: { publish: false, reason: "Terms not read yet.", access: oauth() } })), []);
+  assert.deepEqual(signedInServersOf([server({ termsCheckedOn: null, tracker: { publish: false, reason: "Terms not read yet.", access: oauth() } })] as never), {});
+  assert.deepEqual(oauthServersOf([server({ termsCheckedOn: null, tracker: { publish: false, reason: "Terms not read yet.", access: oauth() } })] as never).map((entry) => [entry.id, entry.publish, entry.signInSecret, entry.tokenVariable]), [["demo", false, "STACKDUKE_OAUTH_DEMO", "STACKDUKE_SCAN_DEMO_TOKEN"]]);
+});
+
+test("a published browser sign-in is watched under its server's token variable, and still needs its terms read", () => {
+  assert.deepEqual(problemsOf(server({ tracker: { publish: true, access: oauth() } })), []);
+  assert.deepEqual(signedInServersOf([server({ tracker: { publish: true, access: oauth() } })] as never), { demo: { url: "https://mcp.demo.example/mcp", tokenVariable: "STACKDUKE_SCAN_DEMO_TOKEN", kind: "oauth" } });
+  assert.deepEqual(problemsOf(server({ termsCheckedOn: null, tracker: { publish: true, access: oauth() } })), ["demo: is published, but nobody has read its terms"]);
+});
+
+test("a browser sign-in is named after its server, pinned to a sign-in server, and asks only for plain scopes", () => {
+  assert.deepEqual(problemsOf(server({ tracker: { publish: true, access: oauth({ signInSecret: "STACKDUKE_OAUTH_OTHER" }) } })), ["demo: its sign-in secret must be STACKDUKE_OAUTH_DEMO"]);
+  assert.deepEqual(problemsOf(server({ tracker: { publish: true, access: oauth({ issuer: "http://auth.demo.example" }) } })), ["demo: issuer must be a plain https address"]);
+  for (const scopes of [["read write"], ["read\"x"], "read", Array.from({ length: 31 }, (_, index) => `s${index}`)]) {
+    assert.deepEqual(problemsOf(server({ tracker: { publish: true, access: oauth({ scopes }) } })), ["demo: scopes must be a list of plain scope names"], JSON.stringify(scopes));
+  }
+  assert.deepEqual(problemsOf(server({ tracker: { publish: true, access: oauth({ scopeAdvice: "" }) } })), ["demo: needs scopeAdvice"]);
+  assert.deepEqual(problemsOf(server({ signIn: "oauth-app", tracker: { publish: true, access: oauth() } })), ["demo: a browser sign-in for the tracker needs signIn oauth-dcr: the client registers itself"]);
+});
+
+test("a vendor whose terms forbid publishing keeps no sign-in, and an unpublished server keeps no key", () => {
+  assert.deepEqual(problemsOf(server({ tracker: { publish: false, reason: "Forbidden.", forbidden: true, access: oauth() } })), ["demo: is marked forbidden, so it keeps no sign-in"]);
+  assert.deepEqual(problemsOf(server({ tracker: { publish: false, reason: "Not yet.", access: server().tracker.access } })), ["demo: a server that is not published can keep only a browser sign-in"]);
+});
+
+test("the six vendors signed in through a browser on 18 October are kept signed in, and none is published", () => {
+  assert.deepEqual(oauthServers.map((entry) => [entry.id, entry.publish]), [["airtable", false], ["dropbox", false], ["zapier", false], ["contentful", false], ["grafana", false], ["circleci", false]]);
+  for (const id of oauthServers.map((entry) => entry.id)) assert.equal(catalog.servers.find((entry) => entry.id === id)?.termsCheckedOn, null);
 });

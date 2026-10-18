@@ -1,0 +1,64 @@
+{
+  "lockfileVersion": 1,
+  "about": "The MCP tools this server is approved to offer. Written by stackduke-mcp-scanner check --update. Review a change to this file as you would a change to code.",
+  "tools": [
+    {
+      "name": "create_note",
+      "description": "Saves a new note.",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "inputSchema": {
+        "properties": {
+          "text": {
+            "description": "What the note says.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "delete_note",
+      "description": "Deletes a note for good.",
+      "annotations": {
+        "destructiveHint": true,
+        "readOnlyHint": false
+      },
+      "inputSchema": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_notes",
+      "description": "Finds notes whose text contains the words given.",
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "inputSchema": {
+        "properties": {
+          "text": {
+            "description": "Words to look for.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      }
+    }
+  ]
+}

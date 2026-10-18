@@ -1,0 +1,129 @@
+name: Stackduke MCP tool check
+description: Compares the tools an MCP server offers with the approved list in stackduke.lock.json, and fails when they differ without approval.
+author: Stackduke
+branding:
+  icon: shield
+  color: blue
+
+# Runs in the caller's job, on the caller's runner. Nothing is sent to Stackduke.
+
+inputs:
+  url:
+    description: Web address of the server, https, or http on localhost for a server started earlier in the job. Give this or command.
+    required: false
+    default: ""
+  command:
+    description: >-
+      Command that starts the server as a local program speaking MCP over standard input and output,
+      such as "node dist/server.js". It is split into words the way a shell splits plain words and
+      quotes, with no variables, globs, pipes or redirection. Give this or url.
+    required: false
+    default: ""
+  lockfile:
+    description: Path of the approved tool list, from the working directory.
+    required: false
+    default: stackduke.lock.json
+  working-directory:
+    description: Directory the check runs in, and the command starts in.
+    required: false
+    default: "."
+  timeout:
+    description: Seconds to wait for each reply from the server. The default is 60 for a program and 15 for a web address.
+    required: false
+    default: ""
+  comment:
+    description: >-
+      "true" to post the summary on the pull request, updated in place on later runs. Needs the
+      workflow to grant "pull-requests: write". The job summary is written either way.
+    required: false
+    default: "false"
+  github-token:
+    description: Token used only to post the comment. The default token is enough.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  result:
+    description: '"passed", "failed" (the tools differ from the lockfile, or a check fired) or "error" (the server could not be listed, or the inputs were wrong).'
+    value: ${{ steps.check.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Look for Node 22.18 or later
+      id: node
+      shell: bash
+      run: |
+        if command -v node > /dev/null && node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 18) ? 0 : 1)'; then
+          echo "found=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Set up Node
+      if: steps.node.outputs.found != 'true'
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: "22"
+
+    # No token is put in this step's environment, and the scanner withholds the workflow command
+    # files and the runner's own tokens from the server's program. That narrows what the program
+    # can reach; it is not a sandbox. See "GitHub Actions" in the README.
+    - name: Check the MCP server's tools against the lockfile
+      id: check
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        STACKDUKE_URL: ${{ inputs.url }}
+        STACKDUKE_COMMAND: ${{ inputs.command }}
+        STACKDUKE_LOCKFILE: ${{ inputs.lockfile }}
+        STACKDUKE_TIMEOUT: ${{ inputs.timeout }}
+        STACKDUKE_SUMMARY: ${{ runner.temp }}/stackduke-mcp-check.md
+      run: |
+        rm -f "$STACKDUKE_SUMMARY"
+        case "$STACKDUKE_URL" in ""|https://*|http://*) ;; *) echo "url must start with https:// or http://."; echo "result=error" >> "$GITHUB_OUTPUT"; echo "code=2" >> "$GITHUB_OUTPUT"; exit 0 ;; esac
+        args=(check "--lockfile=$STACKDUKE_LOCKFILE" "--summary=$STACKDUKE_SUMMARY")
+        if [ -n "$STACKDUKE_TIMEOUT" ]; then args+=("--timeout=$STACKDUKE_TIMEOUT"); fi
+        if [ -n "$STACKDUKE_COMMAND" ]; then args+=("--command=$STACKDUKE_COMMAND"); fi
+        if [ -n "$STACKDUKE_URL" ]; then args+=("$STACKDUKE_URL"); fi
+        set +e
+        node "$GITHUB_ACTION_PATH/src/cli.ts" "${args[@]}"
+        code=$?
+        set -e
+        case "$code" in 0) result=passed ;; 1) result=failed ;; *) result=error ;; esac
+        echo "result=$result" >> "$GITHUB_OUTPUT"
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+        if [ -f "$STACKDUKE_SUMMARY" ]; then cat "$STACKDUKE_SUMMARY" >> "$GITHUB_STEP_SUMMARY"; fi
+
+    # A failed comment, such as on a pull request from a fork where the token can only read, does
+    # not hide the check's result: the last step still fails the job when the check failed.
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && github.event.pull_request.number
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PULL_REQUEST: ${{ github.event.pull_request.number }}
+        STACKDUKE_SUMMARY: ${{ runner.temp }}/stackduke-mcp-check.md
+      run: |
+        if [ ! -f "$STACKDUKE_SUMMARY" ]; then echo "No summary was written, so there is nothing to post."; exit 0; fi
+        comments="repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST/comments"
+        # The summary's first line is a marker naming the lockfile, so each check keeps its own comment.
+        MARKER=$(head -n 1 "$STACKDUKE_SUMMARY")
+        # Who posts: the account behind a personal token, or the Actions bot for the job's own token.
+        POSTER=$(gh api user --jq .login 2> /dev/null || echo "github-actions[bot]")
+        export MARKER POSTER
+        existing=$(gh api "$comments" --paginate --jq '.[] | select(.user.login == env.POSTER and (.body | startswith(env.MARKER))) | .id' | tail -n 1)
+        if [ -n "$existing" ] && gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F "body=@$STACKDUKE_SUMMARY" > /dev/null; then
+          echo "Updated the check's comment on the pull request."
+        else
+          gh api --method POST "$comments" -F "body=@$STACKDUKE_SUMMARY" > /dev/null
+          echo "Posted the check's summary on the pull request."
+        fi
+
+    - name: Fail the job when the check did not pass
+      if: steps.check.outputs.code != '0'
+      shell: bash
+      env:
+        CODE: ${{ steps.check.outputs.code }}
+      run: exit "${CODE:-1}"
