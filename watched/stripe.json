@@ -1,0 +1,603 @@
+{
+  "source": "https://mcp.stripe.com/",
+  "takenAt": "2026-10-18T06:25:15.935Z",
+  "server": {
+    "name": "stripe-mcp",
+    "version": "1.0.0"
+  },
+  "tools": [
+    {
+      "name": "get_stripe_account_info",
+      "description": "This will get the account info for the logged in Stripe account.\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "dashboard_api_keys_link": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "account_id",
+          "display_name",
+          "dashboard_api_keys_link"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true,
+        "title": "Get Stripe account information"
+      },
+      "hash": "99f36c0a08dc78a5caa2524a61da834620f71663423ed6d1c86206e5ea0e51e5"
+    },
+    {
+      "name": "search_stripe_documentation",
+      "description": "Search the Stripe documentation for the given question and language.\n\nIt takes two arguments:\n- question (str): The user question to search an answer for in the Stripe documentation.\n- language (str, optional): The programming language to search for in the documentation.\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "The user question about integrating with Stripe will be used to search the documentation.",
+            "maxLength": 1000
+          },
+          "language": {
+            "type": "string",
+            "description": "The programming language to search for in the documentation.",
+            "enum": [
+              "dotnet",
+              "go",
+              "java",
+              "node",
+              "php",
+              "ruby",
+              "python",
+              "curl"
+            ]
+          },
+          "search_only_api_ref": {
+            "type": "boolean",
+            "description": "When set to true, search only in the Stripe API reference documentation instead of the full documentation set. Use true when users need specific API implementation details, code examples, or parameter references. Use false (default) for conceptual explanations, best practices, integration guides, or troubleshooting help."
+          }
+        },
+        "required": [
+          "question"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "subtitle": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "content"
+              ]
+            }
+          }
+        },
+        "required": [
+          "results"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true,
+        "title": "Search Stripe documentation"
+      },
+      "hash": "1bf4f58dd9e21a56d16869d120d32ffc21a5b0a9bf67754986adedbd5071e7a1"
+    },
+    {
+      "name": "send_stripe_feedback",
+      "description": "Share feedback about Stripe's products.\n\nSubmit when the user gives product feedback or you observe something concrete that worked or failed. Do not report model behavior, the user's local environment, an unclear prompt, or a recovered tool error.\n\nUse actor \"human\" for the user's own words; \"agent\" for your observations. Not a support channel — no ticket or reply.\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sentiment": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative",
+              "neutral"
+            ],
+            "description": "positive, negative, or neutral"
+          },
+          "message": {
+            "type": "string",
+            "description": "What broke or worked, concrete and specific. At least 5 words.",
+            "maxLength": 2000,
+            "minLength": 20
+          },
+          "context": {
+            "type": "string",
+            "description": "What the user was trying to accomplish. Do not include sensitive business information.",
+            "maxLength": 2000,
+            "minLength": 20
+          },
+          "feature_area": {
+            "type": "string",
+            "description": "Product area this feedback is about.",
+            "enum": [
+              "payments",
+              "connect",
+              "subscriptions",
+              "billing",
+              "payouts",
+              "reporting",
+              "invoicing",
+              "invoices",
+              "checkout",
+              "tax",
+              "radar",
+              "issuing",
+              "terminal",
+              "treasury",
+              "capital",
+              "docs",
+              "webhooks",
+              "cli",
+              "dashboard",
+              "crypto",
+              "stablecoins",
+              "managed-payments",
+              "mcp",
+              "identity",
+              "skills",
+              "apps",
+              "other"
+            ]
+          },
+          "actor": {
+            "type": "string",
+            "description": "Who decided to submit: human or agent. Defaults to agent.",
+            "enum": [
+              "human",
+              "agent"
+            ]
+          }
+        },
+        "required": [
+          "sentiment",
+          "message",
+          "context"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "success",
+          "_id"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+        "title": "Send Stripe feedback"
+      },
+      "hash": "521dbf412cea8129b23b91744efc49262c9656a7fe27a72067ee116285d7926b"
+    },
+    {
+      "name": "stripe_analytics",
+      "description": "This tool is for analyzing Stripe Sigma and Metrics data (e.g. about revenue, charges, products, invoices, subscriptions, disputes, transactions, tax tables, payments etc) and running SQL-based reporting queries. Use it for historical analytics, aggregations, and business intelligence questions (e.g. MRR, churn, cohorts, revenue trends). Prefer this tool over making multiple Stripe API calls that would need to be joined or aggregated client-side.\n## SQL Query Runs\n\n**execute_query_run**: Runs a SQL query (Trino) against reporting tables. Requires `sql`. Returns a QueryRun object; use retrieve_query_run to poll.\n**retrieve_query_run**: Retrieves a QueryRun's status and results. Requires `query_run_id`.\n**search_query_tables**: Searches available reporting tables by keyword. Requires `search_string`.\n**retrieve_query_table**: Gets full schema for a specific table. Requires `table_name`, which is the `name` parameter in each table.\n**execute_query_template**: Starts a pre-built query template for subscription/billing metrics (Trino, async). Requires `metric`. Optional: `dimensions`, `grains`, `metric_filters`. Returns a `query_run_id`; use retrieve_query_template to poll for results.\n**retrieve_query_template**: Retrieves the status/results of a template run started by execute_query_template. Requires `query_run_id`.\n\n### workflow (custom SQL):\n  1. search_query_tables: find relevant tables\n  2. retrieve_query_table: get column names and types\n  3. execute_query_run: run SQL\n  4. retrieve_query_run: poll status, get download link\n\n### workflow (query templates):\n  1. execute_query_template: start a template-based metric query (returns a query_run_id)\n  2. retrieve_query_template: poll with query_run_id (exponential backoff) until status is 'succeeded', then get download link\n\n## Return types\n All monetary values returned by this tool are expressed in the smallest currency unit. For example:\n- 1000 is 10 USD (most two-decimal currencies like GBP, EUR, AUD, CAD, divide by 100 to get the major unit value)\n- 10 is 10 JPY (zero-decimal currency)\n- 10000 is 10 BHD (three-decimal currency)\n- 1000000 is 1 USDC\nIf you don't know how many decimals are in a currency's minor units, use the search_stripe_documentation tool to look it up in https://docs.stripe.com/currencies#minor-units\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "description": "The intent of the tool call.",
+            "type": "string",
+            "enum": [
+              "execute_query_run",
+              "retrieve_query_run",
+              "search_query_tables",
+              "retrieve_query_table",
+              "execute_query_template",
+              "retrieve_query_template"
+            ]
+          },
+          "params": {
+            "type": "object",
+            "description": "The parameters for the tool call. Required parameters depend on the intent.",
+            "properties": {
+              "sql": {
+                "description": "Used with execute_query_run. The SQL query to execute (Trino 414).",
+                "type": "string"
+              },
+              "result_options": {
+                "description": "Used with execute_query_run. Optional settings for the QueryRun results.",
+                "type": "object",
+                "properties": {
+                  "compress_file": {
+                    "type": "boolean",
+                    "description": "Whether to compress the generated results file."
+                  }
+                }
+              },
+              "query_run_id": {
+                "description": "Used with retrieve_query_run or retrieve_query_template. The QueryRun ID to retrieve.",
+                "type": "string",
+                "pattern": "^(qryrun|qrun)_[a-zA-Z0-9_]+$"
+              },
+              "search_string": {
+                "description": "Used with search_query_tables. Keyword to search table names and descriptions.",
+                "type": "string"
+              },
+              "table_name": {
+                "description": "Used with retrieve_query_table. The table name.",
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9_]+$"
+              },
+              "metric": {
+                "description": "Used with execute_query_template. The canonical metric name.",
+                "type": "string",
+                "enum": [
+                  "gross_volume",
+                  "subscriber_churn_rate",
+                  "gross_mrr_churn_rate",
+                  "churned_subscribers",
+                  "net_mrr_churn_rate",
+                  "churned_revenue",
+                  "new_subscribers",
+                  "active_subscribers",
+                  "active_subscriber_growth"
+                ]
+              },
+              "dimensions": {
+                "description": "Used with execute_query_template. Dimensions to group by: 'product', 'price'.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "product",
+                    "price"
+                  ]
+                }
+              },
+              "grains": {
+                "description": "Used with execute_query_template. Time grain: 'day', 'week', or 'month'. Default is 'month'.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "day",
+                    "week",
+                    "month"
+                  ]
+                }
+              },
+              "metric_filters": {
+                "description": "Used with execute_query_template. Filters to apply: 'top5' or 'all'. Default is 'all'.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "top5"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "intent"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Stripe Analytics"
+      },
+      "hash": "179f3ed9a4f0367422587a288b08866a8462fc7b9457bef62727f6ddabfd7b38"
+    },
+    {
+      "name": "stripe_api_details",
+      "description": "Get detailed parameter information for a specific Stripe API operation.\nProvide the stripe_api_operation_id from stripe_api_search results to see all path, query, and body parameters with their types, descriptions, and whether they are required.\n\nUse before calling the relevant Stripe API execution tool for operations with nested object fields, enum values, or optional query parameters. You can skip it when the stripe_api_search result already lists every parameter you need, or when you've already fetched this operation's details.\n\nThe response may include an \"LLM Context\" section with usage guidance specific to the operation — follow any instructions there.\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "stripe_api_operation_id": {
+            "description": "The operation ID to get details for (e.g. 'PostCustomers', 'GetPaymentIntents')",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stripe_api_operation_id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "openapi_spec_version": {
+            "description": "The OpenAPI Specification Version that the MCP Server used to look for the operation",
+            "type": "string"
+          },
+          "llm_context": {
+            "description": "Supplemental usage guidance for this operation, if available",
+            "type": "string"
+          }
+        },
+        "required": [
+          "openapi_spec_version"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Get Stripe API operation details"
+      },
+      "hash": "df6cb166048c4c454d3e0e5906e029ba4ab7a0de2f180e0817676625ea45b300"
+    },
+    {
+      "name": "stripe_api_read",
+      "description": "Read data from any Stripe API GET operation:\n1. Use stripe_api_search to find the operation ID.\n2. Use stripe_api_details to see its parameters, unless the search result already lists everything you need or you've already fetched this operation's details.\n3. Call this tool with the stripe_api_operation_id and a parameters object containing path and query parameters. Path parameters use the name inside the curly braces of the path: for GET /v1/customers/{id}, pass {\"id\": \"<customer ID>\"}. For mutations (POST/PATCH/PUT/DELETE), use stripe_api_write instead.\nMonetary values in responses are in the smallest currency unit (e.g. 1000 = $10.00 USD for most currencies).\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "stripe_api_operation_id": {
+            "description": "The operation ID to execute",
+            "type": "string",
+            "examples": [
+              "PostCustomers",
+              "GetPaymentIntents"
+            ]
+          },
+          "parameters": {
+            "description": "All path, query, and request-body values for the API call. Include path parameters here, named as in the path's curly braces (e.g. 'id' for /v1/customers/{id}). Array fields (e.g. line_items) must be passed as a JSON array value, not as a plain string.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "stripe_api_operation_id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true,
+        "title": "Read Stripe API data"
+      },
+      "hash": "7feecf0d4381239d451b6d1796a7194c52bf3831546743b721c96ffc2341adbb"
+    },
+    {
+      "name": "stripe_api_search",
+      "description": "Search for Stripe API operations by providing an intent and a resource to operate on.\n\nFor the resource, use a specific, descriptive phrase (e.g. \"issuing card transactions\", \"payout methods\", \"outbound payments\") rather than a single generic noun — Stripe has many similar resources, and the extra qualifiers help disambiguate between them rather than causing a miss. Only fall back to the bare core noun (e.g. \"transactions\") if a specific multi-word search returns no results.\n\nReturns matching operations with their HTTP method, path, summary, path parameters, required query parameters, and top-level body parameter names with types. Does not include optional query parameters, parameter descriptions, enum values, or nested object fields — use stripe_api_details to get those before calling the relevant Stripe API execution tool.\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string",
+            "description": "The intent of the operation",
+            "examples": [
+              "create",
+              "list",
+              "refund"
+            ]
+          },
+          "resource": {
+            "type": "string",
+            "description": "Target resource the operation is looking to manipulate",
+            "examples": [
+              "customer",
+              "payout methods",
+              "issuing card transactions"
+            ]
+          },
+          "limit": {
+            "description": "Maximum number of results to return",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 5
+          }
+        },
+        "required": [
+          "intent",
+          "resource"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "openapi_spec_version": {
+            "description": "The OpenAPI Specification Version that the MCP Server used to look for the operation",
+            "type": "string"
+          },
+          "api_key_deprecation_warning": {
+            "description": "Present when this session authenticates with an API key that Stripe MCP will stop accepting",
+            "type": "string"
+          },
+          "data": {
+            "description": "List of operations matching the criteria",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "path_params": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Path parameter names to pass inside `parameters`"
+                },
+                "llm_context": {
+                  "type": "string",
+                  "description": "Supplemental LLM guidance for this operation, if provided"
+                }
+              },
+              "required": [
+                "id",
+                "method",
+                "path"
+              ]
+            }
+          }
+        },
+        "required": [
+          "openapi_spec_version",
+          "data"
+        ]
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Search Stripe API operations"
+      },
+      "hash": "36bdc8bc81e4523d3dac92dfac8674624180e27fbfb1d4deaf3b8b0b6b286bb3"
+    },
+    {
+      "name": "stripe_api_write",
+      "description": "Write data via any Stripe API POST/PATCH/PUT/DELETE operation:\n1. Use stripe_api_search to find the operation ID.\n2. Use stripe_api_details to see its parameters, unless the search result already lists everything you need or you've already fetched this operation's details. Always use it for operations with nested object fields like address, metadata, or restrictions.\n3. Call this tool with the stripe_api_operation_id and a parameters object containing path, query, and body parameters together. Path parameters use the name inside the curly braces of the path: for POST /v1/payment_links/{id}, pass {\"id\": \"<payment link ID>\", \"active\": false}. For read-only lookups (GET), use stripe_api_read instead.\nAll monetary amounts must be in the smallest currency unit (e.g. 1000 = $10.00 USD for most currencies).\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "stripe_api_operation_id": {
+            "description": "The operation ID to execute",
+            "type": "string",
+            "examples": [
+              "PostCustomers",
+              "GetPaymentIntents"
+            ]
+          },
+          "parameters": {
+            "description": "All path, query, and request-body values for the API call. Include path parameters here, named as in the path's curly braces (e.g. 'id' for /v1/customers/{id}). Array fields (e.g. line_items) must be passed as a JSON array value, not as a plain string.",
+            "type": "object"
+          },
+          "human_confirmation": {
+            "type": "object",
+            "description": "This tool might require human confirmation. To run it, first invoke it with the desired parameters, ignoring the `approval_token` parameter.\nIf it requires human confirmation, the response will include an approval request ID and a URL to an approval page for the human to approve the tool call.\nYou, as the LLM agent, should:\n\n1. Present this URL to the human as a clickable markdown link. Tell them that they have to approve this tool call at that URL, and that they should tell you when they have approved the operation.\n2. The human will approve that call.\n3. After the human tells you they have approved the operation, you must call the tool again with the `approval_token` parameter and the exact same parameters. The operation will then go through.\n",
+            "properties": {
+              "approval_token": {
+                "type": "string",
+                "description": "The ID of the approval token for the request. This is required on only the post-human-confirmation invocation. An example ID is `approval_123`."
+              }
+            }
+          }
+        },
+        "required": [
+          "stripe_api_operation_id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false,
+        "title": "Write Stripe API data"
+      },
+      "hash": "3a1226e1bbec3481a933b084ec46aa2fd3b2847da31a24ac9aed16c7eb8e0e64"
+    },
+    {
+      "name": "stripe_implementation_planner",
+      "description": "Stripe integration planner. Use this tool to help users accept payments, sell products online, set up billing, set up a marketplace or platform, or build any Stripe integration. Call this BEFORE writing code when the user wants to charge customers, add a checkout flow, handle subscriptions, create invoices, or monetize their app.\n\nWHEN TO USE:\n  Call this tool when the user wants to:\n  - Accept payments, take payments, or charge customers (credit cards, bank transfers, wallets)\n  - Sell online, build e-commerce, add a shopping cart, or create a checkout page\n  - Set up subscriptions, recurring billing, metered billing, or usage-based pricing\n  - Send invoices or collect one-time payments\n  - Add Stripe to their app, integrate Stripe, or build a payment flow\n  - Understand which Stripe products to use (Checkout, Elements, Payment Intents, Connect, Billing)\n  - Plan an integration architecture before writing code\n  - Monetize an app, add billing, or start charging users\n\nFIRST CALL GUIDANCE:\n  Ask the user about their business and payment requirements before choosing a use case:\n  - What do they sell? (physical goods, digital products, SaaS, services, marketplace)\n  - Payment model? (one-time, subscriptions, invoices, usage-based)\n  - Platform? (web, mobile app, in-person, payment links)\n  - Complexity? (simple payment link vs. custom integration in existing tech stack)\n  Then pass their full description as the message parameter.\n\nReturns JSON with use cases, decision trees, documentation links, and a guide_id for follow-up calls.\n\nRULES:\n  - Do NOT pass a guide_id unless you received it from this tool in this conversation.\n  - Do NOT retry with different guide_ids if one fails — omit guide_id to start fresh.\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "guide_id": {
+            "description": "ONLY pass a guide_id that was returned by a previous call to this tool in this conversation. Never fabricate, guess, or reuse guide_ids from other sessions. If you do not have a guide_id from a prior response, omit this field entirely. Invalid guide_ids will be rejected.",
+            "type": "string"
+          },
+          "message": {
+            "description": "For new guides: describe the use case or business requirements.",
+            "type": "string"
+          },
+          "accept": {
+            "description": "Set to true when returning the completed decision trees with your chosen options. Include selected_leaf_nodes with the IDs of all terminal leaves reached.",
+            "type": "boolean"
+          },
+          "selected_leaf_nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The IDs of all terminal leaves reached while traversing the guide's decision tree."
+          }
+        },
+        "required": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false,
+        "title": "Stripe implementation planner"
+      },
+      "hash": "7db7fe1a37ca1d0a56167fda3b525593336b66b89817d0cb07e516d678c020e3"
+    }
+  ]
+}
