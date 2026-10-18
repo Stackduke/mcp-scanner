@@ -38,14 +38,39 @@ export interface TrackerApiKey {
   keyAdvice: string;
 }
 
-export type TrackerEntry =
-  | { publish: true; access: TrackerApiKey }
+/**
+ * How the tracker reaches a server that takes only a browser sign-in. A person signs in once with
+ * `connect-oauth`; the registered client and its tokens are kept as one repository secret, which
+ * the daily run renews and writes back.
+ */
+export interface TrackerOAuth {
+  kind: "oauth";
+  /** The repository secret that holds the sign-in. Named after the server, like a token variable. */
+  signInSecret: string;
   /**
-   * Not watched with an account. The reason says why. `forbidden` means the vendor's terms forbid
-   * publishing about the service, so no address on its sites is checked or kept, wherever the
-   * registry lists one. Without it, the registry's addresses are treated as any other.
+   * The sign-in server the MCP server named when the tracker's account signed in. A sign-in to any
+   * other is refused, and the daily run renews only at the token address saved with the sign-in.
    */
-  | { publish: false; reason: string; forbidden?: boolean };
+  issuer: string;
+  /** The scopes to ask for: read-only ones where the server offers them. Empty: none named, the server decides. */
+  scopes: string[];
+  /** What the person signing in should know: which account to use, and what the scopes allow. */
+  scopeAdvice: string;
+}
+
+export type TrackerAccess = TrackerApiKey | TrackerOAuth;
+
+export type TrackerEntry =
+  | { publish: true; access: TrackerAccess }
+  /**
+   * Not published. The reason says why. `forbidden` means the vendor's terms forbid publishing
+   * about the service, so no address on its sites is checked or kept, wherever the registry lists
+   * one. Without it, the registry's addresses are treated as any other.
+   *
+   * A browser sign-in may be kept for a server that is not published yet, so it is ready the day
+   * its terms are read: the daily run renews it and checks it works, and keeps nothing it lists.
+   */
+  | { publish: false; reason: string; forbidden?: boolean; access?: TrackerOAuth };
 
 export interface CatalogServer {
   /** Short and stable: used in file names, addresses and the tracker's data. */
@@ -104,14 +129,19 @@ export function catalogProblems(value: unknown): string[] {
       if (!isText(tracker.reason, 300)) problem("a server the tracker does not publish needs a reason");
       if (tracker.forbidden !== undefined && typeof tracker.forbidden !== "boolean") problem("forbidden must be true or false");
       if (tracker.forbidden === true && server.termsCheckedOn === null) problem("is marked forbidden, but nobody has read its terms");
-      return;
+      if (tracker.access === undefined) return;
+      // A vendor whose terms forbid publishing is not signed in to at all.
+      if (tracker.forbidden === true) return problem("is marked forbidden, so it keeps no sign-in");
+      if (!isRecord(tracker.access) || tracker.access.kind !== "oauth") return problem("a server that is not published can keep only a browser sign-in");
+      return oauthProblems(server, tracker.access, problem, variables);
     }
     // Publishing is the one thing a vendor's terms can forbid, so nobody publishes before reading them.
     if (server.termsCheckedOn === null) problem("is published, but nobody has read its terms");
     const access = tracker.access;
-    if (!isRecord(access) || access.kind !== "api-key") return problem("tracker access must be an api-key");
+    if (isRecord(access) && access.kind === "oauth") return oauthProblems(server, access, problem, variables);
+    if (!isRecord(access) || access.kind !== "api-key") return problem("tracker access must be an api-key or oauth");
     // The variable is named after the server, so an edit cannot hand one vendor's token to another.
-    const expected = `STACKDUKE_SCAN_${String(server.id).toUpperCase().replaceAll("-", "_")}_TOKEN`;
+    const expected = tokenVariableOf(String(server.id));
     if (access.tokenVariable !== expected) problem(`its token variable must be ${expected}`);
     if (access.formerVariable !== undefined && access.formerVariable !== `AETHIS_SCAN_${String(server.id).toUpperCase().replaceAll("-", "_")}_TOKEN`) problem("a former token variable can only be the AETHIS_SCAN_ name for the same server");
     for (const name of [access.tokenVariable, access.formerVariable]) {
@@ -122,6 +152,24 @@ export function catalogProblems(value: unknown): string[] {
     if (!isText(access.keyAdvice, 300)) problem("needs keyAdvice");
   });
   return problems;
+}
+
+/** The variable a server's token is read from. For a browser sign-in, the run's renewed access token is handed over under it. */
+export const tokenVariableOf = (id: string) => `STACKDUKE_SCAN_${id.toUpperCase().replaceAll("-", "_")}_TOKEN`;
+/** The repository secret that holds a server's browser sign-in. */
+export const signInSecretOf = (id: string) => `STACKDUKE_OAUTH_${id.toUpperCase().replaceAll("-", "_")}`;
+
+/** An OAuth scope: no spaces, quotes or anything else that could change what is asked for. */
+const isScope = (value: unknown) => typeof value === "string" && /^[\w:.\-/]{1,100}$/.test(value);
+
+function oauthProblems(server: Record<string, unknown>, access: Record<string, unknown>, problem: (text: string) => void, variables: Set<string>): void {
+  if (server.signIn !== "oauth-dcr") problem("a browser sign-in for the tracker needs signIn oauth-dcr: the client registers itself");
+  const expected = signInSecretOf(String(server.id));
+  if (access.signInSecret !== expected) problem(`its sign-in secret must be ${expected}`);
+  else if (variables.has(expected)) problem(`${expected} is used twice`); else variables.add(expected);
+  if (!isPlainHttps(access.issuer)) problem("issuer must be a plain https address");
+  if (!Array.isArray(access.scopes) || access.scopes.length > 30 || !access.scopes.every(isScope)) problem("scopes must be a list of plain scope names");
+  if (!isText(access.scopeAdvice, 300)) problem("needs scopeAdvice");
 }
 
 export function readCatalog(text: string): Catalog {

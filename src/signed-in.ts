@@ -1,6 +1,6 @@
 import { listTools } from "./client.ts";
 import type { ListToolsResult } from "./client.ts";
-import { catalog } from "./catalog.ts";
+import { catalog, tokenVariableOf } from "./catalog.ts";
 import type { CatalogServer } from "./catalog.ts";
 
 /**
@@ -9,28 +9,58 @@ import type { CatalogServer } from "./catalog.ts";
  * A token is only ever paired with the address written here. No command-line argument can point
  * a token at another host, and the client refuses redirects, so a server cannot pass it on either.
  */
-export interface SignedInServer {
+export type SignedInServer = {
   url: string;
-  /** The environment variable the token is read from. Tokens are never taken from an argument. */
+  /**
+   * The environment variable the token is read from. Tokens are never taken from an argument.
+   * For a browser sign-in it holds the access token the run has just renewed, handed over in a file.
+   */
   tokenVariable: string;
   /** A name the variable had before, still read when the current one is unset. */
   formerVariable?: string;
+} & (
   /** Where the account owner makes the token, and what to make: the least the server needs to list its tools. */
-  keyPage: string;
-  keyAdvice: string;
+  | { kind: "api-key"; keyPage: string; keyAdvice: string }
+  | { kind: "oauth" }
+);
+
+/** A server the tracker keeps a browser sign-in for, published or not. */
+export interface OAuthServer {
+  id: string;
+  name: string;
+  url: string;
+  publish: boolean;
+  tokenVariable: string;
+  signInSecret: string;
+  issuer: string;
+  scopes: readonly string[];
+  scopeAdvice: string;
 }
+
+export function oauthServersOf(servers: readonly CatalogServer[]): readonly OAuthServer[] {
+  return Object.freeze(servers.flatMap((server) => {
+    const access = server.tracker.access;
+    if (access?.kind !== "oauth") return [];
+    const { signInSecret, issuer, scopes, scopeAdvice } = access;
+    return [Object.freeze({ id: server.id, name: server.name, url: server.url, publish: server.tracker.publish, tokenVariable: tokenVariableOf(server.id), signInSecret, issuer, scopes: Object.freeze([...scopes]), scopeAdvice })];
+  }));
+}
+
+export const oauthServers: readonly OAuthServer[] = oauthServersOf(catalog.servers);
 
 /**
  * The servers in the catalog that the tracker watches with a key and publishes. Each token should
  * belong to an account made for the tracker that holds nothing of value: the server shows the tools
  * that token may see, and the token sits in the tracker's secrets. A server whose terms forbid
- * publishing, or that takes only a browser sign-in, is in the catalog but not here.
+ * publishing, or that is not published yet, is in the catalog but not here.
  */
 export function signedInServersOf(servers: readonly CatalogServer[]): Readonly<Record<string, SignedInServer>> {
-  const entries = servers.flatMap((server) => {
+  const entries = servers.flatMap((server): Array<readonly [string, SignedInServer]> => {
     if (!server.tracker.publish) return [];
-    const { tokenVariable, formerVariable, keyPage, keyAdvice } = server.tracker.access;
-    return [[server.id, Object.freeze({ url: server.url, tokenVariable, ...(formerVariable ? { formerVariable } : {}), keyPage, keyAdvice })] as const];
+    const access = server.tracker.access;
+    if (access.kind === "oauth") return [[server.id, Object.freeze({ url: server.url, tokenVariable: tokenVariableOf(server.id), kind: "oauth" as const })]];
+    const { tokenVariable, formerVariable, keyPage, keyAdvice } = access;
+    return [[server.id, Object.freeze({ url: server.url, tokenVariable, ...(formerVariable ? { formerVariable } : {}), kind: "api-key" as const, keyPage, keyAdvice })]];
   });
   return Object.freeze(Object.fromEntries(entries));
 }
