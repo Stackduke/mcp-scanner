@@ -1,0 +1,1 @@
+{"source":"https://noqt.no-qt.chatgpt.site/api/yumi/probe-mcp","takenAt":"2026-10-18T13:39:26.191Z","server":{"name":"yumi-probe-planner","version":"1.0.0"},"tools":[{"name":"plan_diagnostic_checks","kind":"write","fields":{"description":"76d319e6a0b9e15e","inputSchema":"169f0210b6c37ecf","annotations":"ae78503371695cf7"}}]}
