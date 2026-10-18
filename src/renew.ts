@@ -71,7 +71,7 @@ export async function renewSignIns(deps: RenewDeps): Promise<{ reports: RenewRep
         continue;
       }
       access[vendor] = stored.tokens.accessToken;
-      reports.push({ vendor, status: "kept", ...(refreshToken ? { detail: off } : {}) });
+      reports.push({ vendor, status: "kept", ...(refreshToken ? { detail: off, ...(!save ? { fix: "set-up-app" as const } : {}) } : {}) });
       continue;
     }
 
@@ -151,6 +151,15 @@ export function verdictsOf(renewed: RenewReport[], checked: CheckReport[], serve
 
 export const issueTitle = (name: string) => `Sign-in needs renewing: ${name}`;
 export const unfinishedTitle = "Sign-in renewal did not finish";
+export const renewalOffTitle = "Sign-in renewal is off: the run has no key to save renewed sign-ins";
+
+const renewalOffBody = [
+  "The run had no working key from the GitHub App that saves renewed sign-ins, so every browser sign-in was used as it was stored and none was renewed. Sign-ins with short-lived access tokens (Airtable's last an hour) will be lost at the next run unless the key works again.",
+  "",
+  "Look at the step \"Key for saving renewed sign-ins\" in the run's log. The usual causes: the private key in STACKDUKE_SIGN_IN_APP_KEY is incomplete (it must include the BEGIN and END lines), was deleted from the app, or the app is no longer installed on this repository. README, \"Browser sign-ins\", says how the app is set up.",
+  "",
+  "This issue closes itself after a run in which renewing works again.",
+].join("\n");
 
 export function issueBody(verdict: Verdict, server: OAuthServer): string {
   return [
@@ -193,6 +202,19 @@ export async function signInIssues(renewed: RenewReport[] | null, checked: Check
   if (!finished && !unfinished) delivered = (await deps.open(unfinishedTitle, "The daily run's sign-in steps did not finish, so no browser sign-in was renewed or checked. The run's log says which step stopped. This issue closes itself after a run in which they finish.")) && delivered;
   if (finished && unfinished) delivered = (await deps.close(unfinished.number, `The sign-in steps finished on ${today}.`)) && delivered;
   if (!finished) return delivered;
+
+  // One issue for the key, however many sign-ins it holds back: the fix is in one place.
+  const off = renewed.some((report) => report.fix === "set-up-app");
+  const offIssue = openWith(renewalOffTitle);
+  if (off && !offIssue) {
+    const ok = await deps.open(renewalOffTitle, renewalOffBody);
+    print(ok ? "Renewing is off: an issue is open." : "Renewing is off, and the issue could not be opened.");
+    delivered = ok && delivered;
+  } else if (!off && offIssue) {
+    const ok = await deps.close(offIssue.number, `Renewing worked again on ${today}.`);
+    print(ok ? "Renewing works again; its issue is closed." : "Renewing works again, and its issue could not be closed.");
+    delivered = ok && delivered;
+  }
 
   for (const verdict of verdictsOf(renewed, checked, servers)) {
     const server = servers.find((candidate) => candidate.id === verdict.vendor) as OAuthServer;

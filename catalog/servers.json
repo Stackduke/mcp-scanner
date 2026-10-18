@@ -55,7 +55,7 @@
           "kind": "api-key",
           "tokenVariable": "STACKDUKE_SCAN_STRIPE_TOKEN",
           "keyPage": "https://dashboard.stripe.com/test/apikeys",
-          "keyAdvice": "A restricted key in a sandbox (test mode), made for agent access, with every resource on Read or None. It starts rk_test_."
+          "keyAdvice": "A restricted key in a sandbox (test mode) that holds nothing, made for agent access, with every resource on Write, so the server lists every tool it offers. It starts rk_test_."
         }
       }
     },

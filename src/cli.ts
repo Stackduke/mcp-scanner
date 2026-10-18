@@ -426,6 +426,8 @@ async function main(argv: string[]): Promise<number> {
       await writePrivate(dir, files.access, JSON.stringify(access));
       await writePrivate(dir, files.renewed, JSON.stringify(reports));
       for (const report of reports) console.log(`${report.vendor}: ${report.status}${report.detail ? `, ${report.detail}` : ""}.`);
+      // Shown on the run's summary page, so a broken key is seen without opening the log.
+      if (inActions && reports.some((report) => report.fix === "set-up-app")) console.log("::error title=Sign-in renewal is off::No key from the GitHub App, so no browser sign-in was renewed. See the step Key for saving renewed sign-ins.");
       return 0;
     }
 
