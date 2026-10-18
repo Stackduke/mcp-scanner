@@ -1,0 +1,1 @@
+{"source":"https://mcp.50nos.pt/feriados","takenAt":"2026-10-18T06:17:52.303Z","server":{"name":"feriados","version":"1.1.1"},"tools":[{"name":"list_holidays","kind":"read","fields":{"description":"7ab123991af3b5f3","inputSchema":"7866bc0c0c132e2f"}},{"name":"next_holiday","kind":"unclear","fields":{"description":"df64a69021606d0b","inputSchema":"addadd40c0673533"}}]}
