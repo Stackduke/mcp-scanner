@@ -4,7 +4,7 @@ import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { checkSignIns, issueTitle, renewSignIns, signInIssues, unfinishedTitle, verdictsOf } from "../src/renew.ts";
+import { checkSignIns, issueTitle, renewalOffTitle, renewSignIns, signInIssues, unfinishedTitle, verdictsOf } from "../src/renew.ts";
 import type { CheckReport, IssueDeps, RenewReport } from "../src/renew.ts";
 import { handOver, isAccess, maskCommand, readStep, saveSecret, writePrivate } from "../src/sign-in-io.ts";
 import type { StoredSignIn } from "../src/sign-in-store.ts";
@@ -93,7 +93,7 @@ test("a renewal that cannot be saved is a sign-in lost, though today's token sti
 test("without a key to save with, nothing is renewed: the stored token is used while it lasts", async () => {
   const { fetchImpl, seen } = vendor();
   const fresh = await renewSignIns({ environment: environmentWith(stored({ expiresAt: "2026-10-18T05:00:00.000Z" })), mask: () => undefined, fetchImpl, now: () => now, servers: [demo] });
-  assert.deepEqual(fresh.reports, [{ vendor: "demo", status: "kept", detail: "renewing is off here: no key to save a renewed sign-in with" }]);
+  assert.deepEqual(fresh.reports, [{ vendor: "demo", status: "kept", detail: "renewing is off here: no key to save a renewed sign-in with", fix: "set-up-app" }]);
   assert.deepEqual(fresh.access, { demo: "access-1" });
   const old = await renewSignIns({ environment: environmentWith(stored()), mask: () => undefined, fetchImpl, now: () => now, servers: [demo] });
   assert.equal(old.reports[0]?.status, "lost");
@@ -247,7 +247,8 @@ test("without the app, a lost sign-in's issue says to set the app up first", asy
   assert.equal(reports[0]?.fix, "set-up-app");
   const told = issues();
   await signInIssues(reports, [], "2026-10-18", told.deps);
-  assert.match(told.opened[0]?.body as string, /First set up the GitHub App/);
+  assert.deepEqual(told.opened.map((issue) => issue.title), [renewalOffTitle, issueTitle("Demo")]);
+  assert.match(told.opened.find((issue) => issue.title === issueTitle("Demo"))?.body as string, /First set up the GitHub App/);
   const plain = issues();
   await signInIssues(lost, [], "2026-10-18", plain.deps);
   assert.doesNotMatch(plain.opened[0]?.body as string, /GitHub App/);
@@ -267,4 +268,29 @@ test("saving a renewed sign-in is tried three times, then reported as not saved"
   const second = async () => { tries += 1; return tries === 2; };
   assert.equal(await saveSecret("STACKDUKE_OAUTH_DEMO", "{}", "Stackduke/mcp-scanner", { set: second, wait: async () => undefined }), true);
   assert.equal(tries, 2);
+});
+
+test("a run with no key to save renewals opens one issue about the key, while sign-ins still work, and closes it once renewing works", async () => {
+  const { reports } = await renewSignIns({ environment: environmentWith(stored({ expiresAt: "2026-10-18T09:00:00.000Z" })), mask: () => undefined, ...vendor(), now: () => now, servers: [demo] });
+  assert.equal(reports[0]?.status, "kept");
+  const off = issues();
+  assert.equal(await signInIssues(reports, answered, "2026-10-18", off.deps), true);
+  assert.deepEqual(off.opened.map((issue) => issue.title), [renewalOffTitle]);
+  assert.match(off.opened[0]?.body as string, /Key for saving renewed sign-ins/);
+  // The next broken run does not open it twice.
+  const again = issues([{ number: 9, title: renewalOffTitle }]);
+  await signInIssues(reports, answered, "2026-10-19", again.deps);
+  assert.deepEqual(again.opened, []);
+  // A run that renews again closes it.
+  const fixed = issues([{ number: 9, title: renewalOffTitle }]);
+  await signInIssues([{ vendor: "demo", status: "renewed" }], answered, "2026-10-20", fixed.deps);
+  assert.deepEqual(fixed.closed, [9]);
+});
+
+test("a sign-in that gives no refresh token is kept without any alarm about the key", async () => {
+  const { reports } = await renewSignIns({ environment: environmentWith(stored({ refreshToken: undefined, expiresAt: "2026-10-18T09:00:00.000Z" })), mask: () => undefined, ...vendor(), now: () => now, servers: [demo] });
+  assert.deepEqual(reports, [{ vendor: "demo", status: "kept" }]);
+  const quiet = issues();
+  await signInIssues(reports, answered, "2026-10-18", quiet.deps);
+  assert.deepEqual(quiet.opened, []);
 });
