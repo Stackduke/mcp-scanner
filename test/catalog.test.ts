@@ -16,12 +16,16 @@ test("the catalog in the repository is usable", () => {
   assert.ok(catalog.servers.length > 0);
 });
 
-test("the tracker sends tokens to the same four addresses as before the catalog", () => {
-  assert.deepEqual(Object.fromEntries(Object.entries(signedInServers).map(([id, entry]) => [id, [entry.url, entry.tokenVariable]])), {
-    github: ["https://api.githubcopilot.com/mcp/", "STACKDUKE_SCAN_GITHUB_TOKEN"],
-    linear: ["https://mcp.linear.app/mcp", "STACKDUKE_SCAN_LINEAR_TOKEN"],
-    stripe: ["https://mcp.stripe.com/", "STACKDUKE_SCAN_STRIPE_TOKEN"],
-    supabase: ["https://mcp.supabase.com/mcp", "STACKDUKE_SCAN_SUPABASE_TOKEN"],
+test("the tracker sends tokens to the same four keyed addresses as before the catalog, and four browser sign-ins", () => {
+  assert.deepEqual(Object.fromEntries(Object.entries(signedInServers).map(([id, entry]) => [id, [entry.url, entry.tokenVariable, entry.kind]])), {
+    github: ["https://api.githubcopilot.com/mcp/", "STACKDUKE_SCAN_GITHUB_TOKEN", "api-key"],
+    linear: ["https://mcp.linear.app/mcp", "STACKDUKE_SCAN_LINEAR_TOKEN", "api-key"],
+    stripe: ["https://mcp.stripe.com/", "STACKDUKE_SCAN_STRIPE_TOKEN", "api-key"],
+    supabase: ["https://mcp.supabase.com/mcp", "STACKDUKE_SCAN_SUPABASE_TOKEN", "api-key"],
+    zapier: ["https://mcp.zapier.com/api/v1/connect", "STACKDUKE_SCAN_ZAPIER_TOKEN", "oauth"],
+    contentful: ["https://mcp.contentful.com/mcp", "STACKDUKE_SCAN_CONTENTFUL_TOKEN", "oauth"],
+    grafana: ["https://mcp.grafana.com/mcp", "STACKDUKE_SCAN_GRAFANA_TOKEN", "oauth"],
+    circleci: ["https://mcp.circleci.com/v1/mcp", "STACKDUKE_SCAN_CIRCLECI_TOKEN", "oauth"],
   });
   assert.equal(signedInServers.github?.formerVariable, "AETHIS_SCAN_GITHUB_TOKEN");
 });
@@ -126,7 +130,7 @@ test("a vendor whose terms forbid publishing keeps no sign-in, and an unpublishe
   assert.deepEqual(problemsOf(server({ tracker: { publish: false, reason: "Not yet.", access: server().tracker.access } })), ["demo: a server that is not published can keep only a browser sign-in"]);
 });
 
-test("the six vendors signed in through a browser on 18 October are kept signed in, and none is published", () => {
-  assert.deepEqual(oauthServers.map((entry) => [entry.id, entry.publish]), [["airtable", false], ["dropbox", false], ["zapier", false], ["contentful", false], ["grafana", false], ["circleci", false]]);
-  for (const id of oauthServers.map((entry) => entry.id)) assert.equal(catalog.servers.find((entry) => entry.id === id)?.termsCheckedOn, null);
+test("of the six vendors signed in through a browser on 18 October, Dom cleared four to publish on reading their terms", () => {
+  assert.deepEqual(oauthServers.map((entry) => [entry.id, entry.publish]), [["airtable", false], ["dropbox", false], ["zapier", true], ["contentful", true], ["grafana", true], ["circleci", true]]);
+  for (const entry of oauthServers) assert.equal(catalog.servers.find((server) => server.id === entry.id)?.termsCheckedOn, entry.publish ? "2026-10-18" : null);
 });
