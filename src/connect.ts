@@ -30,13 +30,17 @@ function refusal(result: SignedInScan): string | null {
   return null;
 }
 
+/** The vendors this command makes tokens for: the published ones that take a key. */
+export const apiKeyVendors = () => Object.entries(signedInServers).flatMap(([vendor, server]) => (server.kind === "api-key" ? [vendor] : []));
+
 export async function connect(vendors: string[], repository: string, deps: ConnectDeps): Promise<{ stored: string[]; skipped: string[] }> {
   // The check that certificate checking is on reads this process's setting too, since Node obeys it whatever is passed.
   const { readSecret, storeSecret, print, scan = (vendor, environment) => scanSignedIn(vendor, { NODE_TLS_REJECT_UNAUTHORIZED: process.env.NODE_TLS_REJECT_UNAUTHORIZED, ...environment }) } = deps;
   const stored: string[] = [], skipped: string[] = [];
   for (const vendor of vendors) {
     const server = Object.hasOwn(signedInServers, vendor) ? signedInServers[vendor] : undefined;
-    if (!server) { print(`${vendor}: not a vendor this tracker knows. Known: ${Object.keys(signedInServers).join(", ")}.`); skipped.push(vendor); continue; }
+    if (!server) { print(`${vendor}: not a vendor this tracker knows. Known: ${apiKeyVendors().join(", ")}.`); skipped.push(vendor); continue; }
+    if (server.kind === "oauth") { print(`${vendor}: signs in in a browser. Use: npm run scan -- connect-oauth ${vendor}`); skipped.push(vendor); continue; }
     print("", `${vendor}`, `  Make it at ${server.keyPage}`, `  ${server.keyAdvice}`);
     const token = (await readSecret(`  Paste it here (hidden; press Enter alone to skip): `)).trim();
     if (!token) { print("  Skipped."); skipped.push(vendor); continue; }

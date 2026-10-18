@@ -4,14 +4,18 @@ import path from "node:path";
 import { authorityOf, describeAuthority, shownSource } from "./authority.ts";
 import { listTools } from "./client.ts";
 import { diffSnapshots } from "./diff.ts";
-import { connect, ghSecretSet, readHidden } from "./connect.ts";
+import { apiKeyVendors, connect, ghSecretSet, readHidden } from "./connect.ts";
 import { describeDigest, periodOf } from "./digest.ts";
 import { describeDiff, describeSnapshot } from "./report.ts";
-import { scanSignedIn, signedInServers } from "./signed-in.ts";
+import { oauthServers, scanSignedIn, signedInServers } from "./signed-in.ts";
 import { catalog, signInFrom } from "./catalog.ts";
 import { discover } from "./oauth.ts";
 import { printable } from "./text.ts";
 import { trySignIn } from "./try-sign-in.ts";
+import { connectOAuth } from "./connect-oauth.ts";
+import { checkSignIns, renewSignIns, signInIssues } from "./renew.ts";
+import type { CheckReport, RenewReport } from "./renew.ts";
+import { files, ghIssues, handOver, isAccess, isReports, maskCommand, readStep, saveSecret, writePrivate } from "./sign-in-io.ts";
 import { createInterface } from "node:readline/promises";
 import { readSnapshot, save, writeWhole } from "./files.ts";
 import { describeCheck, describeUnreachable, repeatedNames, runCheck, updateLockfile } from "./check.ts";
@@ -57,6 +61,17 @@ const usage = `Usage:
   npm run scan -- connect [vendor...] [--repo=owner/name]
                                                     Add vendor tokens to the tracker's repository secrets, one hidden
                                                     prompt each, each tested first. Default: every vendor, Stackduke/mcp-scanner.
+  npm run scan -- connect-oauth <vendor...> [--repo=owner/name]
+                                                    Sign the tracker in to a vendor that takes only a browser sign-in
+                                                    (${oauthServers.map((server) => server.id).join(", ")}), test it, and store it as a
+                                                    repository secret the daily run renews. Default repository: Stackduke/mcp-scanner.
+  npm run scan -- renew-sign-ins --dir=<folder> [--repo=owner/name]
+  npm run scan -- check-sign-ins --dir=<folder>
+  npm run scan -- sign-in-issues --dir=<folder> [--repo=owner/name]
+                                                    The daily run's steps for browser sign-ins: renew each and save it back
+                                                    (with GH_TOKEN, a key that may set secrets), check each server answers,
+                                                    and open or close an issue for each that needs a person. track then
+                                                    takes --sign-ins=<folder>.
 
 Nothing here calls a tool. scan, check, discover and catalog send no credential. check runs the program it is
 given, with this environment, so give it only a server you would run anyway. signed-in reads a token from an environment
@@ -315,7 +330,7 @@ async function main(argv: string[]): Promise<number> {
     for (const flag of flags) {
       const match = /^--([a-z-]+)(?:=(.+))?$/.exec(flag);
       const name = match?.[1] ?? "", value = match?.[2];
-      const known = name === "skip-registry" ? value === undefined : Object.hasOwn(defaults, name) && value !== undefined;
+      const known = name === "skip-registry" ? value === undefined : (Object.hasOwn(defaults, name) || name === "sign-ins") && value !== undefined;
       if (!known || given.has(name)) { console.error(`track does not take ${flag.split("=")[0]}, or took it twice.`); return 2; }
       given.set(name, value ?? "");
     }
@@ -326,11 +341,14 @@ async function main(argv: string[]): Promise<number> {
       if (!/^\d{1,6}$/.test(text) || Number(text) < (name === "host-gap-ms" ? 0 : 1)) { console.error(`--${name} takes a whole number${name === "host-gap-ms" ? "" : " from 1"}.`); return 2; }
       value[name] = Number(text);
     }
+    // The access tokens the renew step left, each handed over under its server's token variable, for published servers only.
+    const signIns = given.get("sign-ins");
+    const environment = signIns === undefined ? process.env : handOver(await readStep(signIns, files.access, isAccess) ?? {}, oauthServers, process.env);
     const summary = await track({
       dataDir: option("data"), readRegistry: !given.has("skip-registry"),
       maxChecks: value["max-checks"] as number, perHost: value["per-host"] as number, perSite: value["per-site"] as number, concurrency: value.concurrency as number,
       hostGapMs: value["host-gap-ms"] as number, budgetMinutes: value["budget-minutes"] as number,
-      environment: process.env, log: (line) => console.log(line),
+      environment, log: (line) => console.log(line),
     });
     console.log(`Done: ${summary.checked} of ${summary.planned} checks made, ${summary.changed} with a change, ${summary.notStarted} left for the next run.`);
     return 0;
@@ -348,11 +366,69 @@ async function main(argv: string[]): Promise<number> {
     const repoFlags = [...flags].map((flag) => /^--repo=([\w.-]+\/[\w.-]+)$/.exec(flag));
     if (repoFlags.some((match) => !match) || repoFlags.length > 1) { console.error("connect takes only --repo=owner/name."); return 2; }
     const repository = repoFlags[0]?.[1] ?? "Stackduke/mcp-scanner";
-    const vendors = args.length ? args : Object.keys(signedInServers);
+    const vendors = args.length ? args : apiKeyVendors();
     console.log(`Each token is tested against its vendor's server, then stored as a secret of ${repository}. Nothing is printed or written to a file.`);
     const { stored, skipped } = await connect(vendors, repository, { readSecret: readHidden, storeSecret: ghSecretSet, print: (...lines) => console.log(lines.join("\n")) });
     console.log(`\nStored: ${stored.join(", ") || "none"}. Skipped: ${skipped.join(", ") || "none"}.`);
     return 0;
+  }
+
+  if (command === "connect-oauth" || command === "renew-sign-ins" || command === "check-sign-ins" || command === "sign-in-issues") {
+    const allowed = command === "connect-oauth" ? ["repo"] : command === "check-sign-ins" ? ["dir"] : ["dir", "repo"];
+    const given = new Map<string, string>();
+    for (const flag of flags) {
+      const match = /^--([a-z]+)=(.+)$/.exec(flag);
+      if (!match || !allowed.includes(match[1] as string) || given.has(match[1] as string)) { console.error(`${command} takes ${allowed.map((name) => `--${name}=`).join(" and ")}, each at most once.`); return 2; }
+      given.set(match[1] as string, match[2] as string);
+    }
+    const repository = given.get("repo") ?? "Stackduke/mcp-scanner";
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) { console.error("--repo takes owner/name."); return 2; }
+    // Node sends requests without checking certificates when this is set, so no sign-in may go out.
+    if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") { console.error("Certificate checking is switched off here, so no sign-in was sent."); return 1; }
+
+    if (command === "connect-oauth") {
+      if (args.length === 0) { console.error(`Name the vendors to sign in to: ${oauthServers.map((server) => server.id).join(", ")}.`); return 2; }
+      const lines = createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        console.log(`Each sign-in is tested against its vendor's server, then stored as a secret of ${repository}. No token is printed or written to a file.`);
+        const { stored, skipped } = await connectOAuth(args, repository, { ask: (prompt) => lines.question(prompt), storeSecret: ghSecretSet, print: (...text) => console.log(text.join("\n")) });
+        console.log(`\nStored: ${stored.join(", ") || "none"}. Skipped: ${skipped.join(", ") || "none"}.`);
+        return skipped.length ? 3 : 0;
+      } finally {
+        lines.close();
+      }
+    }
+
+    const dir = given.get("dir");
+    if (!dir || args.length) { console.error(`${command} takes --dir=<folder>, and no other argument.`); return 2; }
+
+    if (command === "renew-sign-ins") {
+      const inActions = process.env.GITHUB_ACTIONS === "true";
+      // In the run's log, which is public, every token is hidden before anything could print it.
+      const mask = (value: string) => { if (inActions) process.stdout.write(maskCommand(value)); };
+      const canSave = Boolean(process.env.GH_TOKEN?.trim());
+      if (!canSave) console.log("No GH_TOKEN here, so nothing is renewed: a renewed sign-in could not be saved.");
+      const { reports, access } = await renewSignIns({ environment: process.env, mask, ...(canSave ? { save: (name: string, value: string) => saveSecret(name, value, repository) } : {}) });
+      await writePrivate(dir, files.access, JSON.stringify(access));
+      await writePrivate(dir, files.renewed, JSON.stringify(reports));
+      for (const report of reports) console.log(`${report.vendor}: ${report.status}${report.detail ? `, ${report.detail}` : ""}.`);
+      return 0;
+    }
+
+    if (command === "check-sign-ins") {
+      const access = await readStep(dir, files.access, isAccess);
+      if (!access) { console.error("The renew step left no access tokens, so nothing was checked."); return 1; }
+      const reports = await checkSignIns(access);
+      await writePrivate(dir, files.checked, JSON.stringify(reports));
+      for (const report of reports) console.log(`${report.vendor}: ${report.status}${report.detail ? `, ${report.detail}` : ""}.`);
+      return 0;
+    }
+
+    const renewed = await readStep(dir, files.renewed, isReports<RenewReport>);
+    const checked = await readStep(dir, files.checked, isReports<CheckReport>);
+    const told = await signInIssues(renewed, checked, new Date().toISOString().slice(0, 10), ghIssues(repository, (line) => console.log(line)));
+    if (!told) console.error("Not every issue could be opened or closed, so someone may not have been told.");
+    return told ? 0 : 1;
   }
 
   if (command === "diff" && args[0] && args[1]) {
