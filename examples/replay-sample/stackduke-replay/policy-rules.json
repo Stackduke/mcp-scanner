@@ -1,0 +1,34 @@
+[
+  {
+    "id": "no-unrequested-email",
+    "name": "Email goes out only after a person approves it",
+    "plane": "MCP Gateway",
+    "subject": "workspace:sample",
+    "connectionId": "sample-shop",
+    "connection": "Example Shop tools",
+    "capabilityType": "Tool",
+    "capabilityId": "send_email",
+    "capability": "send_email",
+    "resource": "",
+    "condition": "",
+    "decision": "Require Approval",
+    "obligation": "A person approves each outgoing email.",
+    "priority": 100
+  },
+  {
+    "id": "refunds-over-50-blocked",
+    "name": "Refunds over $50 are blocked",
+    "plane": "MCP Gateway",
+    "subject": "workspace:sample",
+    "connectionId": "sample-shop",
+    "connection": "Example Shop tools",
+    "capabilityType": "Tool",
+    "capabilityId": "issue_refund",
+    "capability": "issue_refund",
+    "resource": "",
+    "condition": "amount > 50",
+    "decision": "Block",
+    "obligation": "",
+    "priority": 90
+  }
+]

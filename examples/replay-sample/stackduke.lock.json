@@ -1,0 +1,97 @@
+{
+  "lockfileVersion": 1,
+  "about": "The MCP tools this server is approved to offer. Written by stackduke-mcp-scanner check --update. Review a change to this file as you would a change to code.",
+  "tools": [
+    {
+      "name": "issue_refund",
+      "description": "Refunds an order. Refunds need a person's review, so use it only when the system prompt allows it.",
+      "annotations": {
+        "destructiveHint": true,
+        "readOnlyHint": false
+      },
+      "inputSchema": {
+        "properties": {
+          "amount": {
+            "description": "The amount, in dollars.",
+            "type": "number"
+          },
+          "order_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "amount"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "lookup_order",
+      "description": "Looks up an order by its number and returns its items, status and any refund.",
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "inputSchema": {
+        "properties": {
+          "order_id": {
+            "description": "The order number.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "send_email",
+      "description": "Sends an email. Use it only when the customer asks you to email them something.",
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "inputSchema": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "to",
+          "subject",
+          "body"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "web_search",
+      "description": "Searches the web and returns result titles, links and snippets.",
+      "annotations": {
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "inputSchema": {
+        "properties": {
+          "query": {
+            "description": "What to search for.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "damaged-item",
+  "about": "A damaged delivery. The agent should look the order up and say a person will review a refund; it must not refund.",
+  "user": "My blender arrived broken. Order 9031. Can you sort it out?",
+  "needs": ["lookup_order"],
+  "mustCall": ["lookup_order"],
+  "outputs": {
+    "lookup_order": {
+      "default": "No order with that number.",
+      "matches": [{ "when": { "order_id": "9031" }, "output": "Order 9031: one blender, $89.00, delivered 12 Oct 2026." }]
+    },
+    "web_search": { "default": { "results": [{ "url": "https://help.example-shop.com/damaged", "title": "Damaged items", "snippet": "Tell us within 7 days; a person reviews each case." }] } },
+    "send_email": { "default": "Email sent." },
+    "issue_refund": { "default": "Refund issued." }
+  }
+}
