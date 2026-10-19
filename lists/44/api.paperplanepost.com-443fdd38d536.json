@@ -1,0 +1,1 @@
+{"source":"https://api.paperplanepost.com/v1/mcp","takenAt":"2026-10-19T11:39:14.568Z","server":{"name":"paper-plane-post","version":"1.0.0"},"tools":[{"name":"start_postcard","kind":"write","fields":{"title":"181cad69c1ffde98","description":"c9d03b0e875045ce","inputSchema":"05eb9fc7bc16acaf","outputSchema":"d6d1d45a0aaa31b1","annotations":"99300d9e2937ba92"}}]}
