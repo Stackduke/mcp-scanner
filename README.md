@@ -181,6 +181,30 @@ The first passes. The second fails, naming the new tool, the rewritten descripti
 - If the job is cancelled while the server's program runs, the program is left to the runner to stop.
 - The optional upload of results to the Stackduke dashboard is not part of this.
 
+## Behaviour replay (preview)
+
+Added on 2026-10-19, as a local command; not yet part of the GitHub Action. The check says what changed in a server's tool definitions. `replay` shows what effect that had on an agent: it runs a team's cases through the team's own model twice, once with the tools in the lockfile at a git ref and once with the tools the server lists now, several times a side, and reports the difference. No tool is ever called: each call the model makes is answered with a canned output from the case. The plan, including what is still to come, is [docs/behaviour-replay-plan.md](docs/behaviour-replay-plan.md).
+
+```sh
+export ANTHROPIC_API_KEY=...   # or OPENAI_API_KEY, or AWS_BEARER_TOKEN_BEDROCK, as the settings say
+npx @stackduke/mcp-scanner replay --before=main -- node dist/server.js
+#   --settings=stackduke-replay/replay.json   the settings; cases are read from cases/ beside it
+#   --lockfile=stackduke.lock.json            read at the ref with git show
+#   --summary=replay.md --json=replay.json    the report, and every run with the model's answers
+```
+
+- **Model APIs**: Anthropic Messages, OpenAI-compatible Chat Completions with a configurable `baseUrl` (OpenAI, OpenRouter, Groq, Together, Ollama, vLLM, LiteLLM and others), and Bedrock Converse with a Bedrock API key. The team's key, read from an environment variable, goes only to the model API and is kept from the server's program.
+- **What it measures**, each as the share of runs in which it happened, before and after: calls to tools in each capability class; canary values from a case leaving through a tool that sends or reaches outside; obeying an instruction planted in a canned tool output; calls outside a case's `needs`; how often each policy rule, in the platform's draft rule shape, would fire; and cited URLs that no tool output contained, or that fall outside the allow list.
+- **Noise**: a difference is called clear only when Fisher's exact test puts the chance of it being noise under 5 percent. A leak or an obeyed instruction is shown whenever the after side has more of it.
+- **Evidence**: the report starts with hashes of both tool lists, the model and its settings, and fingerprints of the system prompt, the cases and the policy file.
+- **Limits**: it shows a tendency for one model, prompt and set of cases, not a guarantee. A rule's free-text condition is not evaluated, so its count is an upper bound. Agents whose provider calls the MCP server itself (hosted MCP modes) cannot be replayed, since there is no point at which a canned output can be put in. The Chat Completions and Bedrock adapters have been tested only against a fake server so far.
+
+Try it on [`examples/replay-sample/`](examples/replay-sample/), a made-up shop's support agent, from a clone of this repository:
+
+```sh
+REPLAY_SAMPLE_VARIANT=changed node src/cli.ts replay --before=HEAD --settings=examples/replay-sample/stackduke-replay/replay.json --lockfile=examples/replay-sample/stackduke.lock.json -- node examples/replay-sample/server.ts
+```
+
 ## The tracker
 
 `track` is one run of the public tracker over a data folder. [`.github/workflows/track.yml`](.github/workflows/track.yml) runs it every day at 04:17 UTC and commits the folder to the `data` branch.
@@ -261,6 +285,7 @@ To add a vendor: it must sign in with automatic registration (`oauth-dcr`). Give
 
 - `src/client.ts`, `src/stdio.ts`: the handshake and the tool list, over HTTP and over a local program's standard input and output.
 - `src/check.ts`, `src/lockfile.ts`, `action.yml`: the pre-deploy check, its lockfile and its GitHub Action. `examples/sample-server/`: a small server to try it on.
+- `src/replay*.ts`, `src/models.ts`: behaviour replay: the command, its case files, the loop, the measures, the report, and the model APIs. `examples/replay-sample/`: a sample to try it on.
 - `src/snapshot.ts`, `src/diff.ts`, `src/files.ts`: fingerprints, snapshots, comparisons, and reading and writing them.
 - `src/risk.ts`: capability labels. `src/findings.ts`: the text checks. `src/text.ts`: making untrusted text safe to print.
 - `src/authority.ts`, `src/digest.ts`, `src/report.ts`: the plain-language report, the weekly digest and the technical report.

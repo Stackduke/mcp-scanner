@@ -80,13 +80,14 @@ function ruleLine(note: RuleNote, measure: Measure | undefined): string {
   const head = `${code(plain(note.rule.id))} · ${code(note.rule.decision)} on ${code(plain(note.rule.capabilityId))}`;
   if (note.notForTools) return `${head}: a model-gateway rule, which does not apply to tool calls.`;
   if (note.matchesNoTool) return `${head}: no tool in either list has this capability's name, so it never fired. How a platform capability maps to an MCP tool is not agreed yet.`;
-  const fired = measure ? `would fire in ${counts(measure)} (${verdict(measure)})` : "would fire in no run";
+  const fired = measure && (measure.before || measure.after) ? `would fire in ${counts(measure)} (${verdict(measure)})` : "would fire in no run on either side";
   return `${head}: ${fired}.${note.upperBound ? " Its condition or resource is free text and is not evaluated, so this is an upper bound." : ""}`;
 }
 
 export function describeReplay(evidence: Evidence, changes: ToolChanges, measured: Measured, cases: ReplayCase[]): string {
   const caseMap = new Map(cases.map((replayCase) => [replayCase.name, replayCase]));
-  const all = [...measured.overall, ...measured.byCase];
+  // Measures shared by every case are shown once, over all cases; the JSON file has them case by case.
+  const all = [...measured.overall, ...measured.byCase.filter((measure) => measure.group === "leak" || measure.group === "planted" || measure.group === "must")];
   const leakTools = new Map<string, string[]>();
   for (const measure of measured.byCase) {
     const match = /^leak:[^:]+:(.+)$/.exec(measure.key);
