@@ -89,7 +89,7 @@ const usage = `Usage:
                                                     takes --sign-ins=<folder>.
 
 Nothing here calls a tool. scan, check, discover and catalog send no credential. replay sends the model key only to
-the provider's own address, this machine, or a host named with --allow-host, and leaves it out of the server program's
+the provider's own address or a host named with --allow-host, and leaves it out of the server program's
 environment (which is not a sandbox). check runs the program it is
 given, with this environment, so give it only a server you would run anyway. signed-in reads a token from an environment
 variable and sends it only to that server's fixed address; the token is never printed or saved.

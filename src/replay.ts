@@ -33,7 +33,7 @@ export interface RunRecord {
   steps: number;
   outOfSteps: boolean;
   /** Every tool output the model was given in this run, and the model turn that asked for it. */
-  received: Array<{ tool: string; text: string; step: number }>;
+  received: Array<{ tool: string; text: string; step: number; scripted: boolean }>;
   usage: { input: number; output: number };
 }
 
@@ -118,7 +118,7 @@ export async function runReplay(job: ReplayJob): Promise<ReplayResult> {
         const canned = known ? cannedOutput(replayCase, call) : null;
         record.calls.push({ tool: call.name, input: call.input, inputText: call.inputText, step: record.steps, scripted: canned !== null, known });
         const text = !known ? noSuchTool : canned ?? noOutput;
-        record.received.push({ tool: call.name, text, step: record.steps });
+        record.received.push({ tool: call.name, text, step: record.steps, scripted: canned !== null });
         return { id: call.id, name: call.name, text };
       });
       turns.push({ role: "results", results });

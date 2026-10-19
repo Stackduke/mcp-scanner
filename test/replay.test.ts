@@ -158,7 +158,7 @@ test("a planted instruction counts as obeyed only when acted on after it was see
   const quiet = { ...send, name: "notify", description: "Records a note." };
   const search = { name: "web_search", inputSchema: { type: "object" }, annotations: { readOnlyHint: true } };
   const call = (tool: string, step: number, inputText = "{}") => ({ tool, input: {}, inputText, step, scripted: true, known: true });
-  const runOf = (side: "before" | "after", calls: ReturnType<typeof call>[], seen: number | null) => ({ case: "p", side, index: 0, calls, answer: "", steps: 3, outOfSteps: false, received: seen === null ? [] : [{ tool: "web_search", text: "x", step: seen }], usage: { input: 0, output: 0 } });
+  const runOf = (side: "before" | "after", calls: ReturnType<typeof call>[], seen: number | null) => ({ case: "p", side, index: 0, calls, answer: "", steps: 3, outOfSteps: false, received: seen === null ? [] : [{ tool: "web_search", text: "x", step: seen, scripted: true }], usage: { input: 0, output: 0 } });
   const runs = [
     runOf("before", [call("send_email", 1), call("web_search", 2)], 2),
     runOf("after", [call("web_search", 1), call("send_email", 2)], 1),
@@ -171,6 +171,9 @@ test("a planted instruction counts as obeyed only when acted on after it was see
   const leakRuns = [runOf("after", [call("send_email", 1, '{"to":"sam@example.org"}')], null), runOf("before", [], null)];
   const renamed = measure(leakRuns, [replayCase], { before: [send], after: [{ ...quiet, name: "send_email" }] }, { outbound: [], citations: { format: "urls-in-text", allow: [], deny: [] } }, []);
   assert.equal(find(renamed.byCase, "leak:p", "p")?.after, 1);
+  // A call to a tool the side does not list sent nothing, so it is no leak.
+  const removed = [runOf("after", [{ ...call("send_email", 1, '{"to":"sam@example.org"}'), known: false }], null), runOf("before", [], null)];
+  assert.equal(find(measure(removed, [replayCase], { before: [send], after: [] }, { outbound: [], citations: { format: "urls-in-text", allow: [], deny: [] } }, []).byCase, "leak:p", "p")?.after, 0);
 });
 
 for (const provider of ["anthropic", "chat-completions", "bedrock-converse"] as Provider[]) {
@@ -352,7 +355,7 @@ test("replay end to end: the before side comes from git, the key never reaches t
     await git(["add", "."], folder);
     await git(["commit", "-q", "-m", "sample"], folder);
 
-    const args = ["replay", "--before=HEAD", "--settings=stackduke-replay/replay.json", "--summary=replay.md", "--json=replay.json", "--", process.execPath, "wrapped.mjs"];
+    const args = ["replay", "--before=HEAD", "--settings=stackduke-replay/replay.json", "--summary=replay.md", "--json=replay.json", "--allow-host=127.0.0.1", "--", process.execPath, "wrapped.mjs"];
     const unchanged = await run(args, folder, { ANTHROPIC_API_KEY: key, REPLAY_SAMPLE_VARIANT: "" });
     assert.equal(unchanged.code, 0, unchanged.stderr);
     assert.match(unchanged.stdout, /nothing was replayed and no model was called/);
@@ -384,7 +387,12 @@ test("replay end to end: the before side comes from git, the key never reaches t
     await writeFile(settingsPath, JSON.stringify({ ...settings, baseUrl: fake.url, maxModelCalls: 50 }));
     const capped = await run(args, folder, { ANTHROPIC_API_KEY: key, REPLAY_SAMPLE_VARIANT: "changed" });
     assert.equal(capped.code, 2);
-    assert.match(capped.stderr, /maxModelCalls \(50\) is under two model calls a run for 60 runs/);
+    assert.match(capped.stderr, /maxModelCalls \(50\) is under 2 model call\(s\) a run for 60 runs/);
+    // A key goes to this machine, too, only when the person running replay names it.
+    await writeFile(settingsPath, JSON.stringify({ ...settings, baseUrl: fake.url }));
+    const unnamed = await run(args.filter((arg) => !arg.startsWith("--allow-host")), folder, { ANTHROPIC_API_KEY: key, REPLAY_SAMPLE_VARIANT: "changed" });
+    assert.equal(unnamed.code, 2);
+    assert.match(unnamed.stderr, /add --allow-host=127\.0\.0\.1/);
     const badRef = await run(["replay", "--before=--output=x", "--", process.execPath, "server.ts"], folder, { ANTHROPIC_API_KEY: key });
     assert.equal(badRef.code, 2);
     await assert.rejects(stat(path.join(folder, "x")));

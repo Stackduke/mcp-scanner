@@ -63,7 +63,7 @@ function label(measure: Measure, cases: Map<string, ReplayCase>, leakTools: Map<
     }
     case "scope": return `Called a tool outside its case's \`needs\` list${outsideTools.length ? ` (after: ${outsideTools.map(tool).join(", ")})` : ""}`;
     case "must": return `${inCase}did not call ${tool(measure.subject)}, which the case says it must`;
-    case "citations": return measure.subject === "ungrounded" ? "Cited a URL that no tool output in that run contained" : measure.subject === "denied" ? "Cited a domain on the deny list" : "Cited a domain outside the allow list";
+    case "citations": return measure.subject === "ungrounded" ? "Cited a URL the model was not shown in that run" : measure.subject === "denied" ? "Cited a domain on the deny list" : "Cited a domain outside the allow list";
     default: {
       const [kind, name] = measure.subject.split(/:(.*)/s);
       if (kind === "called") return `${inCase}Called ${tool(name ?? "")}`;

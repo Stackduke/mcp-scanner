@@ -90,14 +90,16 @@ export async function replayCommand(rest: string[]): Promise<number> {
   const localServer = settings.provider === "chat-completions" && settings.baseUrl !== undefined && isLoopback(new URL(settings.baseUrl).hostname);
   if (!apiKey && !localServer) { console.error(`Set ${keyVariable} in the environment to the key for ${settings.provider}. It is read from there only, and never printed or stored.`); return 2; }
   // The settings file comes with the branch being replayed. A key goes to an address other than the
-  // provider's own, or this machine, only when the person running replay names that host.
-  if (settings.baseUrl) {
+  // provider's own only when the person running replay names that host. That holds for this machine
+  // too: the branch's own server program runs here and could be listening.
+  if (settings.baseUrl && apiKey) {
     const host = new URL(settings.baseUrl).hostname;
-    if (!isLoopback(host) && !ownHost[settings.provider](host) && options.get("allow-host") !== host) { console.error(`The settings send the model key to ${printable(host, 100)}, which is not ${settings.provider}'s own address. If that is intended, add --allow-host=${printable(host, 100)}.`); return 2; }
+    if (!ownHost[settings.provider](host) && options.get("allow-host") !== host) { console.error(`The settings send the model key to ${printable(host, 100)}, which is not ${settings.provider}'s own address. If that is intended, add --allow-host=${printable(host, 100)}.`); return 2; }
   }
   const runs = loaded.cases.length * 2 * settings.runsPerSide;
   const maxModelCalls = settings.maxModelCalls ?? runs * 4;
-  if (maxModelCalls < runs * 2) { console.error(`maxModelCalls (${maxModelCalls}) is under two model calls a run for ${runs} runs. Any run with a tool call takes two, so the job would stop part way and report nothing. Raise it to at least ${runs * 2}, or leave it out for ${runs * 4}.`); return 2; }
+  const least = runs * Math.min(2, settings.maxSteps);
+  if (maxModelCalls < least) { console.error(`maxModelCalls (${maxModelCalls}) is under ${least / runs} model call(s) a run for ${runs} runs. Any run with a tool call takes two, so the job would stop part way and report nothing. Raise it to at least ${least}, or leave it out for ${runs * 4}.`); return 2; }
 
   const lockfilePath = options.get("lockfile") || "stackduke.lock.json";
   const relative = path.relative(process.cwd(), path.resolve(lockfilePath));
