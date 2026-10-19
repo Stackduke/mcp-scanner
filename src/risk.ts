@@ -57,6 +57,11 @@ const kindOf = (token: string): Kind | null => {
   return null;
 };
 
+/** "updates", "invites": a plural form of a word that writes or sends, as opposed to the word itself. */
+const pluralOfActing = (token: string) => {
+  const kind = kindOf(token);
+  return token.endsWith("s") && (kind === "write" || kind === "send") && !verbs[kind].includes(token);
+};
 /** A verb that reads and is hardly ever a noun: "get", "list", "fetch", not "search" or "check". */
 const plainRead = (token: string | undefined) => token !== undefined && kindOf(token) === "read" && !isIn(token, nounLike);
 
@@ -84,16 +89,16 @@ function propertyNames(schema: unknown): string[] {
 function fromWords(tokens: string[], { inName = true, moneyFrom = tokens }: { inName?: boolean; moneyFrom?: string[] } = {}): { classes: CapabilityClass[]; basis: string[] } {
   const found = new Map<Kind, string>();
   const note = (token: string) => { const kind = kindOf(token); if (kind && !found.has(kind)) found.set(kind, token); };
-  // A name that opens with a plain read verb names what it reads after it: `get_status_updates`
-  // reads updates. The word straight after the verb still acts (`read_write_file`), and so does a
-  // destructive word, or one joined with "and" or "or", anywhere.
+  // A name that opens with a plain read verb names what it reads after it, so a plural there is a
+  // thing: `get_status_updates` reads updates. A singular still acts (`find_user_send_message`), as
+  // does the word straight after the verb (`read_writes`), a destructive word, or one joined with
+  // "and" or "or". "deploy" names a kind of thing between a verb and another word (`get_deploy_component`).
   const readsAThing = inName && plainRead(tokens[0]);
   tokens.forEach((token, index) => {
     const afterConjunction = tokens[index - 1] === "and" || tokens[index - 1] === "or";
     const participle = index > 0 && !afterConjunction && token.length > 4 && token.endsWith("ed");
-    const kind = kindOf(token);
-    const partOfThing = !afterConjunction && ((readsAThing && index > 1 && (kind === "write" || kind === "send"))
-      || (inName && index > 0 && index < tokens.length - 1 && modifiers.has(token)));
+    const partOfThing = !afterConjunction && ((readsAThing && index > 1 && pluralOfActing(token))
+      || (inName && index < tokens.length - 1 && modifiers.has(token) && tokens.slice(0, index).some((word) => kindOf(word) !== null)));
     if (afterConjunction || (!participle && !partOfThing && !isIn(token, nounLike))) note(token);
   });
   // Nothing clear anywhere: let a noun-like first word speak, unless it is a plural ("issues", "logs").
@@ -130,7 +135,7 @@ function openingWords(tool: ToolDefinition): string[] {
 }
 
 // Words a description may open with before its verb: "Use this to delete", "This tool sends", "Allows you to create".
-const leadIn = new Set(["call", "use", "used", "this", "tool", "it", "to", "you", "can", "will", "may", "allows", "allow", "lets", "let", "helps", "help", "the", "a", "an", "agent", "function", "endpoint", "please", "we", "here"]);
+const leadIn = new Set(["use", "used", "this", "tool", "it", "to", "you", "can", "will", "may", "allows", "allow", "lets", "let", "helps", "help", "the", "a", "an", "agent", "function", "endpoint", "please", "we", "here"]);
 const joiners = new Set(["and", "or", "then", "also"]);
 const objectStarts = new Set(["a", "an", "the", "it", "them", "its", "their", "this", "that", "these", "those", "every", "each", "all", "any", "one", "new", "to", "on", "in", "into", "from", "for", "with", "back", "out", "up"]);
 /** "recursively", "optionally": skipped before a verb. "apply" and "reply" are verbs, so a known verb is never skipped. */
@@ -149,8 +154,11 @@ const pastOrOngoing = (token: string) => (token.length > 4 && token.endsWith("ed
  * ("Fetch", "List or get", "Validate"), the rest of it describes the thing read, and an acting
  * word there is a thing or a quality: "metadata and published version history", "a deploy
  * component", "by compiling it", "permissions set on", "the URL where users can configure it".
- * Only a verb joined on still counts ("and deletes it", ", then update it"), and a destructive one
- * after "to", "that", "can" and the like ("to purge them"). A word joined on must be a plain verb:
+ * Only a verb joined on still counts ("and deletes it", ", then update it"), a destructive one
+ * after "to", "that", "can" and the like ("to purge them"), and an "-ing" form that destroys or
+ * sends, with its object ("by sending a sample event"). A verb that writes after "to" does not
+ * ("find actions you can enable", and also "Fetch the template to create a page"): reading the
+ * opening verb's purpose as an action was the commoner mistake. A word joined on must be a plain verb:
  * not one usually a noun with no object after it ("and issue and scope histories"), nor an "-ed"
  * or "-ing" form ("and linked assets", "adding, editing, or removing").
  *
@@ -158,9 +166,12 @@ const pastOrOngoing = (token: string) => (token.length > 4 && token.endsWith("ed
  * files", "Executes any API call including DELETE". There an "-ed" form past the first word counts
  * only if it destroys ("and linked assets" does not; "and deleted" does).
  */
-function statedWords(tokens: string[]): string[] {
+// "Call this only after", "Call `inspect_actions` first": a word on when to call the tool, not what it does.
+const callTimes = new Set(["this", "it", "only", "when", "after", "before", "first"]);
+function statedWords(tokens: string[], name: string[] = []): string[] {
   let index = 0;
-  while (index < tokens.length && (leadIn.has(tokens[index] as string) || adverb(tokens[index] as string))) index += 1;
+  const callsItself = (at: number) => tokens[at] === "call" && (callTimes.has(tokens[at + 1] as string) || (name.length > 0 && name.every((word, offset) => tokens[at + 1 + offset] === word)));
+  while (index < tokens.length && (leadIn.has(tokens[index] as string) || adverb(tokens[index] as string) || callsItself(index))) index += 1;
   const start = index;
   const stated: string[] = [];
   for (; index < tokens.length; index += 1) {
@@ -181,10 +192,17 @@ function statedWords(tokens: string[]): string[] {
   for (; index < tokens.length; index += 1) {
     const token = tokens[index] as string;
     const kind = kindOf(token);
-    if (kind === null || kind === "read" || pastOrOngoing(token)) continue;
+    if (kind === null || kind === "read") continue;
     let before = index - 1;
     while (before >= 0 && adverb(tokens[before] as string)) before -= 1;
     const previous = tokens[before];
+    // "Lists files, deleting those older", "by sending a sample event": an "-ing" form that
+    // destroys or sends, with its object after it, is what the tool does too.
+    if (pastOrOngoing(token)) {
+      const doing = token.endsWith("ing") && (kind === "destructive" || kind === "send") && (joined(previous) || previous === "by" || previous === "while") && objectStarts.has(tokens[index + 1] as string);
+      if (doing) stated.push("and", token);
+      continue;
+    }
     if (!joined(previous) && !(kind === "destructive" && previous !== undefined && clauseMarkers.has(previous))) continue;
     // A word that is usually a thing counts as a verb when what follows is its object: "and publish
     // a new version", "and share with the team", but not "and issue and scope histories".
@@ -197,7 +215,7 @@ function statedWords(tokens: string[]): string[] {
 /** What a description says the tool does. Money words count anywhere in the opening sentence, beside a verb that acts. */
 function fromDescription(tool: ToolDefinition): { classes: CapabilityClass[]; basis: string[] } {
   const opening = openingWords(tool);
-  return fromWords(statedWords(opening), { inName: false, moneyFrom: opening.filter((token) => token !== ",") });
+  return fromWords(statedWords(opening, words(tool.name)), { inName: false, moneyFrom: opening.filter((token) => token !== ",") });
 }
 
 /** What the opening of the description suggests. The server writes it, so it is evidence of action and never of harmlessness. */

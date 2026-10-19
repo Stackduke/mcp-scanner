@@ -126,6 +126,9 @@ test("a description is read for what it says the tool does, not for every acting
     // Opening with a read, a verb joined on by a comma or after "to" still counts.
     "Fetch a user, update their email": "write",
     "Fetch the stale records to purge them": "destructive",
+    "Lists files, deleting those older than 30 days": "destructive",
+    "Test the webhook by sending a sample event": "send",
+    "Call an external webhook with the payload": "write",
   };
   for (const [description, label] of Object.entries(whole)) assert.equal(said(description), label, description);
 });
@@ -142,6 +145,10 @@ test("a name's acting word used as a thing does not make a reader act", () => {
     app_deploy: "write", vercel_deploy: "write", app_deploys: "write", bulk_updates: "write", batch_inserts: "write",
     records_bulk_creates: "write", zap_executes: "write", sheet_values_appends: "write", bot_sends_message: "send",
     read_write_file: "write", get_or_create_user: "write",
+    // Past a read verb only a plural is a thing; a singular acting word still acts.
+    get_user_update_profile: "write", find_user_send_message: "send", read_file_then_execute: "write",
+    list_messages_mark_read: "write", fetch_email_send: "send", describe_stack_update: "write",
+    vercel_deploy_project: "write", netlify_deploy_site: "write",
   };
   for (const [name, label] of Object.entries(expected)) assert.equal(classes(name), label, name);
 });
