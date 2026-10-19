@@ -25,6 +25,7 @@ import { listToolsStdio, programEnvironment, splitCommand } from "./stdio.ts";
 import { confined } from "./authority.ts";
 import { stat } from "node:fs/promises";
 import { describeReview, review } from "./review.ts";
+import { replayCommand } from "./replay-command.ts";
 import { notice } from "./notice.ts";
 import { takeSnapshot } from "./snapshot.ts";
 import { track } from "./track.ts";
@@ -41,6 +42,14 @@ const usage = `Usage:
                                                     check fires, or when a tool that changes things has no risk annotation.
                                                     --lockfile=stackduke.lock.json --update --accept-findings
                                                     --summary=<file> (Markdown) --timeout=<seconds> --command="<program> [args]"
+  npm run scan -- replay --before=<git ref> [options] -- <program> [args...]
+  npm run scan -- replay --before=<git ref> [options] <url>
+                                                    Run the cases in stackduke-replay/ through a model twice, with the tools
+                                                    in the lockfile at the ref and with the tools the server lists now, and
+                                                    report how the agent's behaviour moved. No tool is called. Reads the
+                                                    model's key from the environment variable its settings name.
+                                                    --settings=stackduke-replay/replay.json --lockfile=stackduke.lock.json
+                                                    --summary=<file> (Markdown) --json=<file> (every run) --timeout=<seconds>
   npm run scan -- authority <snapshot.json>...      What an agent can do through these servers, in plain words.
   npm run scan -- digest <snapshot-folder>...       The week's changes on the servers saved there, as an email's text.
                                                     --days=7 and --until=YYYY-MM-DD set the period, in UTC.
@@ -78,7 +87,8 @@ const usage = `Usage:
                                                     and open or close an issue for each that needs a person. track then
                                                     takes --sign-ins=<folder>.
 
-Nothing here calls a tool. scan, check, discover and catalog send no credential. check runs the program it is
+Nothing here calls a tool. scan, check, discover and catalog send no credential. replay sends the model key only to
+the model API in its settings, and keeps it from the server's program. check runs the program it is
 given, with this environment, so give it only a server you would run anyway. signed-in reads a token from an environment
 variable and sends it only to that server's fixed address; the token is never printed or saved.
 --save writes the snapshot under data/snapshots/<source>/. history sends GITHUB_TOKEN, if set, to
@@ -187,6 +197,7 @@ async function check(rest: string[]): Promise<number> {
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
   if (command === "check") return check(rest);
+  if (command === "replay") return replayCommand(rest);
   const flags = new Set(rest.filter((value) => value.startsWith("--")));
   const args = rest.filter((value) => !value.startsWith("--"));
 
