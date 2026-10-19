@@ -125,7 +125,7 @@ jobs:
         with:
           persist-credentials: false # keeps the job's token off the disk the server's program can read
       - run: npm ci && npm run build
-      - uses: Stackduke/mcp-scanner@v0 # or a release such as @v0.3.0, or a commit
+      - uses: Stackduke/mcp-scanner@v0 # or a release such as @v0.4.0, or a commit
         with:
           command: node dist/server.js
           comment: "true"
@@ -133,7 +133,7 @@ jobs:
 
 Inputs: `url` or `command` (one of them), `lockfile` (default `stackduke.lock.json`), `working-directory`, `timeout`, `comment` (default `"false"`) and `github-token` (default: the job's own token). The output `result` is `passed`, `failed` or `error`.
 
-- `@v0` follows the latest 0.x release; `@v0.3.0` stays fixed.
+- `@v0` follows the latest 0.x release; `@v0.4.0` stays fixed.
 - The action runs the scanner from its own copy with Node 22.18 or later, and sets up Node 22 only when the runner has nothing recent enough.
 - With `comment: "true"` it posts the summary on the pull request and updates that one comment on later runs, one comment for each lockfile. The default token is enough, given `pull-requests: write`. On a pull request from a fork that token can only read, so the comment fails; the job summary is still written and the check still decides the job.
 - The token is in the environment of the comment step only. The scanner also starts the server's program without GitHub's workflow command files (`GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_OUTPUT`, `GITHUB_STATE`, `GITHUB_STEP_SUMMARY`), so it cannot set variables or a PATH for the later step that holds the token, and without the runner's own tokens, `GITHUB_TOKEN` and `GH_TOKEN` (and in GitLab, `CI_JOB_TOKEN` and the registry and deploy passwords). This narrows what the program can reach; it is not a sandbox. The program runs as the same user on the same machine, as the build step before it did.
@@ -214,7 +214,7 @@ stackduke-mcp-scanner watch --update --server=mcp.stripe.com        # approve a 
 
 [`examples/watch/mcp-watch.yml`](examples/watch/mcp-watch.yml) runs the watch every day with the action in [`watch/action.yml`](watch/action.yml), and [`examples/watch/stackduke.watch.json`](examples/watch/stackduke.watch.json) is a watch file for Stripe's server. The action writes the job summary, fails the job when the watch does not pass, and with `issue: "true"` keeps one issue open per watch file: opened when the watch first fails or cannot check a server, its text replaced on each later run, and closed with a comment once it passes. That needs only the job's own token with `issues: write`. The issue is found by its first line, which names the watch file's path from the repository's root, and by its author: the account behind `github-token`, or `github-actions[bot]` for the job's own token. With a GitHub App's token the author is not found, so use the job's own token, or a personal one. A token for a server goes in the action step's `env:`, so the job's other steps do not hold it.
 
-Inputs: `watchfile` (default `stackduke.watch.json`), `working-directory`, `timeout`, `max-age`, `tracker-data`, `issue` (default `"false"`) and `github-token`. The output `result` is `passed`, `failed` or `error`. The action is used as `Stackduke/mcp-scanner/watch@<release>` from the first release after 0.3.0; until then, `@main` or a commit.
+Inputs: `watchfile` (default `stackduke.watch.json`), `working-directory`, `timeout`, `max-age`, `tracker-data`, `issue` (default `"false"`) and `github-token`. The output `result` is `passed`, `failed` or `error`. The action is used as `Stackduke/mcp-scanner/watch@v0`, which follows the latest 0.x release, or a fixed release such as `@v0.4.0`.
 
 ### Limits of the watch
 

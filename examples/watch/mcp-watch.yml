@@ -26,7 +26,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # From the first release after 0.3.0. Until then, use @main or a commit.
+      # @v0 follows the latest 0.x release. Pin @v0.4.0 or a commit to stay fixed.
       - uses: Stackduke/mcp-scanner/watch@v0
         with:
           issue: "true"
