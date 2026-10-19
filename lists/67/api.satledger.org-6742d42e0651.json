@@ -1,1 +1,1 @@
-{"source":"https://api.satledger.org/mcp","takenAt":"2026-10-16T18:11:49.949Z","server":{"name":"satledger","version":"0.15.7"},"tools":[{"name":"timestamp_receipt","kind":"write","fields":{"title":"65d3fc0d7008c522","description":"21c13d9a7cf85b6c","inputSchema":"8ba7cdee30d77aeb"}}]}
+{"source":"https://api.satledger.org/mcp","takenAt":"2026-10-19T10:04:35.467Z","server":{"name":"satledger","version":"0.18.2"},"tools":[{"name":"timestamp_receipt","kind":"write","fields":{"title":"65d3fc0d7008c522","description":"1c9ad3211393cf1d","inputSchema":"ce0ba7c229441d60"}}]}
