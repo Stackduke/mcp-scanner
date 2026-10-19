@@ -31,6 +31,8 @@ jobs:
         with:
           issue: "true"
         # Only for a server whose entry in the watch file names a tokenVariable. Each token goes
-        # only to the server that names it. Put it in this step, not the job, so no other step has it.
+        # only to the server whose entry names it. Put it on this step, not the job, so the job's
+        # other steps do not hold it. Do not run this on pull_request with tokens set: the watch
+        # file decides where each token goes, and a pull request can change it.
         # env:
         #   STACKDUKE_WATCH_LINEAR_TOKEN: ${{ secrets.STACKDUKE_WATCH_LINEAR_TOKEN }}

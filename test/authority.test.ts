@@ -326,4 +326,10 @@ test("a getter the server marks read-only is not counted as acting on the streng
   assert.deepEqual(groups([{ name: "get_orb", description: "Fetch an orb and publish a new version of it.", ...readOnly }]), [["send", ["get_orb"]]]);
   assert.deepEqual(groups([{ name: "deploy_component", ...readOnly }]), [["write", ["deploy_component"]]]);
   assert.deepEqual(groups([{ name: "getpublishkeys", ...readOnly }]), [["unclear", ["getpublishkeys"]]]);
+  // A tool marked read-only whose description says it destroys is still read the serious way, and disputed.
+  for (const description of ["A tool that deletes files from the workspace.", "Given an ID, permanently deletes the record."]) {
+    const [tool] = all([{ name: "files_tool", description, ...readOnly }]);
+    assert.equal(tool?.kind, "destructive", description);
+    assert.equal(tool?.disputed, true, description);
+  }
 });

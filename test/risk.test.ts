@@ -21,7 +21,7 @@ test("the verb is found by position, so nouns that look like verbs do not mislea
 });
 
 test("where no word qualifies there is no guess, and the description is tried before giving up", () => {
-  assert.deepEqual(labelTool({ name: "wubble_wait_for_request" }), { classes: [], source: "unclassified", basis: [] });
+  assert.deepEqual(labelTool({ name: "wubble_frobnicate_request" }), { classes: [], source: "unclassified", basis: [] });
   const fromDescription = labelTool({ name: "weather", description: "Returns the forecast for a city. Then more text." });
   assert.equal(fromDescription.source, "heuristic");
   assert.deepEqual(fromDescription.classes, ["read"]);
@@ -87,8 +87,8 @@ test("a description is read for what it says the tool does, not for every acting
     "Read the catalog: which agents send data where",
   ];
   for (const description of reads) assert.equal(said(description), "read", description);
-  // No verb this scanner knows: nothing is said, so the tool is not placed by its description.
-  assert.equal(said("Wait for an investigation to settle"), "");
+  // Waiting reads; the thing waited for does not act ("to settle" is said of the investigation).
+  assert.equal(said("Wait for an investigation to settle"), "read");
   // Words that do say what the tool does still count, wherever the sentence puts them.
   const acts: Record<string, string> = {
     "List, create, update or delete issues": "destructive",
@@ -104,6 +104,30 @@ test("a description is read for what it says the tool does, not for every acting
     "List comments and share them with the team": "send",
   };
   for (const [description, label] of Object.entries(acts)) assert.equal(said(description), label, description);
+  // A sentence that does not open by saying the tool reads is read whole, as it always was, so
+  // an acting word anywhere in it counts. Each of these lost its label in a first draft of the rule.
+  const whole: Record<string, string> = {
+    "A tool that deletes files from the workspace": "destructive",
+    "Tool for deleting files": "destructive",
+    "Can be used to delete files": "destructive",
+    "Allows users to delete files": "destructive",
+    "Enables you to delete files": "destructive",
+    "Given a path, deletes the file": "destructive",
+    "When called, permanently deletes the repository": "destructive",
+    "Perform a hard delete of the record": "destructive",
+    "Unpublish an entry to remove it": "destructive",
+    "[Destructive] Deletes a branch": "destructive",
+    "Handles creating, updating and deleting issues": "destructive",
+    "Executes any API call including DELETE operations": "destructive",
+    "Write data via any POST/PATCH/PUT/DELETE operation": "destructive",
+    "Run SQL that may drop tables": "destructive",
+    "Gmail: send an email to a recipient": "send",
+    "Wrapper around the Slack API to send messages": "send",
+    // Opening with a read, a verb joined on by a comma or after "to" still counts.
+    "Fetch a user, update their email": "write",
+    "Fetch the stale records to purge them": "destructive",
+  };
+  for (const [description, label] of Object.entries(whole)) assert.equal(said(description), label, description);
 });
 
 test("a name's acting word used as a thing does not make a reader act", () => {
@@ -114,6 +138,10 @@ test("a name's acting word used as a thing does not make a reader act", () => {
     send_invites: "send", list_and_send_updates: "send",
     // A destructive word is never read as a thing.
     list_pending_deletes: "destructive", purge_old_logs: "destructive",
+    // Only a name that opens with a plain read verb reads the words after it as the thing read.
+    app_deploy: "write", vercel_deploy: "write", app_deploys: "write", bulk_updates: "write", batch_inserts: "write",
+    records_bulk_creates: "write", zap_executes: "write", sheet_values_appends: "write", bot_sends_message: "send",
+    read_write_file: "write", get_or_create_user: "write",
   };
   for (const [name, label] of Object.entries(expected)) assert.equal(classes(name), label, name);
 });

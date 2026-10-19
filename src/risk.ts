@@ -18,7 +18,7 @@ const verbs: Record<Kind, string[]> = {
   destructive: ["delete", "remove", "drop", "destroy", "purge", "truncate", "wipe", "erase", "revoke", "terminate", "kill", "uninstall", "reset", "clear", "prune", "deprovision", "deactivate", "expunge", "nuke"],
   send: ["send", "email", "mail", "notify", "publish", "broadcast", "invite", "sms", "reply", "tweet", "share", "forward"],
   write: ["create", "update", "edit", "set", "add", "write", "insert", "upsert", "modify", "patch", "put", "upload", "deploy", "run", "execute", "exec", "merge", "push", "commit", "move", "rename", "enable", "disable", "start", "stop", "restart", "assign", "approve", "reject", "close", "reopen", "import", "apply", "trigger", "schedule", "book", "cancel", "archive", "post", "submit", "save", "register", "sync", "mark", "pin", "star", "fork", "lock", "unlock", "attach", "link", "unlink", "transfer", "grant", "rotate", "configure", "install", "restore", "rollback", "comment", "label", "dismiss", "store", "remember", "record", "log", "track", "subscribe", "unsubscribe", "rerun", "retry", "pause", "resume", "release", "request", "manage", "toggle", "change", "replace", "copy", "clone", "duplicate", "provision", "launch", "invoke", "call", "place", "open", "accept", "decline", "complete", "claim", "hide", "unhide", "unresolve", "mute", "unmute", "follow", "unfollow", "block", "unblock", "ban", "flag", "vote", "react", "bookmark", "pay", "buy", "purchase", "refund", "charge", "withdraw", "deposit", "donate", "fund", "checkout", "swap", "trade", "bid", "tip", "redeem", "mint", "burn", "stake", "sign", "authorize", "authorise", "impersonate", "seed", "migrate", "scale", "overwrite", "append", "populate", "initialize", "initialise", "init", "bootstrap", "build", "compile", "format", "rebase", "revert", "tag", "untag", "enqueue", "queue", "dispatch", "emit", "fire", "issue", "void", "settle", "capture", "reverse", "allocate", "reserve", "consume", "ingest", "index", "reindex", "train", "finetune", "evict", "flush", "drain", "detach", "disconnect", "connect", "join", "leave", "kick", "promote", "demote", "elevate", "escalate", "suspend", "activate", "expire", "extend", "renew"],
-  read: ["get", "list", "read", "search", "fetch", "find", "query", "lookup", "describe", "show", "view", "check", "retrieve", "count", "export", "download", "inspect", "status", "validate", "analyze", "analyse", "summarize", "summarise", "explain", "compare", "browse", "ask", "watch", "monitor", "preview", "calculate", "estimate", "verify", "test", "ping", "whoami", "info", "detect", "diff", "trace", "explore", "discover", "scan", "audit", "review", "recommend", "suggest", "translate", "extract", "parse", "predict", "score", "rank", "match", "locate", "select", "load", "return", "display"],
+  read: ["get", "list", "read", "search", "fetch", "find", "query", "lookup", "describe", "show", "view", "check", "retrieve", "count", "export", "download", "inspect", "status", "validate", "analyze", "analyse", "summarize", "summarise", "explain", "compare", "browse", "ask", "watch", "monitor", "preview", "calculate", "estimate", "verify", "test", "ping", "whoami", "info", "detect", "diff", "trace", "explore", "discover", "scan", "audit", "review", "recommend", "suggest", "translate", "extract", "parse", "predict", "score", "rank", "match", "locate", "select", "load", "return", "display", "wait"],
 };
 const moneyWords = ["pay", "payment", "refund", "charge", "payout", "invoice", "purchase", "buy", "checkout", "withdraw", "withdrawal", "deposit", "transfer", "fund", "bounty", "billing", "subscription", "order", "price", "wallet", "swap", "trade", "bid", "tip", "donate", "donation", "credit", "coupon", "balance", "funds", "money", "transaction", "settle", "settlement", "mint", "stake"];
 const broadWords = ["sql", "shell", "bash", "command", "cmd", "exec", "execute", "eval", "script", "graphql", "raw", "arbitrary", "cypher", "terminal", "powershell"];
@@ -26,7 +26,10 @@ const broadProperties = ["sql", "command", "cmd", "script", "cypher", "graphql",
 
 // Words that act as verbs at the start of a name and are usually nouns elsewhere:
 // "log_event" writes a log, "get_job_logs" reads some. None of the destructive words is here.
-const nounLike = new Set(["duplicate", "clone", "connect", "pay", "log", "request", "record", "release", "track", "store", "call", "label", "comment", "link", "star", "pin", "fork", "place", "change", "copy", "load", "test", "match", "score", "rank", "review", "trace", "status", "info", "check", "count", "export", "import", "order", "post", "mail", "email", "share", "schedule", "book", "commit", "push", "merge", "run", "query", "search", "view", "show", "diff", "scan", "audit", "tip", "bid", "trade", "swap", "deposit", "transfer", "sync", "save", "lock", "grant", "claim", "start", "stop", "open", "close", "sign", "vote", "block", "follow", "fund", "charge", "refund", "purchase", "watch", "monitor", "preview", "estimate", "select", "reply", "invite", "forward", "broadcast", "publish", "notify", "upload", "download", "install", "restore", "tag", "issue", "queue", "index", "build", "format", "scale", "capture", "reserve", "seed", "credit", "balance", "price", "render", "deploy"]);
+const nounLike = new Set(["duplicate", "clone", "connect", "pay", "log", "request", "record", "release", "track", "store", "call", "label", "comment", "link", "star", "pin", "fork", "place", "change", "copy", "load", "test", "match", "score", "rank", "review", "trace", "status", "info", "check", "count", "export", "import", "order", "post", "mail", "email", "share", "schedule", "book", "commit", "push", "merge", "run", "query", "search", "view", "show", "diff", "scan", "audit", "tip", "bid", "trade", "swap", "deposit", "transfer", "sync", "save", "lock", "grant", "claim", "start", "stop", "open", "close", "sign", "vote", "block", "follow", "fund", "charge", "refund", "purchase", "watch", "monitor", "preview", "estimate", "select", "reply", "invite", "forward", "broadcast", "publish", "notify", "upload", "download", "install", "restore", "tag", "issue", "queue", "index", "build", "format", "scale", "capture", "reserve", "seed", "credit", "balance", "price", "render"]);
+// Words that, inside a name and before another word, name a kind of thing: `get_deploy_component`.
+// First (`deploy_app`) or last (`trigger_deploy`), they act.
+const modifiers = new Set(["deploy"]);
 
 const order: CapabilityClass[] = ["read", "write", "send", "money", "destructive"];
 const acting: Kind[] = ["destructive", "send", "write"];
@@ -54,11 +57,8 @@ const kindOf = (token: string): Kind | null => {
   return null;
 };
 
-/** "updates", "invites": a plural form of a word that writes or sends, as opposed to the word itself. */
-const pluralOfActing = (token: string) => {
-  const kind = kindOf(token);
-  return token.endsWith("s") && (kind === "write" || kind === "send") && !verbs[kind].includes(token);
-};
+/** A verb that reads and is hardly ever a noun: "get", "list", "fetch", not "search" or "check". */
+const plainRead = (token: string | undefined) => token !== undefined && kindOf(token) === "read" && !isIn(token, nounLike);
 
 /** What kind of action a single word names, if it names one. */
 export const actionKind = (token: string): CapabilityClass | null => kindOf(token);
@@ -84,13 +84,17 @@ function propertyNames(schema: unknown): string[] {
 function fromWords(tokens: string[], { inName = true, moneyFrom = tokens }: { inName?: boolean; moneyFrom?: string[] } = {}): { classes: CapabilityClass[]; basis: string[] } {
   const found = new Map<Kind, string>();
   const note = (token: string) => { const kind = kindOf(token); if (kind && !found.has(kind)) found.set(kind, token); };
+  // A name that opens with a plain read verb names what it reads after it: `get_status_updates`
+  // reads updates. The word straight after the verb still acts (`read_write_file`), and so does a
+  // destructive word, or one joined with "and" or "or", anywhere.
+  const readsAThing = inName && plainRead(tokens[0]);
   tokens.forEach((token, index) => {
     const afterConjunction = tokens[index - 1] === "and" || tokens[index - 1] === "or";
     const participle = index > 0 && !afterConjunction && token.length > 4 && token.endsWith("ed");
-    // Past the first word of a name, the plural of a word that changes or sends is a thing, not an
-    // action: `get_status_updates` reads updates. A destructive word still counts wherever it is.
-    const pluralThing = inName && index > 0 && !afterConjunction && pluralOfActing(token);
-    if (afterConjunction || (!participle && !pluralThing && !isIn(token, nounLike))) note(token);
+    const kind = kindOf(token);
+    const partOfThing = !afterConjunction && ((readsAThing && index > 1 && (kind === "write" || kind === "send"))
+      || (inName && index > 0 && index < tokens.length - 1 && modifiers.has(token)));
+    if (afterConjunction || (!participle && !partOfThing && !isIn(token, nounLike))) note(token);
   });
   // Nothing clear anywhere: let a noun-like first word speak, unless it is a plural ("issues", "logs").
   // A description's first word is in a verb's place, so there "Runs" and "Lists" speak too.
@@ -115,46 +119,76 @@ export function nameSuggests(tool: ToolDefinition): CapabilityClass[] {
   return fromWords(words(tool.name)).classes;
 }
 
-/** The first sentence of a description, as words: where the verb usually is. */
-const openingWords = (tool: ToolDefinition) => words((tool.description ?? "").split(/[.\n]/)[0] ?? "").slice(0, 24);
+/** The first sentence of a description, as words, with "," for each comma, semicolon or colon: where the verb usually is. */
+function openingWords(tool: ToolDefinition): string[] {
+  const tokens: string[] = [];
+  for (const part of ((tool.description ?? "").split(/[.\n]/)[0] ?? "").split(/[,;:]/)) {
+    if (tokens.length) tokens.push(",");
+    tokens.push(...words(part));
+  }
+  return tokens.slice(0, 32);
+}
 
 // Words a description may open with before its verb: "Use this to delete", "This tool sends", "Allows you to create".
-const leadIn = new Set(["use", "used", "this", "tool", "it", "to", "you", "can", "will", "may", "allows", "allow", "lets", "let", "helps", "help", "the", "a", "an", "agent", "function", "endpoint", "please", "we", "here"]);
+const leadIn = new Set(["call", "use", "used", "this", "tool", "it", "to", "you", "can", "will", "may", "allows", "allow", "lets", "let", "helps", "help", "the", "a", "an", "agent", "function", "endpoint", "please", "we", "here"]);
 const joiners = new Set(["and", "or", "then", "also"]);
 const objectStarts = new Set(["a", "an", "the", "it", "them", "its", "their", "this", "that", "these", "those", "every", "each", "all", "any", "one", "new", "to", "on", "in", "into", "from", "for", "with", "back", "out", "up"]);
 /** "recursively", "optionally": skipped before a verb. "apply" and "reply" are verbs, so a known verb is never skipped. */
 const adverb = (token: string) => token.endsWith("ly") && kindOf(token) === null;
 
+const joined = (token: string | undefined) => token === "," || (token !== undefined && joiners.has(token));
+// Words after which a destructive verb is said of the tool, whatever opened the sentence: "to delete it", "that removes", "can drop".
+const clauseMarkers = new Set(["to", "that", "which", "who", "can", "will", "may", "might", "could", "would"]);
+/** "published", "compiling": a past or ongoing form, which describes rather than says what is done. */
+const pastOrOngoing = (token: string) => (token.length > 4 && token.endsWith("ed")) || (token.length > 5 && token.endsWith("ing"));
+
 /**
- * The words of a description's opening sentence that say what the tool does: the verbs it opens
- * with ("List, create, update or delete issues"), after a lead-in such as "Use this to", and a verb
- * joined on later ("Fetches the record and deletes it"). The rest of the sentence names what is
- * acted on and its context, where an acting word is a thing or a quality, not what the tool does:
- * "permissions set on", "metadata and published version history", "a deploy component", "by
- * compiling it", "the URL where users can configure it". A word joined on later must be a plain
- * verb: not one that is usually a noun ("and issue"), nor an "-ed" or "-ing" form ("and linked
- * assets", "adding, editing, or removing").
+ * The words of a description's opening sentence to read for what the tool does.
+ *
+ * When the sentence opens, after a lead-in such as "Use this to", with verbs that only read
+ * ("Fetch", "List or get", "Validate"), the rest of it describes the thing read, and an acting
+ * word there is a thing or a quality: "metadata and published version history", "a deploy
+ * component", "by compiling it", "permissions set on", "the URL where users can configure it".
+ * Only a verb joined on still counts ("and deletes it", ", then update it"), and a destructive one
+ * after "to", "that", "can" and the like ("to purge them"). A word joined on must be a plain verb:
+ * not one usually a noun with no object after it ("and issue and scope histories"), nor an "-ed"
+ * or "-ing" form ("and linked assets", "adding, editing, or removing").
+ *
+ * Any other sentence is read whole, as before: "A tool that deletes files", "Tool for deleting
+ * files", "Executes any API call including DELETE". There an "-ed" form past the first word counts
+ * only if it destroys ("and linked assets" does not; "and deleted" does).
  */
 function statedWords(tokens: string[]): string[] {
   let index = 0;
   while (index < tokens.length && (leadIn.has(tokens[index] as string) || adverb(tokens[index] as string))) index += 1;
+  const start = index;
   const stated: string[] = [];
   for (; index < tokens.length; index += 1) {
     const token = tokens[index] as string;
-    if (joiners.has(token)) { if (stated.length) stated.push(token === "or" ? "or" : "and"); continue; }
+    if (joined(token)) { if (stated.length && stated.at(-1) !== "and") stated.push("and"); continue; }
     if (adverb(token) && stated.length) continue;
     if (kindOf(token) === null) break;
+    // "List release notes", "List deploy components": past the first verb, a word that is usually
+    // a thing, or names a kind of one, is that, unless it is joined on ("Search or run").
+    if (stated.length && stated.at(-1) !== "and" && (isIn(token, nounLike) || modifiers.has(token))) break;
     stated.push(token);
   }
+  const opening = stated.filter((token) => token !== "and");
+  if (!(opening.length && opening.every((token) => kindOf(token) === "read"))) {
+    return tokens.slice(start).filter((token, at) => token !== "," && (at === 0 || !(token.length > 4 && token.endsWith("ed")) || kindOf(token) === "destructive"));
+  }
+  while (stated.at(-1) === "and") stated.pop();
   for (; index < tokens.length; index += 1) {
     const token = tokens[index] as string;
+    const kind = kindOf(token);
+    if (kind === null || kind === "read" || pastOrOngoing(token)) continue;
     let before = index - 1;
     while (before >= 0 && adverb(tokens[before] as string)) before -= 1;
-    if (!joiners.has(tokens[before] as string) || kindOf(token) === null) continue;
+    const previous = tokens[before];
+    if (!joined(previous) && !(kind === "destructive" && previous !== undefined && clauseMarkers.has(previous))) continue;
     // A word that is usually a thing counts as a verb when what follows is its object: "and publish
     // a new version", "and share with the team", but not "and issue and scope histories".
     if (isIn(token, nounLike) && !objectStarts.has(tokens[index + 1] as string)) continue;
-    if ((token.length > 4 && token.endsWith("ed")) || (token.length > 5 && token.endsWith("ing"))) continue;
     stated.push("and", token);
   }
   return stated;
@@ -163,7 +197,7 @@ function statedWords(tokens: string[]): string[] {
 /** What a description says the tool does. Money words count anywhere in the opening sentence, beside a verb that acts. */
 function fromDescription(tool: ToolDefinition): { classes: CapabilityClass[]; basis: string[] } {
   const opening = openingWords(tool);
-  return fromWords(statedWords(opening), { inName: false, moneyFrom: opening });
+  return fromWords(statedWords(opening), { inName: false, moneyFrom: opening.filter((token) => token !== ",") });
 }
 
 /** What the opening of the description suggests. The server writes it, so it is evidence of action and never of harmlessness. */

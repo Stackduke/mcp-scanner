@@ -222,7 +222,9 @@ async function watch(rest: string[]): Promise<number> {
   if (data !== undefined && (!data || /^http:/i.test(data))) { console.error("--tracker-data takes an https:// address or a folder."); return 2; }
 
   const watchfilePath = options.get("watchfile") || watchfileName;
-  const relative = path.relative(process.cwd(), path.resolve(watchfilePath));
+  // In GitHub Actions the path is from the repository's root, so two watch files in different
+  // folders keep separate issues.
+  const relative = path.relative(process.env.GITHUB_WORKSPACE || process.cwd(), path.resolve(watchfilePath));
   const shownWatchfile = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : watchfilePath;
   const summaryPath = options.get("summary");
   const finish = async (markdown: string, code: number) => {
@@ -248,6 +250,10 @@ async function watch(rest: string[]): Promise<number> {
     return 2;
   }
 
+  if (!watchfile.servers.length && !added.length) {
+    return finish(describeWatchfileProblem(shownWatchfile, "it lists no servers, so there is nothing to compare"), 2);
+  }
+
   // The servers this run looks at: those added, those named with --server, or all of them.
   let chosen: WatchedServer[];
   if (added.length) {
@@ -257,6 +263,7 @@ async function watch(rest: string[]): Promise<number> {
       if (!address.ok) { console.error(`--add=${printable(text, 80)} is refused: ${address.reason}.`); return 2; }
       if (watchfile.servers.some((server) => server.url === address.url) || chosen.some((server) => server.url === address.url)) { console.error("A server given with --add is already in the watch file, or was given twice. To approve its tools again, use --update --server=<its host>."); return 2; }
       if (tokenVariable && !address.url.startsWith("https:")) { console.error("A token is only sent over https."); return 2; }
+      if (tokenVariable && watchfile.servers.some((server) => server.tokenVariable === tokenVariable)) { console.error("Another server in the watch file already uses that --token-variable. Each token goes to one server only."); return 2; }
       chosen.push({ url: address.url, ...(tokenVariable ? { tokenVariable } : {}), tools: null });
     }
     watchfile = { servers: [...watchfile.servers, ...chosen] };

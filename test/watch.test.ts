@@ -92,6 +92,8 @@ test("the watch file is read strictly, and written back sorted and the same", ()
     [file({ [privateServer]: { tokenVariable: "GITHUB_TOKEN" } }), /tokenVariable of server 1 must be named STACKDUKE_WATCH_/],
     [file({ [privateServer]: { tokenVariable: "STACKDUKE_SCAN_GITHUB_TOKEN" } }), /STACKDUKE_WATCH_/],
     [file({ [stripe]: { tools: [{ name: "a" }, { name: "a" }] } }), /in server 1/],
+    // One variable, one address: a later entry cannot borrow another server's token.
+    [file({ [privateServer]: { tokenVariable: "STACKDUKE_WATCH_PRIVATE_TOKEN" }, "https://elsewhere.test/mcp": { tokenVariable: "STACKDUKE_WATCH_PRIVATE_TOKEN" } }), /server 2 names the same tokenVariable/],
   ];
   for (const [given, reason] of refused) {
     const result = readWatchfile(given);
@@ -161,6 +163,13 @@ test("a missing or refused token, or a server that wants one, is a sign-in probl
   assert.ok(!open.checked && open.code === 3 && /asks for a sign-in.*tokenVariable/.test(open.why));
   assert.equal(exitCode([missing, refused, open]), 3);
 
+  // A token is never sent over plain http, even to this machine.
+  const loopback = "http://127.0.0.1:9/mcp";
+  const local = fakeNetwork({ servers: { [loopback]: { tools: [] } } });
+  const plain = only(await run([{ url: loopback, tokenVariable: "STACKDUKE_WATCH_PRIVATE_TOKEN", tools: null }], local, { STACKDUKE_WATCH_PRIVATE_TOKEN: token }));
+  assert.ok(!plain.checked);
+  assert.equal(local.sent.length, 0);
+
   const insecure = only(await run([{ url: privateServer, tokenVariable: "STACKDUKE_WATCH_PRIVATE_TOKEN", tools: null }], network, { STACKDUKE_WATCH_PRIVATE_TOKEN: token, NODE_TLS_REJECT_UNAUTHORIZED: "0" }));
   assert.ok(!insecure.checked && insecure.code === 4 && /certificate checking/.test(insecure.why));
 });
@@ -181,6 +190,10 @@ test("a stale tracker copy is not used, and the server is reported as not checke
   assert.match(summary, /\*\*not checked\*\*/);
   assert.match(summary, /cannot say whether its tools changed/);
   assert.match(summary, /A server that was not checked is not known to be unchanged/);
+
+  const ahead = fakeNetwork({ files: trackerWith(trackerFiles("stripe", stripe, [readNotes], { lastListed: "2026-10-19T18:00:00.000Z" })) });
+  const future = only(await run([{ url: stripe, tools: approved([readNotes]) }], ahead));
+  assert.ok(!future.checked && /time in the future/.test(future.why));
 
   const never = fakeNetwork({ files: { "feed.json": feedOf({ ...trackerFiles("stripe", stripe, []).entry, lastListed: undefined }) } });
   const unlisted = only(await run([{ url: stripe, tools: null }], never));
@@ -211,6 +224,10 @@ test("a feed and saved list that do not agree are not used", async () => {
     const outcome = only(await run([{ url: stripe, tools: null }], fakeNetwork({ files })));
     assert.match(outcome.checked ? "" : outcome.why, reason, label);
   }
+  // A tool the server lists twice is named `name#variant` in the feed and twice in the saved list: that agrees.
+  const twice = trackerFiles("stripe", stripe, [readNotes, { ...readNotes, description: "Other." }], { names: ["list_notes", "list_notes#repeat-2"] });
+  const repeated = only(await run([{ url: stripe, tools: null }], fakeNetwork({ files: trackerWith(twice) })));
+  assert.ok(repeated.checked && repeated.repeated.length === 1, "read, and failed for the repeated name rather than left unread");
   // A vendor id that could reach another path is not followed.
   const odd = fakeNetwork({ files: { "feed.json": feedOf({ ...entry, vendor: "../../main" }) } });
   const outcome = only(await run([{ url: stripe, tools: null }], odd));
@@ -339,6 +356,9 @@ test("the watch command: start a watch file, pass, fail on a change, and approve
   const started = await command(["--update", "--add=https://mcp.example.com/mcp", using], folder);
   assert.equal(started.code, 0, started.stdout + started.stderr);
   assert.match(started.stdout, /watch file updated/);
+  assert.match(started.stdout, /\| approved now \(1 tool\) \|/);
+  assert.match(started.stdout, /What was approved:/);
+  assert.doesNotMatch(started.stdout, /nothing approved yet/);
   const watchfile = await readFile(path.join(folder, "stackduke.watch.json"), "utf8");
   assert.ok(readWatchfile(watchfile).ok);
 
@@ -364,6 +384,12 @@ test("the watch command: start a watch file, pass, fail on a change, and approve
   const unset = await command([using, "--watchfile=other.json"], folder);
   assert.equal(unset.code, 3);
   assert.match(unset.stdout, /`STACKDUKE_WATCH_PRIVATE_TOKEN` is not set for this run/);
+
+  await writeFile(path.join(folder, "empty.json"), writeWatchfile({ servers: [] }));
+  const empty = await command([using, "--watchfile=empty.json"], folder);
+  assert.equal(empty.code, 2);
+  assert.match(empty.stdout, /lists no servers/);
+  assert.equal((await command(["--update", "--add=https://elsewhere.test/mcp", "--token-variable=STACKDUKE_WATCH_PRIVATE_TOKEN", using, "--watchfile=other.json"], folder)).code, 2, "a variable already in use");
 
   await writeFile(path.join(folder, "broken.json"), "{");
   const broken = await command([using, "--watchfile=broken.json"], folder);

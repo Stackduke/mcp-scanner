@@ -88,6 +88,10 @@ export function readWatchfile(text: string): WatchfileRead {
     if (entry.tokenVariable !== undefined && !(typeof entry.tokenVariable === "string" && tokenVariablePattern.test(entry.tokenVariable))) {
       return { ok: false, reason: `the tokenVariable of ${at} must be named STACKDUKE_WATCH_ and capital letters, digits or _` };
     }
+    // Each variable goes with one address, so an entry added later cannot borrow another server's token.
+    if (typeof entry.tokenVariable === "string" && servers.some((server) => server.tokenVariable === entry.tokenVariable)) {
+      return { ok: false, reason: `${at} names the same tokenVariable as a server before it; each token goes to one server only` };
+    }
     let tools: LockedTool[] | null = null;
     if (entry.tools !== undefined) {
       if (!Array.isArray(entry.tools)) return { ok: false, reason: `the tools of ${at} are not a list` };
@@ -189,7 +193,12 @@ function readFeed(text: string): FeedRead {
 }
 
 const hour = 3_600_000;
-const sameNames = (a: string[], b: string[]) => a.length === b.length && [...a].sort().every((name, index) => name === [...b].sort()[index]);
+const sameNames = (a: string[], b: string[]) => {
+  const [left, right] = [[...a].sort(), [...b].sort()];
+  return left.length === right.length && left.every((name, index) => name === right[index]);
+};
+/** The feed names a tool listed more than once `name#variant`; the saved list repeats the plain name. */
+const baseName = (shown: string) => shown.replace(/#.*$/, "");
 
 type Copy = { ok: true; tools: ToolDefinition[]; server?: Snapshot["server"]; listedAt: string; note?: string } | { ok: false; why: string };
 
@@ -219,7 +228,7 @@ async function trackerCopy(entry: FeedEntry, read: (file: string) => Promise<Fet
   // Both files come from the same run of the tracker only if these agree. A cache can serve one
   // file from before a run and the other from after it.
   const savedAt = Date.parse(snapshot.takenAt);
-  const disagree = (entry.names !== null && !sameNames(definitions.map((tool) => shownName(tool)), entry.names))
+  const disagree = (entry.names !== null && !sameNames(definitions.map((tool) => shownName(tool)), entry.names.map(baseName)))
     || (entry.tools !== undefined && entry.tools !== definitions.length)
     || savedAt > Date.parse(entry.lastListed) + 60_000
     || (entry.latestChange !== undefined && savedAt < Date.parse(entry.latestChange) - 60_000);
@@ -380,7 +389,7 @@ function serverOption(url: string, urls: string[]): string {
   return urls.filter((other) => hostOf(other) === host).length > 1 ? "<its address in the watch file>" : shownSource(host);
 }
 
-const at = (iso: string) => `${day(iso)}, ${iso.slice(11, 16)} UTC`;
+const at = (time: string) => { const iso = new Date(time).toISOString(); return `${day(iso)}, ${iso.slice(11, 16)} UTC`; };
 
 function readFrom(via: Via | null): string {
   if (!via) return "the Stackduke tracker";
@@ -388,9 +397,10 @@ function readFrom(via: Via | null): string {
   return via.tokenVariable ? `the server itself, with \`${via.tokenVariable}\`` : "the server itself, with no credential";
 }
 
-function resultOf(outcome: ServerOutcome): string {
+function resultOf(outcome: ServerOutcome, written: boolean): string {
   if (!outcome.checked) return "**not checked**";
   const { result } = outcome;
+  if (written && !result.passed) return `approved now (${plural(result.toolCount, "tool")})`;
   if (!result.lockfileFound) return "**nothing approved yet**";
   const drift = result.diff.added.length + result.diff.removed.length + result.diff.changed.length;
   const parts = [
@@ -425,7 +435,7 @@ export function describeWatch(outcomes: ServerOutcome[], { watchfilePath, update
   } else {
     lines.push(`Compared the tools of ${plural(outcomes.length, "MCP server")} this repository's agents connect to with ${file}.`, "");
     lines.push("| Server | Tools read from | Result |", "| --- | --- | --- |");
-    for (const outcome of outcomes) lines.push(`| ${nameOf(outcome.url)} | ${readFrom(outcome.via)} | ${resultOf(outcome)} |`);
+    for (const outcome of outcomes) lines.push(`| ${nameOf(outcome.url)} | ${readFrom(outcome.via)} | ${resultOf(outcome, update === "written")} |`);
     lines.push("");
   }
 
@@ -440,7 +450,7 @@ export function describeWatch(outcomes: ServerOutcome[], { watchfilePath, update
     const { result } = outcome;
     const rows = changeRows(result.diff);
     if (rows.length) {
-      lines.push(result.lockfileFound ? "What changed since the tools were approved:" : "Tools it lists, none approved yet:", "");
+      lines.push(update === "written" ? (result.lockfileFound ? "What was approved, since the tools approved before:" : "What was approved:") : result.lockfileFound ? "What changed since the tools were approved:" : "Tools it lists, none approved yet:", "");
       lines.push(...listOf(result.lockfileFound ? rows : rows.map((row) => row.replace(": added; ", ": ")), more), "");
     }
     const problems = problemRows(result);
