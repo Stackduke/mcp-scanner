@@ -7,6 +7,7 @@ import { diffSnapshots } from "./diff.ts";
 import { writeWhole } from "./files.ts";
 import { readLockfile, writeLockfile } from "./lockfile.ts";
 import { defaultKeyVariable, makeAdapter, sendableName } from "./models.ts";
+import type { Provider } from "./models.ts";
 import { runReplay } from "./replay.ts";
 import { loadReplay, sha256 } from "./replay-cases.ts";
 import { measure } from "./replay-measures.ts";
@@ -25,6 +26,11 @@ import type { ToolDefinition } from "./types.ts";
  * arguments, settings or cases are wrong; 3 the server asks for a sign-in; 4 the server could
  * not be listed, or the model API failed, or the job hit its cap of model calls.
  */
+const ownHost: Record<Provider, (host: string) => boolean> = {
+  anthropic: (host) => host === "api.anthropic.com",
+  "chat-completions": (host) => host === "api.openai.com",
+  "bedrock-converse": (host) => /^bedrock-runtime(?:-fips)?\.[a-z0-9-]+\.amazonaws\.com$/.test(host),
+};
 const isLoopback = (host: string) => host === "localhost" || /^127(?:\.\d{1,3}){3}$/.test(host) || host === "[::1]";
 // Keys for the model APIs are kept from the server's program, as the CI tokens already are.
 const modelKeyVariables = Object.values(defaultKeyVariable);
@@ -50,7 +56,7 @@ export async function replayCommand(rest: string[]): Promise<number> {
   const positional: string[] = [];
   for (const item of before) {
     if (!item.startsWith("--")) { positional.push(item); continue; }
-    const match = /^--(settings|lockfile|before|summary|json|timeout|command)=(.*)$/s.exec(item);
+    const match = /^--(settings|lockfile|before|summary|json|timeout|command|allow-host)=(.*)$/s.exec(item);
     if (!match || options.has(match[1] as string)) { console.error(`replay does not take ${item.split("=")[0]}, or took it twice.`); return 2; }
     options.set(match[1] as string, match[2] as string);
   }
@@ -83,6 +89,15 @@ export async function replayCommand(rest: string[]): Promise<number> {
   const apiKey = process.env[keyVariable] || undefined;
   const localServer = settings.provider === "chat-completions" && settings.baseUrl !== undefined && isLoopback(new URL(settings.baseUrl).hostname);
   if (!apiKey && !localServer) { console.error(`Set ${keyVariable} in the environment to the key for ${settings.provider}. It is read from there only, and never printed or stored.`); return 2; }
+  // The settings file comes with the branch being replayed. A key goes to an address other than the
+  // provider's own, or this machine, only when the person running replay names that host.
+  if (settings.baseUrl) {
+    const host = new URL(settings.baseUrl).hostname;
+    if (!isLoopback(host) && !ownHost[settings.provider](host) && options.get("allow-host") !== host) { console.error(`The settings send the model key to ${printable(host, 100)}, which is not ${settings.provider}'s own address. If that is intended, add --allow-host=${printable(host, 100)}.`); return 2; }
+  }
+  const runs = loaded.cases.length * 2 * settings.runsPerSide;
+  const maxModelCalls = settings.maxModelCalls ?? runs * 4;
+  if (maxModelCalls < runs * 2) { console.error(`maxModelCalls (${maxModelCalls}) is under two model calls a run for ${runs} runs. Any run with a tool call takes two, so the job would stop part way and report nothing. Raise it to at least ${runs * 2}, or leave it out for ${runs * 4}.`); return 2; }
 
   const lockfilePath = options.get("lockfile") || "stackduke.lock.json";
   const relative = path.relative(process.cwd(), path.resolve(lockfilePath));
@@ -111,17 +126,17 @@ export async function replayCommand(rest: string[]): Promise<number> {
   if (hashes.before === hashes.after) { console.log(`No tool definition differs from the lockfile at ${printable(ref)}, so nothing was replayed and no model was called.`); return 0; }
 
   const adapter = makeAdapter({ provider: settings.provider, model: settings.model, ...(settings.baseUrl ? { baseUrl: settings.baseUrl } : {}), ...(settings.region ? { region: settings.region } : {}), ...(apiKey ? { apiKey } : {}), inference: settings.inference, providerFields: settings.providerFields });
-  const total = loaded.cases.length * 2 * settings.runsPerSide;
-  console.error(`Replaying ${loaded.cases.length} case(s), ${settings.runsPerSide} runs a side, ${total} runs in all, with ${settings.provider} ${printable(settings.model, 80)}. At most ${settings.maxModelCalls} model calls.`);
+  const total = runs;
+  console.error(`Replaying ${loaded.cases.length} case(s), ${settings.runsPerSide} runs a side, ${total} runs in all, with ${settings.provider} ${printable(settings.model, 80)}. At most ${maxModelCalls} model calls.`);
   let result: Awaited<ReturnType<typeof runReplay>>;
   try {
-    result = await runReplay({ adapter, settings, systemPrompt: loaded.systemPrompt, cases: loaded.cases, tools, onRunDone: (done) => { if (done % 10 === 0 || done === total) console.error(`  ${done} of ${total} runs done`); } });
+    result = await runReplay({ adapter, settings: { ...settings, maxModelCalls }, systemPrompt: loaded.systemPrompt, cases: loaded.cases, tools, onRunDone: (done) => { if (done % 10 === 0 || done === total) console.error(`  ${done} of ${total} runs done`); } });
   } catch (error) {
     console.error(`The replay stopped and reports nothing: ${printable(error instanceof Error ? error.message : "the model API failed", 300)}.`);
     return 4;
   }
 
-  const measured = measure(result.runs, loaded.cases, tools, settings, loaded.rules);
+  const measured = measure(result.runs, loaded.cases, tools, settings, loaded.rules, loaded.systemPrompt);
   const diff = diffSnapshots(takeSnapshot("before", beforeTools, undefined, ""), takeSnapshot("after", afterTools, undefined, ""));
   const changes = {
     added: diff.added.map((tool) => tool.name),

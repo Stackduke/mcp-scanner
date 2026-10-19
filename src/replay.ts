@@ -32,14 +32,14 @@ export interface RunRecord {
   answer: string;
   steps: number;
   outOfSteps: boolean;
-  /** Every tool output the model was given in this run. */
-  received: Array<{ tool: string; text: string }>;
+  /** Every tool output the model was given in this run, and the model turn that asked for it. */
+  received: Array<{ tool: string; text: string; step: number }>;
   usage: { input: number; output: number };
 }
 
 export interface ReplayJob {
   adapter: ModelAdapter;
-  settings: Pick<ReplaySettings, "runsPerSide" | "maxSteps" | "maxModelCalls" | "concurrency">;
+  settings: Pick<ReplaySettings, "runsPerSide" | "maxSteps" | "concurrency"> & { maxModelCalls: number };
   systemPrompt: string;
   cases: ReplayCase[];
   tools: Record<Side, ToolDefinition[]>;
@@ -67,8 +67,8 @@ const outputText = (output: unknown) => (typeof output === "string" ? output : J
 
 /** The canned output for one call, or null when the case has none for it. */
 export function cannedOutput(replayCase: ReplayCase, call: { name: string; input: unknown }): string | null {
-  const outputs = replayCase.outputs[call.name];
-  if (!outputs) return null;
+  if (!Object.hasOwn(replayCase.outputs, call.name)) return null;
+  const outputs = replayCase.outputs[call.name] as ReplayCase["outputs"][string];
   const args = typeof call.input === "object" && call.input !== null && !Array.isArray(call.input) ? (call.input as Record<string, unknown>) : {};
   const match = outputs.matches.find((entry) => Object.entries(entry.when).every(([key, value]) => key in args && canonical(args[key]) === canonical(value)));
   if (match) return outputText(match.output);
@@ -118,7 +118,7 @@ export async function runReplay(job: ReplayJob): Promise<ReplayResult> {
         const canned = known ? cannedOutput(replayCase, call) : null;
         record.calls.push({ tool: call.name, input: call.input, inputText: call.inputText, step: record.steps, scripted: canned !== null, known });
         const text = !known ? noSuchTool : canned ?? noOutput;
-        record.received.push({ tool: call.name, text });
+        record.received.push({ tool: call.name, text, step: record.steps });
         return { id: call.id, name: call.name, text };
       });
       turns.push({ role: "results", results });

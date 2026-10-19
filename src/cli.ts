@@ -50,6 +50,7 @@ const usage = `Usage:
                                                     model's key from the environment variable its settings name.
                                                     --settings=stackduke-replay/replay.json --lockfile=stackduke.lock.json
                                                     --summary=<file> (Markdown) --json=<file> (every run) --timeout=<seconds>
+                                                    --allow-host=<host> (needed when the settings send the key elsewhere)
   npm run scan -- authority <snapshot.json>...      What an agent can do through these servers, in plain words.
   npm run scan -- digest <snapshot-folder>...       The week's changes on the servers saved there, as an email's text.
                                                     --days=7 and --until=YYYY-MM-DD set the period, in UTC.
@@ -88,7 +89,8 @@ const usage = `Usage:
                                                     takes --sign-ins=<folder>.
 
 Nothing here calls a tool. scan, check, discover and catalog send no credential. replay sends the model key only to
-the model API in its settings, and keeps it from the server's program. check runs the program it is
+the provider's own address, this machine, or a host named with --allow-host, and leaves it out of the server program's
+environment (which is not a sandbox). check runs the program it is
 given, with this environment, so give it only a server you would run anyway. signed-in reads a token from an environment
 variable and sends it only to that server's fixed address; the token is never printed or saved.
 --save writes the snapshot under data/snapshots/<source>/. history sends GITHUB_TOKEN, if set, to

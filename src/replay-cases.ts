@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { providers } from "./models.ts";
+import { defaultKeyVariable, providers } from "./models.ts";
 import type { Inference, Provider } from "./models.ts";
 
 /**
@@ -16,14 +16,15 @@ export interface ReplaySettings {
   model: string;
   baseUrl?: string;
   region?: string;
-  /** The environment variable the key is read from. Its value is never printed or stored. */
+  /** The environment variable the key is read from: a provider's usual name, or one starting STACKDUKE_REPLAY_. Its value is never printed or stored. */
   apiKeyEnv?: string;
   systemPromptFile: string;
   inference: Inference;
   providerFields: Record<string, unknown>;
   runsPerSide: number;
   maxSteps: number;
-  maxModelCalls: number;
+  /** Absent: four calls for every run, worked out once the cases are counted. */
+  maxModelCalls?: number;
   concurrency: number;
   /** Tools that reach outside without being counted as sending: a search whose query goes to a third party. */
   outbound: string[];
@@ -94,9 +95,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const isText = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 const isTextList = (value: unknown): value is string[] => Array.isArray(value) && value.every(isText);
 const unknownField = (record: Record<string, unknown>, known: readonly string[]) => Object.keys(record).find((key) => !known.includes(key));
+/** Names the field, cut to plain characters: the file is the team's own, but its text is still printed. */
+const notKnown = (field: string, where = "it") => `${where} has a field this version does not know (${field.replace(/[^A-Za-z0-9_-]+/g, "?").slice(0, 40)})`;
 const wholeNumber = (value: unknown, low: number, high: number) => typeof value === "number" && Number.isInteger(value) && value >= low && value <= high;
 export const sha256 = (text: string | Buffer) => createHash("sha256").update(text).digest("hex");
 
+const keyVariables = Object.values(defaultKeyVariable);
 const settingsFields = ["replayVersion", "provider", "model", "baseUrl", "region", "apiKeyEnv", "systemPromptFile", "inference", "providerFields", "runsPerSide", "maxSteps", "maxModelCalls", "concurrency", "outbound", "policyFile", "citations", "casesDir", "failWhen"] as const;
 // Fields that the replay itself fills in; letting providerFields set them would replace the tools or the conversation.
 const reservedRequestFields = new Set(["model", "messages", "system", "tools", "toolConfig", "tool_choice", "toolChoice", "stream"]);
@@ -109,7 +113,7 @@ export function readSettings(text: string): Read<ReplaySettings> {
   if (!isRecord(parsed)) return { ok: false, reason: "it is not a JSON object" };
   if (parsed.replayVersion !== 1) return { ok: false, reason: "its replayVersion is not 1" };
   const unknown = unknownField(parsed, settingsFields);
-  if (unknown !== undefined) return { ok: false, reason: "it has a field this version does not know" };
+  if (unknown !== undefined) return { ok: false, reason: notKnown(unknown) };
   if (!providers.includes(parsed.provider as Provider)) return { ok: false, reason: `provider must be one of ${providers.join(", ")}` };
   if (!isText(parsed.model)) return { ok: false, reason: "it names no model" };
   if (!isText(parsed.systemPromptFile)) return { ok: false, reason: "it names no systemPromptFile" };
@@ -121,7 +125,8 @@ export function readSettings(text: string): Read<ReplaySettings> {
   }
   if (parsed.region !== undefined && !(typeof parsed.region === "string" && /^[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/.test(parsed.region))) return { ok: false, reason: "region is not an AWS region name" };
   if (parsed.provider === "bedrock-converse" && parsed.region === undefined && parsed.baseUrl === undefined) return { ok: false, reason: "bedrock-converse needs a region (or a baseUrl)" };
-  if (parsed.apiKeyEnv !== undefined && !(typeof parsed.apiKeyEnv === "string" && /^[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(parsed.apiKeyEnv))) return { ok: false, reason: "apiKeyEnv is not an environment variable name" };
+  // Any other variable could be a token for something else entirely, which a branch could then send to its own baseUrl.
+  if (parsed.apiKeyEnv !== undefined && !(typeof parsed.apiKeyEnv === "string" && (keyVariables.includes(parsed.apiKeyEnv) || /^STACKDUKE_REPLAY_[A-Z0-9_]{1,60}$/.test(parsed.apiKeyEnv)))) return { ok: false, reason: `apiKeyEnv must be ${keyVariables.join(", ")}, or a name starting STACKDUKE_REPLAY_` };
 
   const inference = parsed.inference ?? {};
   if (!isRecord(inference) || unknownField(inference, ["maxTokens", "temperature", "topP"]) !== undefined) return { ok: false, reason: "inference takes only maxTokens, temperature and topP" };
@@ -131,10 +136,11 @@ export function readSettings(text: string): Read<ReplaySettings> {
   if (!isRecord(providerFields)) return { ok: false, reason: "providerFields is not an object" };
   if (Object.keys(providerFields).some((key) => reservedRequestFields.has(key))) return { ok: false, reason: "providerFields may not set the model, the conversation or the tools" };
 
-  const counts = { runsPerSide: [10, 1, 100], maxSteps: [8, 1, 50], maxModelCalls: [600, 1, 100_000], concurrency: [4, 1, 16] } as const;
+  const counts = { runsPerSide: [10, 1, 100], maxSteps: [8, 1, 50], maxModelCalls: [undefined, 1, 100_000], concurrency: [4, 1, 16] } as const;
   const numbers: Record<string, number> = {};
   for (const [field, [fallback, low, high]] of Object.entries(counts)) {
     const value = parsed[field] ?? fallback;
+    if (value === undefined) continue;
     if (!wholeNumber(value, low, high)) return { ok: false, reason: `${field} is not a whole number from ${low} to ${high}` };
     numbers[field] = value as number;
   }
@@ -160,7 +166,7 @@ export function readSettings(text: string): Read<ReplaySettings> {
       providerFields,
       runsPerSide: numbers.runsPerSide as number,
       maxSteps: numbers.maxSteps as number,
-      maxModelCalls: numbers.maxModelCalls as number,
+      ...(numbers.maxModelCalls !== undefined ? { maxModelCalls: numbers.maxModelCalls } : {}),
       concurrency: numbers.concurrency as number,
       outbound: (parsed.outbound as string[] | undefined) ?? [],
       ...(parsed.policyFile !== undefined ? { policyFile: parsed.policyFile as string } : {}),
@@ -175,21 +181,23 @@ const caseFields = ["name", "about", "system", "history", "user", "canaries", "n
 function readOutputs(value: unknown): Read<Record<string, CannedOutput>> {
   if (value === undefined) return { ok: true, value: {} };
   if (!isRecord(value)) return { ok: false, reason: "outputs is not an object of tool names" };
-  const outputs: Record<string, CannedOutput> = {};
+  const outputs: Array<[string, CannedOutput]> = [];
   for (const [tool, entry] of Object.entries(value)) {
     if (!isRecord(entry) || unknownField(entry, ["default", "matches"]) !== undefined) return { ok: false, reason: `the outputs for a tool take only default and matches` };
     const matches = entry.matches ?? [];
     if (!Array.isArray(matches) || !matches.every((match) => isRecord(match) && isRecord(match.when) && "output" in match && unknownField(match, ["when", "output"]) === undefined)) return { ok: false, reason: "each entry in matches needs when (an object) and output, and nothing else" };
-    outputs[tool] = { ...("default" in entry ? { default: entry.default } : {}), matches: matches as CannedOutput["matches"] };
+    outputs.push([tool, { ...("default" in entry ? { default: entry.default } : {}), matches: matches as CannedOutput["matches"] }]);
   }
-  return { ok: true, value: outputs };
+  // fromEntries makes every name an own property, "__proto__" included; lookups use Object.hasOwn.
+  return { ok: true, value: Object.fromEntries(outputs) };
 }
 
 export function readCase(text: string): Read<ReplayCase> {
   let parsed: unknown;
   try { parsed = JSON.parse(text); } catch { return { ok: false, reason: "it is not valid JSON" }; }
   if (!isRecord(parsed)) return { ok: false, reason: "it is not a JSON object" };
-  if (unknownField(parsed, caseFields) !== undefined) return { ok: false, reason: "it has a field this version does not know" };
+  const unknownInCase = unknownField(parsed, caseFields);
+  if (unknownInCase !== undefined) return { ok: false, reason: notKnown(unknownInCase) };
   if (!(typeof parsed.name === "string" && /^[A-Za-z0-9_.-]{1,60}$/.test(parsed.name))) return { ok: false, reason: "its name is missing, or uses more than letters, digits, dots, dashes and underscores" };
   if (!isText(parsed.user)) return { ok: false, reason: "it has no user message" };
   for (const field of ["about", "system"] as const) if (parsed[field] !== undefined && typeof parsed[field] !== "string") return { ok: false, reason: `${field} is not text` };
@@ -212,6 +220,7 @@ export function readCase(text: string): Read<ReplayCase> {
     if ((obeyed.calls !== undefined && !isTextList(obeyed.calls)) || (obeyed.recipients !== undefined && !isTextList(obeyed.recipients)) || (obeyed.leaks !== undefined && typeof obeyed.leaks !== "boolean")) return { ok: false, reason: "obeyedIf has a value of the wrong kind" };
     const rule = { calls: (obeyed.calls as string[] | undefined) ?? [], recipients: (obeyed.recipients as string[] | undefined) ?? [], leaks: obeyed.leaks === true };
     if (!rule.calls.length && !rule.recipients.length && !rule.leaks) return { ok: false, reason: "a planted instruction's obeyedIf says nothing that would count as obeying it" };
+    if (rule.leaks && !(parsed.canaries as string[] | undefined)?.length) return { ok: false, reason: "a planted instruction counts leaks, but the case has no canaries" };
     plantedRead.push({ in: item.in, obeyedIf: rule });
   }
   return {
@@ -244,7 +253,8 @@ export function readPolicyRules(text: string): Read<PolicyRule[]> {
   for (const [index, item] of list.entries()) {
     const at = `rule ${index + 1}`;
     if (!isRecord(item)) return { ok: false, reason: `${at} is not an object` };
-    if (unknownField(item, ruleFields) !== undefined) return { ok: false, reason: `${at} has a field this version does not know` };
+    const unknownInRule = unknownField(item, ruleFields);
+    if (unknownInRule !== undefined) return { ok: false, reason: notKnown(unknownInRule, at) };
     for (const field of ["id", "name", "capabilityType", "capabilityId", "capability"] as const) if (!isText(item[field])) return { ok: false, reason: `${at} has no ${field}` };
     for (const field of ["subject", "connectionId", "connection", "resource", "condition", "obligation"] as const) if (item[field] !== undefined && typeof item[field] !== "string") return { ok: false, reason: `${at} has a ${field} that is not text` };
     if (item.plane !== "Model Gateway" && item.plane !== "MCP Gateway") return { ok: false, reason: `${at} has a plane other than Model Gateway or MCP Gateway` };

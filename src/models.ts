@@ -102,7 +102,7 @@ async function post(config: AdapterConfig, fetchImpl: typeof fetch, url: string,
   try {
     response = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body), redirect: "error", signal: AbortSignal.timeout(config.timeoutMs ?? 120_000) });
   } catch (error) {
-    throw new ModelError(`the request to the model API failed (${hide(printable(error instanceof Error ? error.message : "no reason given", 160))})`, true);
+    throw new ModelError(`the request to the model API failed (${printable(hide(error instanceof Error ? error.message : "no reason given"), 160)})`, true);
   }
   const text = await response.text();
   if (text.length > largestReply) throw new ModelError("the model API's reply was larger than a reply should be", false);
@@ -110,7 +110,8 @@ async function post(config: AdapterConfig, fetchImpl: typeof fetch, url: string,
   try { parsed = JSON.parse(text); } catch { /* reported below */ }
   if (!response.ok) {
     const said = isRecord(parsed) ? (isRecord(parsed.error) ? parsed.error.message : parsed.message ?? parsed.Message) : undefined;
-    const why = typeof said === "string" ? `: ${hide(printable(said, 200))}` : "";
+    // The key is taken out before the text is cut, so a cut cannot leave part of it behind.
+    const why = typeof said === "string" ? `: ${printable(hide(said), 200)}` : "";
     const retryAfter = Number(response.headers.get("retry-after"));
     const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
     throw new ModelError(`the model API answered HTTP ${response.status}${why}`, retryable, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : undefined);
@@ -136,7 +137,7 @@ function anthropic(config: AdapterConfig, fetchImpl: typeof fetch): ModelAdapter
         max_tokens: config.inference.maxTokens ?? 1024,
         ...(system ? { system } : {}),
         messages,
-        tools: tools.map((tool) => ({ name: tool.name, ...(tool.description ? { description: tool.description } : {}), input_schema: objectSchema(tool.inputSchema) })),
+        ...(tools.length ? { tools: tools.map((tool) => ({ name: tool.name, ...(tool.description ? { description: tool.description } : {}), input_schema: objectSchema(tool.inputSchema) })) } : {}),
         ...(config.inference.temperature !== undefined ? { temperature: config.inference.temperature } : {}),
         ...(config.inference.topP !== undefined ? { top_p: config.inference.topP } : {}),
         ...config.providerFields,
@@ -171,7 +172,8 @@ function chatCompletions(config: AdapterConfig, fetchImpl: typeof fetch): ModelA
       const body = {
         model: config.model,
         messages,
-        tools: tools.map((tool) => ({ type: "function", function: { name: tool.name, ...(tool.description ? { description: tool.description } : {}), parameters: objectSchema(tool.inputSchema) } })),
+        ...(tools.length ? { tools: tools.map((tool) => ({ type: "function", function: { name: tool.name, ...(tool.description ? { description: tool.description } : {}), parameters: objectSchema(tool.inputSchema) } })) } : {}),
+        // OpenAI's newest models take max_completion_tokens instead: leave maxTokens out and set that in providerFields.
         ...(config.inference.maxTokens !== undefined ? { max_tokens: config.inference.maxTokens } : {}),
         ...(config.inference.temperature !== undefined ? { temperature: config.inference.temperature } : {}),
         ...(config.inference.topP !== undefined ? { top_p: config.inference.topP } : {}),
@@ -215,7 +217,7 @@ function bedrockConverse(config: AdapterConfig, fetchImpl: typeof fetch): ModelA
       const body = {
         messages,
         ...(system ? { system: [{ text: system }] } : {}),
-        toolConfig: { tools: tools.map((tool) => ({ toolSpec: { name: tool.name, ...(tool.description ? { description: tool.description } : {}), inputSchema: { json: objectSchema(tool.inputSchema) } } })) },
+        ...(tools.length ? { toolConfig: { tools: tools.map((tool) => ({ toolSpec: { name: tool.name, ...(tool.description ? { description: tool.description } : {}), inputSchema: { json: objectSchema(tool.inputSchema) } } })) } } : {}),
         ...(Object.keys(inferenceConfig).length ? { inferenceConfig } : {}),
         ...(Object.keys(config.providerFields).length ? { additionalModelRequestFields: config.providerFields } : {}),
       };
