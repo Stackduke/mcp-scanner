@@ -128,6 +128,12 @@ test("checking keeps only whether each server answered", async () => {
   assert.deepEqual(await checkSignIns({ demo: "access-1" }, { ...vendor({ echo: true }), servers: [demo] }), [{ vendor: "demo", status: "token-echoed" }]);
 });
 
+test("a check that fails says why, in the scanner's own words", async () => {
+  const failing = (answer: () => Response | Promise<Response>) => (async () => answer()) as unknown as typeof fetch;
+  assert.deepEqual(await checkSignIns({ demo: "access-1" }, { fetchImpl: failing(() => new Response("busy", { status: 503 })), servers: [demo] }), [{ vendor: "demo", status: "unreachable", detail: "it answered, but initialize answered 503" }]);
+  assert.deepEqual(await checkSignIns({ demo: "access-1" }, { fetchImpl: failing(() => { throw new TypeError("fetch failed"); }), servers: [demo] }), [{ vendor: "demo", status: "unreachable", detail: "no answer (TypeError)" }]);
+});
+
 function issues(start: Array<{ number: number; title: string }> = [], { works = true } = {}) {
   const open = [...start], opened: Array<{ title: string; body: string }> = [], closed: number[] = [], printed: string[] = [];
   const deps: IssueDeps = {

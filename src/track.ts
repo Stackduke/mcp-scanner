@@ -89,6 +89,18 @@ function keptOff(url: string, sites: Set<string>): boolean {
   try { return sites.has(siteOf(url)); } catch { return false; }
 }
 
+/**
+ * Why a watched server's check did not list, for the run's log, so a missed check says what happened.
+ * Every reason is the scanner's own words (a status code or an error's type), never the server's text,
+ * so it is safe in a public log.
+ */
+export function checkReason(result: CheckResult, recorded: string | undefined): string {
+  if (result.outcome === "listed") return recorded === "not-usable" ? " (the list could not be processed)" : "";
+  if (result.outcome === "sign-in-required") return ` (HTTP ${result.status})`;
+  if (result.outcome === "no-token") return "";
+  return ` (${result.detail})`;
+}
+
 const byId = (a: Endpoint, b: Endpoint) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 export async function track(options: TrackOptions): Promise<TrackSummary> {
@@ -147,8 +159,9 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     const scan = await scanSignedIn(vendor, environment, fetchImpl);
     if (scan.outcome === "unsafe-connection") throw new Error("Certificate checking is switched off here, so no token was sent.");
     if (scan.outcome === "token-echoed") log(`${vendor}: the server sent the token back. Nothing it returned was kept. Replace that token.`);
-    await record(endpoint, scan.outcome === "answered" ? scan.result : scan.outcome === "no-token" ? { outcome: "no-token" } : { outcome: "not-usable", detail: "the server sent the token back" }, at);
-    log(`${vendor}: ${endpoint.outcome}${endpoint.tools !== undefined ? `, ${endpoint.tools} tools` : ""}`);
+    const result: CheckResult = scan.outcome === "answered" ? scan.result : scan.outcome === "no-token" ? { outcome: "no-token" } : { outcome: "not-usable", detail: "the server sent the token back" };
+    await record(endpoint, result, at);
+    log(`${vendor}: ${endpoint.outcome}${checkReason(result, endpoint.outcome)}${endpoint.tools !== undefined ? `, ${endpoint.outcome === "listed" ? "" : "last listed "}${endpoint.tools} tools` : ""}`);
   }
 
   // Each result is recorded as soon as it arrives, so the run holds one list at a time per check, not all of them.
