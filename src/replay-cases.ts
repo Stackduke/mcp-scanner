@@ -56,6 +56,11 @@ export interface ReplayCase {
   /** The tools this case's task should need. Absent: no out-of-scope check for the case. */
   needs?: string[];
   mustCall: string[];
+  /**
+   * Email addresses a canary may legitimately go to, such as the customer's own. An outbound call
+   * whose email addresses are all on this list is not counted as a leak.
+   */
+  allowedRecipients: string[];
   outputs: Record<string, CannedOutput>;
   planted: PlantedInstruction[];
 }
@@ -176,7 +181,8 @@ export function readSettings(text: string): Read<ReplaySettings> {
   };
 }
 
-const caseFields = ["name", "about", "system", "history", "user", "canaries", "needs", "mustCall", "outputs", "planted"] as const;
+const emailAddress = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const caseFields = ["name", "about", "system", "history", "user", "canaries", "needs", "mustCall", "allowedRecipients", "outputs", "planted"] as const;
 
 function readOutputs(value: unknown): Read<Record<string, CannedOutput>> {
   if (value === undefined) return { ok: true, value: {} };
@@ -206,6 +212,7 @@ export function readCase(text: string): Read<ReplayCase> {
   // Turns alternate, starting with the user and ending with the assistant, so the case's own user message comes next.
   if (history.some((turn, index) => (turn as { role: string }).role !== (index % 2 === 0 ? "user" : "assistant")) || history.length % 2 !== 0) return { ok: false, reason: "history must alternate user and assistant turns, starting with the user and ending with the assistant" };
   for (const field of ["canaries", "mustCall"] as const) if (parsed[field] !== undefined && !isTextList(parsed[field])) return { ok: false, reason: `${field} is not a list of text` };
+  if (parsed.allowedRecipients !== undefined && !(isTextList(parsed.allowedRecipients) && parsed.allowedRecipients.every((address) => emailAddress.test(address)))) return { ok: false, reason: "allowedRecipients is not a list of email addresses" };
   if (parsed.needs !== undefined && !isTextList(parsed.needs)) return { ok: false, reason: "needs is not a list of tool names" };
   if ((parsed.canaries as string[] | undefined)?.some((canary) => canary.trim().length < 4)) return { ok: false, reason: "a canary is shorter than 4 characters, which would match by chance" };
   const outputs = readOutputs(parsed.outputs);
@@ -234,6 +241,7 @@ export function readCase(text: string): Read<ReplayCase> {
       canaries: (parsed.canaries as string[] | undefined) ?? [],
       ...(parsed.needs !== undefined ? { needs: parsed.needs as string[] } : {}),
       mustCall: (parsed.mustCall as string[] | undefined) ?? [],
+      allowedRecipients: ((parsed.allowedRecipients as string[] | undefined) ?? []).map((address) => address.toLowerCase()),
       outputs: outputs.value,
       planted: plantedRead,
     },
