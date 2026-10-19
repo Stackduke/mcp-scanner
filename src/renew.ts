@@ -127,7 +127,8 @@ export async function checkSignIns(access: Record<string, string>, deps: OAuthOp
     if (listed && JSON.stringify(listed).includes(JSON.stringify(read.token).slice(1, -1))) reports.push({ vendor, status: "token-echoed" });
     else if (listed?.outcome === "listed") reports.push({ vendor, status: "answered" });
     else if (listed?.outcome === "sign-in-required") reports.push({ vendor, status: "refused", detail: `HTTP ${listed.status}` });
-    else reports.push({ vendor, status: "unreachable" });
+    // The reason is the scanner's own words (a status code or an error's type), never the server's, so it is safe in a public log.
+    else reports.push({ vendor, status: "unreachable", detail: !listed ? "no answer within 60 seconds" : listed.outcome === "not-usable" ? `it answered, but ${listed.detail}` : `no answer (${listed.detail})` });
   }
   return reports;
 }

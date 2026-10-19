@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { crawl } from "../src/crawl.ts";
 import { readEntry, readRegistry, scannableAddress } from "../src/registry.ts";
 import { takeSnapshot } from "../src/snapshot.ts";
-import { track } from "../src/track.ts";
+import { checkReason, track } from "../src/track.ts";
 import { buildFeed, changeBetween, keptNames, labelsOf, listHashOf, lookupOf, mergeRegistry, planChecks, printOf, recordCheck, siteOf } from "../src/tracker.ts";
 import type { Endpoint, Feed } from "../src/tracker.ts";
 import type { ToolDefinition } from "../src/types.ts";
@@ -327,4 +327,13 @@ test("a watched server in the feed carries its catalog name and website, and one
   assert.equal(byVendor.github?.name, "GitHub");
   assert.equal(byVendor.github?.site, "https://github.com");
   assert.equal(byVendor.unlisted?.name, undefined);
+});
+
+test("a missed check on a watched server says why in the log, in the scanner's own words", () => {
+  assert.equal(checkReason({ outcome: "not-usable", detail: "initialize answered 503" }, "not-usable"), " (initialize answered 503)");
+  assert.equal(checkReason({ outcome: "unreachable", detail: "TimeoutError" }, "unreachable"), " (TimeoutError)");
+  assert.equal(checkReason({ outcome: "sign-in-required", status: 403 }, "sign-in-required"), " (HTTP 403)");
+  assert.equal(checkReason({ outcome: "listed", server: {}, tools: [] }, "not-usable"), " (the list could not be processed)");
+  assert.equal(checkReason({ outcome: "listed", server: {}, tools: [] }, "listed"), "");
+  assert.equal(checkReason({ outcome: "no-token" }, "no-token"), "");
 });
