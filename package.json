@@ -1,6 +1,6 @@
 {
   "name": "@stackduke/mcp-scanner",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Lists what an MCP server lets an agent do, labels the risky tools, and reports what changed between two looks. It never calls a tool.",
   "type": "module",
   "bin": {
