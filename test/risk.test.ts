@@ -70,3 +70,50 @@ test("moving money is read off a money word beside an action, not off a bare ban
   for (const name of ["send_money", "create_transaction", "void_transaction", "settle_transaction", "settle_up", "capture_payment", "void_invoice"]) assert.ok(money(name), name);
   for (const name of ["void_envelope", "capture_screenshot", "list_transactions"]) assert.ok(!money(name), name);
 });
+
+test("a description is read for what it says the tool does, not for every acting word in it", () => {
+  // Found in the tracker's published vendors (CircleCI, Linear, Grafana, Zapier, Supabase): read-only
+  // getters that were counted as acting because of a word describing the thing they read.
+  const said = (description: string) => labelTool({ name: "x", description }).classes.join("+");
+  const reads: string[] = [
+    "Fetch an orb's metadata and published version history",
+    "Validate a pipeline config by compiling it",
+    "List all permissions set on a resource",
+    "Fetch annotations using filters such as time range and tags",
+    "List a team's cycles with their dates, and issue and scope histories",
+    "Gets the cost of creating a new project or branch",
+    "Returns the URL where users can configure it - adding, editing, or removing actions",
+    "Recursively resolve an entry's references and return the entry plus its linked assets",
+    "Read the catalog: which agents send data where",
+  ];
+  for (const description of reads) assert.equal(said(description), "read", description);
+  // No verb this scanner knows: nothing is said, so the tool is not placed by its description.
+  assert.equal(said("Wait for an investigation to settle"), "");
+  // Words that do say what the tool does still count, wherever the sentence puts them.
+  const acts: Record<string, string> = {
+    "List, create, update or delete issues": "destructive",
+    "Use this to remove items the user no longer wants": "destructive",
+    "This tool sends a message to the channel": "send",
+    "Fetches the record and deletes it": "destructive",
+    "Fetches the record and then optionally deletes it": "destructive",
+    "Creates a branch, which can incur usage charges": "write+money",
+    "Executes a query against the datasource": "write",
+    "Runs a query against the logs": "write",
+    "Apply a template to an issue": "write",
+    "Fetch an orb and publish a new version of it": "send",
+    "List comments and share them with the team": "send",
+  };
+  for (const [description, label] of Object.entries(acts)) assert.equal(said(description), label, description);
+});
+
+test("a name's acting word used as a thing does not make a reader act", () => {
+  const expected: Record<string, string> = {
+    get_deploy_component: "read", list_deploy_components: "read", list_deploy_component_versions: "read",
+    get_status_updates: "read", list_payment_refunds: "read",
+    deploy_app: "write", create_deploy: "write", trigger_deploy: "write", deploy: "write",
+    send_invites: "send", list_and_send_updates: "send",
+    // A destructive word is never read as a thing.
+    list_pending_deletes: "destructive", purge_old_logs: "destructive",
+  };
+  for (const [name, label] of Object.entries(expected)) assert.equal(classes(name), label, name);
+});
