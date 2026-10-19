@@ -13,11 +13,12 @@ A connected MCP server can change what an agent can do without anyone on the age
 ## What it does
 
 - **Lists a server's tools** over the Streamable HTTP transport, or over standard input and output for a server that runs as a local program: the handshake, then `tools/list`. It never calls a tool. It sends no credential to an open server. For a server that needs a sign-in it can send a token, under the rules in [Signed-in servers](#signed-in-servers).
-- **Labels each tool**: read, write, send, money, destructive, and "broad" for a free-form target such as SQL or a shell command. A label comes from the server's own annotations when it gives them. Otherwise it is a guess from the words in the tool's name, or failing that from the first sentence of its description, and the report marks the guess and shows the words it rests on.
+- **Labels each tool**: read, write, send, money, destructive, and "broad" for a free-form target such as SQL or a shell command. A label comes from the server's own annotations when it gives them. Otherwise it is a guess from the words in the tool's name, or failing that from the first sentence of its description, and the report marks the guess and shows the words it rests on. In a description, only the words that say what the tool does count: the verbs the sentence opens with ("List, create or delete issues", after a lead-in such as "Use this to"), and a verb joined on later ("and deletes it"). A word describing the thing acted on does not ("metadata and published version history", "a deploy component", "permissions set on").
 - **Checks the text a model would read** for signs of tool poisoning: instructions aimed at the model, invisible characters, pointers to credential stores, requests to send data elsewhere, and annotations that contradict a tool's name.
 - **Compares two looks**: tools added, removed and changed; for each changed field, whether it appeared, disappeared or was rewritten; and tools now counted as able to do more.
 - **Says what a server lets an agent do, in plain words**, for a reader who is not an engineer, and writes a weekly digest of changes. See [docs/reports.md](docs/reports.md).
 - **Checks a server before it ships**: in a repository's own CI, its tools are compared with an approved list kept beside its code, `stackduke.lock.json`, and the pull request fails until a person approves a change. See [Pre-deploy check](#pre-deploy-check).
+- **Watches the servers an agent uses**: in the agent's repository, each server's tools are compared each day with an approved list, `stackduke.watch.json`, read from the tracker's copy when it has one. A change fails the job and can open an issue. It is an alert, not a block. See [Watching the servers your agents use](#watching-the-servers-your-agents-use).
 
 ## What it does not do
 
@@ -181,6 +182,46 @@ The first passes. The second fails, naming the new tool, the rewritten descripti
 - If the job is cancelled while the server's program runs, the program is left to the runner to stop.
 - The optional upload of results to the Stackduke dashboard is not part of this.
 
+## Watching the servers your agents use
+
+Added on 2026-10-19. `watch` is the agent's side of the pre-deploy check: for a repository whose agents connect to MCP servers it did not write, such as GitHub's, Linear's or Stripe's. The approved tools of every server are kept in one file, `stackduke.watch.json`, keyed by each server's address, in the lockfile's format. A scheduled job compares each server's tools with it and fails, with a plain-language summary, when a tool was added, removed or changed. Think of it as Dependabot for MCP tools.
+
+**It is an alert, not a block.** Nothing here stands between an agent and a server. A failed watch tells a person; until someone acts, an agent can still use every tool a server offers, changed or not.
+
+```sh
+stackduke-mcp-scanner watch --update --add=https://mcp.stripe.com/   # start the watch file, approving what Stripe lists now
+stackduke-mcp-scanner watch                                         # compare; exit 1 when a tool differs
+stackduke-mcp-scanner watch --update --server=mcp.stripe.com        # approve a change after a person has looked at it
+```
+
+**Where each server's tools come from.**
+
+- **The tracker's copy**, for a server the Stackduke tracker watches with a sign-in (GitHub, Linear, Stripe, Supabase, Zapier, Contentful, Grafana and CircleCI today). Nothing is sent to that server, and no token is needed. The copy is read from the tracker's [`data` branch](../../tree/data), `feed.json` and `watched/<vendor>.json`, at `raw.githubusercontent.com`: the full definitions are only there, it is the same data [stackduke.com/tracker](https://stackduke.com/tracker) shows, and no Stackduke service sits in the way. `--tracker-data` reads another address or a folder instead.
+- **The server itself**, for any other server, with no credential.
+- **The server itself, with your token**, for a server whose entry names a `tokenVariable`. The token is read from that environment variable and sent to that server only, under the same rules as every token here: https only, nothing sent when certificate checking is off, no redirects, and nothing kept from a reply that sends it back. The variable must be named `STACKDUKE_WATCH_...`, so a watch file cannot point the job's own `GITHUB_TOKEN`, or another secret not made for this, at an address, and each variable may be named by one entry only. Add one with `--update --add=<url> --token-variable=STACKDUKE_WATCH_LINEAR_TOKEN`, or by writing it into the entry. The watch file still decides where each `STACKDUKE_WATCH_` token goes, so review a change to an entry's address or `tokenVariable` as you would a change to a workflow, and do not run the watch with tokens on `pull_request`, where a pull request can change the file.
+
+**The tracker's test account may see different tools from yours.** Tools read from the tracker are the ones its own account was shown, on the day given in the summary. Your agents' account may be shown more or fewer, because of its plan, its permissions or the scopes it signed in with. To compare with what your own account is shown, give the server a `tokenVariable`.
+
+**When the tracker's copy cannot be used, the run says so.** The copy is refused, and the server reported as not checked, when the tracker last listed its tools more than 48 hours ago (`--max-age` in hours; the tracker runs daily), when the feed and the saved list do not agree (a cache can serve one from before a run and the other from after it), when the tracker could not be reached, or when it has no entry for the server. A server not checked is never counted as unchanged: the run exits 4 (3 when the only problem is a sign-in), and the summary says why. When the tracker's latest look missed a server but an earlier one in the allowed time listed it, the earlier list is used, and the summary says so.
+
+**Approving.** `--update` writes what each server lists now, as `check --update` does: a high or medium finding nobody has accepted stops it, `--accept-findings` records it as accepted for that definition, and a name listed twice cannot be approved. A server that could not be read keeps the list approved before. `--server=<host or address>`, given once or more, looks only at those servers.
+
+**Exit codes.** 0: every server read and matches. 1: a tool differs, nothing is approved yet, or a check fired. 3: a server wants a sign-in it did not get. 4: a server, or the tracker, could not be read. 2: the options or the watch file are wrong, or it lists no servers.
+
+**The summary** follows the check's rules: each server is named by its host only, since a path may hold something private; tool names are the only words of a server's in it; descriptions are never quoted; and nothing says a server is safe.
+
+### Running it on a schedule
+
+[`examples/watch/mcp-watch.yml`](examples/watch/mcp-watch.yml) runs the watch every day with the action in [`watch/action.yml`](watch/action.yml), and [`examples/watch/stackduke.watch.json`](examples/watch/stackduke.watch.json) is a watch file for Stripe's server. The action writes the job summary, fails the job when the watch does not pass, and with `issue: "true"` keeps one issue open per watch file: opened when the watch first fails or cannot check a server, its text replaced on each later run, and closed with a comment once it passes. That needs only the job's own token with `issues: write`. The issue is found by its first line, which names the watch file's path from the repository's root, and by its author: the account behind `github-token`, or `github-actions[bot]` for the job's own token. With a GitHub App's token the author is not found, so use the job's own token, or a personal one. A token for a server goes in the action step's `env:`, so the job's other steps do not hold it.
+
+Inputs: `watchfile` (default `stackduke.watch.json`), `working-directory`, `timeout`, `max-age`, `tracker-data`, `issue` (default `"false"`) and `github-token`. The output `result` is `passed`, `failed` or `error`. The action is used as `Stackduke/mcp-scanner/watch@<release>` from the first release after 0.3.0; until then, `@main` or a commit.
+
+### Limits of the watch
+
+- It sees what a server lists, once a day at most for a tracker copy. A change made and undone between two looks is not seen, and it cannot see what a tool does when called.
+- A tracker copy is as good as the tracker's account: a tool only your account is shown is invisible to it.
+- The text checks are pattern checks, and a label guessed from a name can be wrong. A pass means nothing changed and nothing matched, not that a server is safe.
+
 ## The tracker
 
 `track` is one run of the public tracker over a data folder. [`.github/workflows/track.yml`](.github/workflows/track.yml) runs it every day at 04:17 UTC and commits the folder to the `data` branch.
@@ -261,6 +302,7 @@ To add a vendor: it must sign in with automatic registration (`oauth-dcr`). Give
 
 - `src/client.ts`, `src/stdio.ts`: the handshake and the tool list, over HTTP and over a local program's standard input and output.
 - `src/check.ts`, `src/lockfile.ts`, `action.yml`: the pre-deploy check, its lockfile and its GitHub Action. `examples/sample-server/`: a small server to try it on.
+- `src/watch.ts`, `watch/action.yml`: watching the servers an agent uses, and its GitHub Action. `examples/watch/`: a workflow and a watch file to start from.
 - `src/snapshot.ts`, `src/diff.ts`, `src/files.ts`: fingerprints, snapshots, comparisons, and reading and writing them.
 - `src/risk.ts`: capability labels. `src/findings.ts`: the text checks. `src/text.ts`: making untrusted text safe to print.
 - `src/authority.ts`, `src/digest.ts`, `src/report.ts`: the plain-language report, the weekly digest and the technical report.

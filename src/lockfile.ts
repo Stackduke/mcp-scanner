@@ -25,7 +25,7 @@ export interface Lockfile {
 }
 
 const toolFields = ["name", "title", "description", "annotations", "inputSchema", "outputSchema", "accepted"] as const;
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+export const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** A copy with every object's keys in sorted order. Array order is kept: in a schema it can carry meaning. */
 function sortedDeep(value: unknown, depth = 0): unknown {
@@ -37,9 +37,9 @@ function sortedDeep(value: unknown, depth = 0): unknown {
 
 const byName = (a: { name: string }, b: { name: string }) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
 
-/** The file's text for these tools. The same tools always give the same text. */
-export function writeLockfile(tools: LockedTool[]): string {
-  const entries = [...tools].sort(byName).map((tool) => {
+/** Tools as the lockfile writes them: sorted by name, fields in a fixed order, keys inside sorted. */
+export function lockedEntries(tools: LockedTool[]): Array<Record<string, unknown>> {
+  return [...tools].sort(byName).map((tool) => {
     const entry: Record<string, unknown> = {};
     for (const field of toolFields) {
       const value = field === "accepted" ? (tool.accepted?.length ? [...new Set(tool.accepted)].sort() : undefined) : tool[field];
@@ -47,7 +47,11 @@ export function writeLockfile(tools: LockedTool[]): string {
     }
     return entry;
   });
-  return `${JSON.stringify({ lockfileVersion, about, tools: entries }, null, 2)}\n`;
+}
+
+/** The file's text for these tools. The same tools always give the same text. */
+export function writeLockfile(tools: LockedTool[]): string {
+  return `${JSON.stringify({ lockfileVersion, about, tools: lockedEntries(tools) }, null, 2)}\n`;
 }
 
 export type LockfileRead = { ok: true; lockfile: Lockfile } | { ok: false; reason: string };
@@ -63,9 +67,15 @@ export function readLockfile(text: string): LockfileRead {
   if (parsed.lockfileVersion !== lockfileVersion) return { ok: false, reason: `its lockfileVersion is not ${lockfileVersion}` };
   if (!Array.isArray(parsed.tools)) return { ok: false, reason: "it has no tools list" };
   if (Object.keys(parsed).some((key) => !["lockfileVersion", "about", "tools"].includes(key))) return { ok: false, reason: "it has a field this version does not know" };
+  const tools = readLockedTools(parsed.tools);
+  return tools.ok ? { ok: true, lockfile: { tools: tools.tools } } : tools;
+}
+
+/** A list of tools as the lockfile holds them, read as strictly as the lockfile is. */
+export function readLockedTools(list: unknown[]): { ok: true; tools: LockedTool[] } | { ok: false; reason: string } {
   const tools: LockedTool[] = [];
   const names = new Set<string>();
-  for (const [index, item] of parsed.tools.entries()) {
+  for (const [index, item] of list.entries()) {
     const at = `tool ${index + 1}`;
     if (!isRecord(item) || typeof item.name !== "string" || !item.name) return { ok: false, reason: `${at} has no name` };
     const unknown = Object.keys(item).find((key) => !(toolFields as readonly string[]).includes(key));
@@ -77,7 +87,7 @@ export function readLockfile(text: string): LockfileRead {
     if (item.accepted !== undefined && !(Array.isArray(item.accepted) && item.accepted.every((key) => typeof key === "string"))) return { ok: false, reason: `${at} has an accepted list that is not a list of text` };
     tools.push(item as unknown as LockedTool);
   }
-  return { ok: true, lockfile: { tools } };
+  return { ok: true, tools };
 }
 
 /** The lockfile as a snapshot, so it can be compared with a live list the same way two scans are. */

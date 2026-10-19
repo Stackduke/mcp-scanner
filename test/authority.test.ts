@@ -312,3 +312,24 @@ test("the command refuses a file that is not a snapshot, without echoing it", as
   assert.equal(good.code, 0);
   assert.match(good.output, /^What an agent can do through example\.test\/mcp\n1 tool listed on 13 October 2026\./);
 });
+
+test("a getter the server marks read-only is not counted as acting on the strength of a word about the thing it reads", () => {
+  // The shapes of CircleCI's get_orb and list_deploy_components, and Supabase's get_publishable_keys, as published on 19 October 2026.
+  const tools = [
+    { name: "get_orb", description: "Fetch an orb's metadata and published version history.", ...readOnly },
+    { name: "list_deploy_components", description: "List deploy components for a project.", ...readOnly },
+    { name: "get_publishable_keys", description: "Gets the publishable keys for a project.", ...readOnly },
+  ];
+  assert.deepEqual(groups(tools), [["read", ["get_orb", "get_publishable_keys", "list_deploy_components"]]]);
+  assert.ok(!all(tools).some((tool) => tool.disputed));
+  // The more serious reading still wins where the words say the tool acts.
+  assert.deepEqual(groups([{ name: "get_orb", description: "Fetch an orb and publish a new version of it.", ...readOnly }]), [["send", ["get_orb"]]]);
+  assert.deepEqual(groups([{ name: "deploy_component", ...readOnly }]), [["write", ["deploy_component"]]]);
+  assert.deepEqual(groups([{ name: "getpublishkeys", ...readOnly }]), [["unclear", ["getpublishkeys"]]]);
+  // A tool marked read-only whose description says it destroys is still read the serious way, and disputed.
+  for (const description of ["A tool that deletes files from the workspace.", "Given an ID, permanently deletes the record."]) {
+    const [tool] = all([{ name: "files_tool", description, ...readOnly }]);
+    assert.equal(tool?.kind, "destructive", description);
+    assert.equal(tool?.disputed, true, description);
+  }
+});

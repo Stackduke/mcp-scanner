@@ -41,3 +41,61 @@ jobs:
         env:
           RESULT: ${{ steps.changed.outputs.result }}
         run: test "$RESULT" = failed
+
+  # Runs the watch action against a copy of the tracker's files made here, dated now, so it reaches
+  # no server: once as approved, where it must pass, and once with a tool added, where it must fail.
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Make a tracker copy and approve it
+        shell: bash
+        env:
+          TRACKER: ${{ runner.temp }}/tracker
+          WATCHFILE: ${{ runner.temp }}/stackduke.watch.json
+        run: |
+          mkdir -p "$TRACKER/watched"
+          now=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+          tool='{"name":"list_notes","description":"List the notes.","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}'
+          printf '{"version":1,"watched":[{"vendor":"sample","url":"https://mcp.example.com/mcp","lastChecked":"%s","lastListed":"%s","outcome":"listed","tools":1,"groups":[{"kind":"read","tools":["list_notes"]}],"changes":[]}]}\n' "$now" "$now" > "$TRACKER/feed.json"
+          printf '{"source":"https://mcp.example.com/mcp","takenAt":"%s","tools":[%s]}\n' "$now" "$tool" > "$TRACKER/watched/sample.json"
+          node src/cli.ts watch --update --add=https://mcp.example.com/mcp "--tracker-data=$TRACKER" "--watchfile=$WATCHFILE"
+
+      - name: The approved copy passes
+        uses: ./watch
+        with:
+          watchfile: ${{ runner.temp }}/stackduke.watch.json
+          tracker-data: ${{ runner.temp }}/tracker
+
+      - name: Add a tool to the copy
+        shell: bash
+        env:
+          TRACKER: ${{ runner.temp }}/tracker
+        run: |
+          now=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+          read='{"name":"list_notes","description":"List the notes.","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}'
+          remove='{"name":"delete_note","description":"Delete a note.","inputSchema":{"type":"object"},"annotations":{"destructiveHint":true}}'
+          printf '{"version":1,"watched":[{"vendor":"sample","url":"https://mcp.example.com/mcp","lastChecked":"%s","lastListed":"%s","outcome":"listed","tools":2,"groups":[{"kind":"destructive","tools":["delete_note"]},{"kind":"read","tools":["list_notes"]}],"changes":[{"at":"%s"}]}]}\n' "$now" "$now" "$now" > "$TRACKER/feed.json"
+          printf '{"source":"https://mcp.example.com/mcp","takenAt":"%s","tools":[%s,%s]}\n' "$now" "$read" "$remove" > "$TRACKER/watched/sample.json"
+
+      - name: The changed copy fails
+        id: changed
+        uses: ./watch
+        continue-on-error: true
+        with:
+          watchfile: ${{ runner.temp }}/stackduke.watch.json
+          tracker-data: ${{ runner.temp }}/tracker
+
+      - name: The changed copy was reported as failed
+        shell: bash
+        env:
+          RESULT: ${{ steps.changed.outputs.result }}
+        run: test "$RESULT" = failed

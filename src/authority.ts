@@ -136,7 +136,8 @@ function reachOf(tool: SnapshotTool): Reach {
   // A name that cannot be read as words tells this report nothing, whatever the server says about the tool.
   const readable = ordinaryName.test(tool.name);
   const letters = tool.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
-  const runTogether = stems.find((stem) => letters.includes(stem) && !words(tool.name).some((word) => actionKind(word) !== null && word.startsWith(stem)));
+  // "publishable" and "refundable" are words of their own, saying what can be done to a thing; "deleteaccount" is not.
+  const runTogether = stems.find((stem) => letters.includes(stem) && !words(tool.name).some((word) => word.startsWith(stem) && (actionKind(word) !== null || /^ables?$/.test(word.slice(stem.length)))));
   if (!acting.some((kind) => does.has(kind)) && (!readable || runTogether)) {
     const wasRead = does.has("read");
     does.clear();

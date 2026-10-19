@@ -1,0 +1,136 @@
+name: Stackduke MCP tool watch
+description: For a repository whose agents use MCP servers. Compares each server's tools with the approved list in stackduke.watch.json, and fails when a tool was added, removed or changed.
+author: Stackduke
+branding:
+  icon: eye
+  color: blue
+
+# Runs in the caller's job, on the caller's runner, usually on a schedule. It reads the Stackduke
+# tracker's public files from GitHub, and lists any other server directly. A token goes only to the
+# server whose entry in the watch file names its variable; set that variable in this step's env.
+# Nothing is sent to Stackduke. It is an alert, not a block: agents keep using the servers.
+
+inputs:
+  watchfile:
+    description: Path of the watch file, from the working directory.
+    required: false
+    default: stackduke.watch.json
+  working-directory:
+    description: Directory the watch runs in.
+    required: false
+    default: "."
+  timeout:
+    description: Seconds to wait for each reply, from a server or from the tracker. Default 15.
+    required: false
+    default: ""
+  max-age:
+    description: Hours after which the tracker's copy of a server's tools is too old to use. Default 48; the tracker runs once a day.
+    required: false
+    default: ""
+  tracker-data:
+    description: Where the tracker's files are read from, an https address or a folder. Default its data branch on GitHub.
+    required: false
+    default: ""
+  issue:
+    description: >-
+      "true" to keep one issue open while the watch fails, updated in place on later runs and closed
+      once it passes. Needs the workflow to grant "issues: write". The job summary is written either way.
+    required: false
+    default: "false"
+  github-token:
+    description: Token used only for the issue. The default token is enough.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  result:
+    description: '"passed", "failed" (a tool differs from the approved list, or a check fired) or "error" (a server could not be read, or the inputs were wrong).'
+    value: ${{ steps.watch.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Look for Node 22.18 or later
+      id: node
+      shell: bash
+      run: |
+        if command -v node > /dev/null && node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 18) ? 0 : 1)'; then
+          echo "found=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Set up Node
+      if: steps.node.outputs.found != 'true'
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: "22"
+
+    - name: Compare the MCP servers' tools with the watch file
+      id: watch
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        STACKDUKE_WATCHFILE: ${{ inputs.watchfile }}
+        STACKDUKE_TIMEOUT: ${{ inputs.timeout }}
+        STACKDUKE_MAX_AGE: ${{ inputs.max-age }}
+        STACKDUKE_TRACKER_DATA: ${{ inputs.tracker-data }}
+        STACKDUKE_SUMMARY: ${{ runner.temp }}/stackduke-mcp-watch.md
+      run: |
+        rm -f "$STACKDUKE_SUMMARY"
+        args=(watch "--watchfile=$STACKDUKE_WATCHFILE" "--summary=$STACKDUKE_SUMMARY")
+        if [ -n "$STACKDUKE_TIMEOUT" ]; then args+=("--timeout=$STACKDUKE_TIMEOUT"); fi
+        if [ -n "$STACKDUKE_MAX_AGE" ]; then args+=("--max-age=$STACKDUKE_MAX_AGE"); fi
+        if [ -n "$STACKDUKE_TRACKER_DATA" ]; then args+=("--tracker-data=$STACKDUKE_TRACKER_DATA"); fi
+        set +e
+        node "$GITHUB_ACTION_PATH/../src/cli.ts" "${args[@]}"
+        code=$?
+        set -e
+        case "$code" in 0) result=passed ;; 1) result=failed ;; *) result=error ;; esac
+        echo "result=$result" >> "$GITHUB_OUTPUT"
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+        if [ -f "$STACKDUKE_SUMMARY" ]; then cat "$STACKDUKE_SUMMARY" >> "$GITHUB_STEP_SUMMARY"; fi
+
+    # One issue for each watch file: opened when the watch first fails or cannot run, its text
+    # replaced on each later run that does not pass, and closed with a comment once it passes. A
+    # failure here does not hide the watch's result: the last step still fails the job.
+    - name: Open, update or close the watch's issue
+      if: inputs.issue == 'true'
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        RESULT: ${{ steps.watch.outputs.result }}
+        STACKDUKE_SUMMARY: ${{ runner.temp }}/stackduke-mcp-watch.md
+      run: |
+        if [ ! -f "$STACKDUKE_SUMMARY" ]; then echo "No summary was written, so the issue was left as it was. The job log says why."; exit 0; fi
+        # The summary's first line is a marker naming the watch file, so each watch file keeps its own issue.
+        MARKER=$(head -n 1 "$STACKDUKE_SUMMARY")
+        # Who posts: the account behind a personal token, or the Actions bot for the job's own token.
+        POSTER=$(gh api user --jq .login 2> /dev/null || echo "github-actions[bot]")
+        export MARKER POSTER
+        existing=$(gh api "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" --paginate --jq '.[] | select(.pull_request == null and .user.login == env.POSTER and ((.body // "") | startswith(env.MARKER))) | .number' | tail -n 1)
+        run_link="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        if [ "$RESULT" = passed ]; then
+          if [ -n "$existing" ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$existing/comments" -f "body=The watch passed again: every server's tools match the approved list. Closing. ([run]($run_link))" > /dev/null
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/$existing" -f state=closed -f state_reason=completed > /dev/null
+            echo "Closed issue #$existing."
+          fi
+          exit 0
+        fi
+        if [ "$RESULT" = failed ]; then title="MCP tool watch: a server's tools differ from the approved list"; else title="MCP tool watch: not every server could be checked"; fi
+        if [ -n "$existing" ]; then
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/$existing" -f "title=$title" -F "body=@$STACKDUKE_SUMMARY" > /dev/null
+          echo "Updated issue #$existing."
+        else
+          number=$(gh api --method POST "repos/$GITHUB_REPOSITORY/issues" -f "title=$title" -F "body=@$STACKDUKE_SUMMARY" --jq .number)
+          echo "Opened issue #$number."
+        fi
+
+    - name: Fail the job when the watch did not pass
+      if: steps.watch.outputs.code != '0'
+      shell: bash
+      env:
+        CODE: ${{ steps.watch.outputs.code }}
+      run: exit "${CODE:-1}"

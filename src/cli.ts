@@ -28,6 +28,8 @@ import { describeReview, review } from "./review.ts";
 import { notice } from "./notice.ts";
 import { takeSnapshot } from "./snapshot.ts";
 import { track } from "./track.ts";
+import { describeWatch, describeWatchfileProblem, exitCode, readWatchfile, runWatch, serverAddress, tokenVariablePattern, updateWatch, watchfileName, writeWatchfile } from "./watch.ts";
+import type { WatchedServer, Watchfile } from "./watch.ts";
 import { snapshotFromRepository } from "./sources/github-snapshots.ts";
 import type { Snapshot } from "./types.ts";
 
@@ -41,6 +43,15 @@ const usage = `Usage:
                                                     check fires, or when a tool that changes things has no risk annotation.
                                                     --lockfile=stackduke.lock.json --update --accept-findings
                                                     --summary=<file> (Markdown) --timeout=<seconds> --command="<program> [args]"
+  npm run scan -- watch [options]                   For a repository whose agents use MCP servers: compare each server's tools
+                                                    with the approved list in stackduke.watch.json. A server the Stackduke
+                                                    tracker watches is read from the tracker's copy; any other is listed
+                                                    directly, with the token in its tokenVariable if it has one. Fails when
+                                                    a tool was added, removed or changed; an alert, not a block.
+                                                    --watchfile=stackduke.watch.json --update --accept-findings
+                                                    --add=<url> [--token-variable=STACKDUKE_WATCH_...] (with --update)
+                                                    --server=<host or url> (repeatable) --summary=<file> --timeout=<seconds>
+                                                    --max-age=<hours, default 48> --tracker-data=<https address or folder>
   npm run scan -- authority <snapshot.json>...      What an agent can do through these servers, in plain words.
   npm run scan -- digest <snapshot-folder>...       The week's changes on the servers saved there, as an email's text.
                                                     --days=7 and --until=YYYY-MM-DD set the period, in UTC.
@@ -81,6 +92,7 @@ const usage = `Usage:
 Nothing here calls a tool. scan, check, discover and catalog send no credential. check runs the program it is
 given, with this environment, so give it only a server you would run anyway. signed-in reads a token from an environment
 variable and sends it only to that server's fixed address; the token is never printed or saved.
+watch sends a token only to a server whose watch file entry names a STACKDUKE_WATCH_ variable, read from the environment.
 --save writes the snapshot under data/snapshots/<source>/. history sends GITHUB_TOKEN, if set, to
 api.github.com only.`;
 
@@ -184,9 +196,114 @@ async function check(rest: string[]): Promise<number> {
   return finish(describeCheck(checked, summary), checked.passed ? 0 : 1);
 }
 
+async function watch(rest: string[]): Promise<number> {
+  const options = new Map<string, string>();
+  const servers: string[] = [];
+  const added: string[] = [];
+  for (const item of rest) {
+    const match = /^--(watchfile|summary|timeout|max-age|tracker-data|token-variable|server|add)=(.*)$|^--(update|accept-findings)$/s.exec(item);
+    const name = match?.[1] ?? match?.[3];
+    if (name === "server") { servers.push(match?.[2] ?? ""); continue; }
+    if (name === "add") { added.push(match?.[2] ?? ""); continue; }
+    if (!name || options.has(name)) { console.error(`watch does not take ${item.split("=")[0]}, or took it twice.`); return 2; }
+    options.set(name, match?.[2] ?? "");
+  }
+  if (options.has("accept-findings") && !options.has("update")) { console.error("--accept-findings is only used with --update."); return 2; }
+  if (added.length && !options.has("update")) { console.error("--add is only used with --update: adding a server approves the tools it lists now."); return 2; }
+  if (added.length && servers.length) { console.error("Give --add or --server, not both: an --update with --add looks only at the servers added."); return 2; }
+  if (options.has("token-variable") && added.length !== 1) { console.error("--token-variable goes with one --add."); return 2; }
+  const tokenVariable = options.get("token-variable");
+  if (tokenVariable !== undefined && !tokenVariablePattern.test(tokenVariable)) { console.error("--token-variable must be named STACKDUKE_WATCH_ and capital letters, digits or _, such as STACKDUKE_WATCH_LINEAR_TOKEN."); return 2; }
+  const timeoutText = options.get("timeout");
+  if (timeoutText !== undefined && !(/^\d{1,3}$/.test(timeoutText) && Number(timeoutText) >= 1 && Number(timeoutText) <= 600)) { console.error("--timeout takes a whole number of seconds from 1 to 600."); return 2; }
+  const maxAgeText = options.get("max-age");
+  if (maxAgeText !== undefined && !(/^\d{1,3}$/.test(maxAgeText) && Number(maxAgeText) >= 1 && Number(maxAgeText) <= 720)) { console.error("--max-age takes a whole number of hours from 1 to 720."); return 2; }
+  const data = options.get("tracker-data");
+  if (data !== undefined && (!data || /^http:/i.test(data))) { console.error("--tracker-data takes an https:// address or a folder."); return 2; }
+
+  const watchfilePath = options.get("watchfile") || watchfileName;
+  // In GitHub Actions the path is from the repository's root, so two watch files in different
+  // folders keep separate issues.
+  const relative = path.relative(process.env.GITHUB_WORKSPACE || process.cwd(), path.resolve(watchfilePath));
+  const shownWatchfile = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : watchfilePath;
+  const summaryPath = options.get("summary");
+  const finish = async (markdown: string, code: number) => {
+    console.log(markdown);
+    if (summaryPath) await writeWhole(summaryPath, markdown);
+    return code;
+  };
+
+  let current: string | null = null;
+  try {
+    if ((await stat(watchfilePath)).size > 16_000_000) { console.error(`${printable(watchfilePath)} is larger than a watch file should be.`); return 2; }
+    current = await readFile(watchfilePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") { console.error(`${printable(watchfilePath)} could not be opened.`); return 2; }
+  }
+  let watchfile: Watchfile = { servers: [] };
+  if (current !== null) {
+    const read = readWatchfile(current);
+    if (!read.ok) return finish(describeWatchfileProblem(shownWatchfile, read.reason), 2);
+    watchfile = read.watchfile;
+  } else if (!added.length) {
+    console.error(`There is no ${printable(watchfilePath)} here. Start one with: stackduke-mcp-scanner watch --update --add=<the server's https address>`);
+    return 2;
+  }
+
+  if (!watchfile.servers.length && !added.length) {
+    return finish(describeWatchfileProblem(shownWatchfile, "it lists no servers, so there is nothing to compare"), 2);
+  }
+
+  // The servers this run looks at: those added, those named with --server, or all of them.
+  let chosen: WatchedServer[];
+  if (added.length) {
+    chosen = [];
+    for (const text of added) {
+      const address = serverAddress(text);
+      if (!address.ok) { console.error(`--add=${printable(text, 80)} is refused: ${address.reason}.`); return 2; }
+      if (watchfile.servers.some((server) => server.url === address.url) || chosen.some((server) => server.url === address.url)) { console.error("A server given with --add is already in the watch file, or was given twice. To approve its tools again, use --update --server=<its host>."); return 2; }
+      if (tokenVariable && !address.url.startsWith("https:")) { console.error("A token is only sent over https."); return 2; }
+      if (tokenVariable && watchfile.servers.some((server) => server.tokenVariable === tokenVariable)) { console.error("Another server in the watch file already uses that --token-variable. Each token goes to one server only."); return 2; }
+      chosen.push({ url: address.url, ...(tokenVariable ? { tokenVariable } : {}), tools: null });
+    }
+    watchfile = { servers: [...watchfile.servers, ...chosen] };
+  } else if (servers.length) {
+    chosen = [];
+    for (const text of servers) {
+      const address = /^https?:\/\//i.test(text) ? serverAddress(text) : null;
+      const matches = address?.ok
+        ? watchfile.servers.filter((server) => server.url === address.url)
+        : watchfile.servers.filter((server) => new URL(server.url).host === text.toLowerCase());
+      if (matches.length !== 1) { console.error(matches.length ? `More than one server in the watch file is on ${printable(text, 80)}. Name it by its whole address.` : `No server in the watch file matches --server=${printable(text, 80)}.`); return 2; }
+      if (!chosen.includes(matches[0] as WatchedServer)) chosen.push(matches[0] as WatchedServer);
+    }
+  } else {
+    chosen = watchfile.servers;
+  }
+
+  const outcomes = await runWatch(chosen, {
+    env: process.env,
+    ...(timeoutText ? { timeoutMs: Number(timeoutText) * 1000 } : {}),
+    ...(maxAgeText ? { maxAgeHours: Number(maxAgeText) } : {}),
+    ...(data ? { trackerData: data } : {}),
+  });
+  const summary = { watchfilePath: shownWatchfile, allUrls: watchfile.servers.map((server) => server.url), adding: added.length > 0 };
+  if (options.has("update")) {
+    const update = updateWatch(watchfile, outcomes, options.has("accept-findings"));
+    if (!update.written) return finish(describeWatch(outcomes, { ...summary, update: "refused" }), 1);
+    const text = writeWatchfile(update.watchfile);
+    const unreadCode = exitCode(outcomes.filter((outcome) => !outcome.checked));
+    if (text === current) return finish(describeWatch(outcomes, { ...summary, update: "unchanged" }), unreadCode);
+    await writeWhole(watchfilePath, text);
+    return finish(describeWatch(outcomes, { ...summary, update: "written" }), unreadCode);
+  }
+  return finish(describeWatch(outcomes, summary), exitCode(outcomes));
+}
+
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
   if (command === "check") return check(rest);
+  if (command === "watch") return watch(rest);
   const flags = new Set(rest.filter((value) => value.startsWith("--")));
   const args = rest.filter((value) => !value.startsWith("--"));
 
