@@ -1,6 +1,6 @@
 # Plan: behaviour replay for the pre-deploy check
 
-Status: **plan only, not built, not approved.** Written 19 Oct 2026 for Dom's review. Revised the same day, first to a general version for most teams, then to centre on governance rather than answer quality. API details were checked in the providers' docs on that date and will drift.
+Status: **Stage 1 approved by Dom on 19 Oct 2026 and being built, with three adapters from the start.** Written 19 Oct 2026, revised the same day, first to a general version for most teams, then to centre on governance rather than answer quality, then to widen Stage 1 to three model APIs. API details were checked in the providers' docs on that date and will drift.
 
 ## What it is for
 
@@ -112,18 +112,22 @@ Both sides run in the same job at the same time with the same model, so a provid
 
 One small interface: turn MCP definitions into the provider's tools, send a conversation, read back text, tool calls and token use, and append tool results. Each adapter is a few hundred lines over `fetch`, with no SDK.
 
-**Ship first: AWS Bedrock Converse.** One tool-calling shape across the model families Bedrock serves (Anthropic Claude, Meta Llama, Mistral, Amazon Nova, OpenAI's models and others), as checked in AWS's API reference:
+**Stage 1 ships three adapters on one interface: Anthropic Messages, OpenAI-compatible Chat Completions and Bedrock Converse.**
+
+**Bedrock Converse.** One tool-calling shape across the model families Bedrock serves (Anthropic Claude, Meta Llama, Mistral, Amazon Nova, OpenAI's models and others), as checked in AWS's API reference:
 
 - Tools go in `toolConfig.tools[].toolSpec` with `name` (1 to 64 characters, `[a-zA-Z0-9_-]+`), `description`, `inputSchema` (the JSON Schema under `json`) and optional `strict`. `toolConfig.toolChoice` is `auto` (default), `any`, or `tool` (a named tool, only for Anthropic Claude 3 and Amazon Nova models).
 - The reply has `stopReason: "tool_use"` and `toolUse` blocks with `toolUseId`, `name` and `input`.
 - Results go back in a `user` message as `toolResult` blocks with the same `toolUseId` and `content` (`json` or `text` items). `status: "error"` is supported only by Amazon Nova and Anthropic Claude 3 and 4 models, so the adapter does not rely on it.
 - `usage` gives token counts for the cost line.
 - Not every model on Bedrock supports tool use. The replay stops with a clear error on one that refuses tools rather than reporting "never called". Tool names outside Bedrock's name rule are reported, not silently renamed, since a renamed tool is a different tool to the model.
-- Sign-in: a Bedrock API key as a bearer token is simplest. Short-term AWS credentials (for example from GitHub's OIDC sign-in to AWS) need AWS Signature Version 4, written with `node:crypto` to keep the scanner free of runtime dependencies.
+- Sign-in in Stage 1: a Bedrock API key, sent as `Authorization: Bearer` (`AWS_BEARER_TOKEN_BEDROCK`). Short-term AWS credentials (for example from GitHub's OIDC sign-in to AWS) need AWS Signature Version 4, which comes later.
 
-**Second: OpenAI-compatible Chat Completions**, the widest reach (OpenAI, Azure OpenAI, many gateways and local servers): `tools` of `{ "type": "function", "function": { "name", "description", "parameters" } }`, calls in `tool_calls` with an `id`, results as `role: "tool"` messages with `tool_call_id`.
+**OpenAI-compatible Chat Completions**, one adapter with a configurable base URL, for the widest reach (OpenAI, OpenRouter, Groq, Together, Ollama, vLLM, LiteLLM and other servers that speak it): `tools` of `{ "type": "function", "function": { "name", "description", "parameters" } }`, calls in `tool_calls` with an `id`, results as `role: "tool"` messages with `tool_call_id`.
 
-**Third: OpenAI Responses and Anthropic Messages direct.** Responses because OpenAI's guide says its newest models need it for tool calling (`function_call` items answered by `function_call_output`, reasoning items passed back). Anthropic Messages for teams calling Claude directly (`tool_use` blocks answered by `tool_result`).
+**Anthropic Messages**, for teams calling Claude directly: `tools` with `name`, `description` and `input_schema`; `tool_use` blocks with `id`, `name` and `input`; results as `tool_result` blocks with `tool_use_id`, first in the next user message.
+
+**Later: OpenAI Responses**, because OpenAI's guide says its newest models need it for tool calling (`function_call` items answered by `function_call_output`, reasoning items passed back).
 
 ## 3. What is measured
 
@@ -167,8 +171,8 @@ A section in the existing pull-request comment (same marker, updated in place), 
 
 | Field | What it is |
 | --- | --- |
-| Tools before | SHA-256 of the base branch's lockfile. |
-| Tools after | SHA-256 of the lockfile text the current tools would produce (the same canonical writer as `check --update`, so it equals the new lockfile's hash once approved). |
+| Tools before | SHA-256 of the base branch's tool definitions, written by the lockfile's canonical writer without accepted findings. |
+| Tools after | SHA-256 of the current tools, written the same way, so the two match exactly when the definitions do. |
 | Model | Provider, model id, and every setting sent. |
 | System prompt | SHA-256 of the prompt file. |
 | Cases | SHA-256 over the case files, in name order, and their count. |
@@ -196,7 +200,7 @@ prompt 51c8e09d3f12 · 6 cases 0d7e44a1b9c3 · policy rules 7a1f0c2b5e88 · scan
 Ten runs a side detects large shifts only. This shows a tendency for this model, prompt and set of cases, not a guarantee.
 ```
 
-The comment keeps the check's existing rules: every sentence is the scanner's; tool, argument, rule and case names appear only as identifiers; and neither a server's descriptions nor the model's own text is quoted. Canary values are never shown, only that one leaked and through which tool. Cited domains are proposed as the one exception (a domain, never a full URL), since they come from the team's own canned outputs; that is an open question. Full arguments and answers go in the JSON artifact, which stays in the team's CI.
+The comment keeps the check's existing rules: every sentence is the scanner's; tool, argument, rule and case names appear only as identifiers; and neither a server's descriptions nor the model's own text is quoted. Canary values are never shown, only that one leaked and through which tool. Cited domains are proposed as the one exception (a domain, never a full URL), since they come from the team's own canned outputs; that is an open question, and Stage 1 shows counts only. Full arguments and answers go in the JSON artifact, which stays in the team's CI.
 
 With no `failWhen` rules the replay only reports. Rules a team can add once it trusts its cases:
 
@@ -249,26 +253,26 @@ Platform work that needs the backend, planned separately:
 
 Rough working days, one person, including tests. Tests use a fake model server on 127.0.0.1 that returns scripted replies in each provider's format, so the suite never calls a real API and stays deterministic.
 
-**Stage 1, the smallest version worth showing (about 8 days):**
+**Stage 1, the smallest version worth showing (about 9 days):**
 
 | Part | Days |
 | --- | --- |
 | Case and settings format, strict reader | 1 |
 | Adapter interface and the replay loop (canned outputs, step limit, repeats, call cap, retries) | 1.5 |
-| Bedrock Converse adapter, with API-key and Signature Version 4 sign-in | 1.5 |
+| Three adapters: Anthropic Messages, Chat Completions with a configurable base URL, Bedrock Converse with a bearer API key | 2.5 |
 | Reach, out-of-scope calls and the rate test | 1 |
 | Canaries and planted instructions | 1 |
 | Policy rules: reading the draft shape, matching on capability and decision | 0.5 |
 | Grounded citations, allow and deny | 0.5 |
 | Evidence header, `replay --before=<ref>` command and the Markdown report | 1 |
 
-A local command only: no Action changes, no fail rules, one provider, policy conditions not evaluated. Shown on a small sample server whose definitions we change, with a case that plants an instruction and canaries, on our own Bedrock key (a few dollars at most). Presented as a prototype.
+A local command only: no Action changes, no fail rules, policy conditions not evaluated. Shown on a small sample server whose definitions we change, with a case that plants an instruction and canaries, on Dom's Anthropic key (well under a dollar). The Chat Completions and Bedrock adapters are tested only against a fake server until real keys are tried. Presented as a prototype.
 
-**Stage 2, ready for CI (about 5.5 days):** the Action step with the base-branch lockfile and a separate keyed step (1.5), fail rules (1), the JSON artifact (0.5), the Chat Completions adapter (1), `--calibrate` and re-running unclear cases (1), README and docs (0.5).
+**Stage 2, ready for CI (about 4.5 days):** the Action step with the base-branch lockfile and a separate keyed step (1.5), fail rules (1), the JSON artifact (0.5), `--calibrate` and re-running unclear cases (1), README and docs (0.5).
 
-**Stage 3 (about 2 days, plus the policy contract):** the Responses adapter (1) and the Anthropic Messages adapter (1). Evaluating policy conditions, priority and capability mapping follows the backend rule contract and is estimated once that exists.
+**Stage 3 (about 1.5 days, plus the policy contract):** the Responses adapter (1) and Bedrock sign-in with AWS Signature Version 4 (0.5). Evaluating policy conditions, priority and capability mapping follows the backend rule contract and is estimated once that exists.
 
-Full version, stages 1 to 3: about 15 to 16 days, down from 19 to 22 in the previous draft, with the model judge and the Langfuse import cut.
+Full version, stages 1 to 3: about 15 days.
 
 **Later, not planned:** posting replay measures to Langfuse as scores; Google Gemini and other adapters; simulated multi-turn users; posting to GitLab merge requests; uploading results to a Stackduke dashboard; hosted MCP modes (not possible).
 
