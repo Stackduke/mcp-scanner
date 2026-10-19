@@ -1,0 +1,36 @@
+# An example workflow: copy it to .github/workflows/ in a repository whose agents use MCP servers,
+# with stackduke.watch.json at the repository's root. Start the watch file on a computer with
+#   stackduke-mcp-scanner watch --update --add=<the server's https address>
+# and commit it.
+#
+# Each day it compares every server's tools with the approved list, and keeps one issue open while
+# they differ. It is an alert, not a block: agents keep using the servers until someone acts.
+
+name: MCP tool watch
+on:
+  schedule:
+    # The Stackduke tracker lists the servers it watches each day from 04:17 UTC. This runs after.
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write # only for issue: "true"
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # From the first release after 0.3.0. Until then, use @main or a commit.
+      - uses: Stackduke/mcp-scanner/watch@v0
+        with:
+          issue: "true"
+        # Only for a server whose entry in the watch file names a tokenVariable. Each token goes
+        # only to the server that names it. Put it in this step, not the job, so no other step has it.
+        # env:
+        #   STACKDUKE_WATCH_LINEAR_TOKEN: ${{ secrets.STACKDUKE_WATCH_LINEAR_TOKEN }}

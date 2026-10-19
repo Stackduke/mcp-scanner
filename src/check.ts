@@ -104,7 +104,7 @@ export function runCheck(live: Snapshot, lockfile: Lockfile | null, repeated: st
 }
 
 export type UpdateResult =
-  | { written: true; text: string; result: CheckResult }
+  | { written: true; text: string; tools: LockedTool[]; result: CheckResult }
   /** New findings that a person has not accepted, or a name listed twice. Nothing is written. */
   | { written: false; result: CheckResult };
 
@@ -121,7 +121,7 @@ export function updateLockfile(live: Snapshot, lockfile: Lockfile | null, accept
     const keys = problemsOf(tool).problems.map((problem) => problem.key);
     return { ...tool, ...(keys.length ? { accepted: keys } : {}) };
   });
-  return { written: true, text: writeLockfile(tools), result };
+  return { written: true, text: writeLockfile(tools), tools, result };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -151,9 +151,38 @@ function counted(tool: SnapshotTool): string {
   return kind === "unclear" ? "what it does could not be labelled" : `counted as able to ${canDo[kind]}`;
 }
 
-function listOf(rows: string[]): string[] {
+/** Rows as a Markdown list, cut short with `more` said after the count of those left out. */
+export function listOf(rows: string[], more = "The lockfile's diff has them all."): string[] {
   const shown = rows.slice(0, mostListed).map((row) => `- ${row}`);
-  return rows.length > mostListed ? [...shown, `- … and ${rows.length - mostListed} more. The lockfile's diff has them all.`] : shown;
+  return rows.length > mostListed ? [...shown, `- … and ${rows.length - mostListed} more. ${more}`] : shown;
+}
+
+/** One row for each tool added, removed or changed, in the scanner's words. */
+export function changeRows(diff: SnapshotDiff): string[] {
+  return [
+    ...diff.added.map((tool) => `${code(tool.name)}: added; ${counted(tool)}`),
+    ...diff.removed.map((tool) => `${code(tool.name)}: removed`),
+    ...diff.changed.map((change) => {
+      const fields = change.fields.map((field) => `${fieldWords[field]} ${howWords[change.how[field] ?? "altered"]}`).join(", ");
+      const before = assessTool(change.before).tool, after = assessTool(change.after).tool;
+      const gained = after.does.filter((kind) => kind !== "read" && !before.does.includes(kind));
+      const wider = gained.length || (after.kind === "unclear" && before.kind !== "unclear");
+      return `${code(change.name)}: ${fields}${wider ? `; now ${counted(change.after)}, which it was not before` : ""}`;
+    }),
+  ];
+}
+
+/** One row for each name listed twice and each finding nobody has accepted. */
+export function problemRows(result: CheckResult): string[] {
+  return [
+    ...result.repeated.map((name) => `${code(name)} is listed more than once. A client uses the first definition, and this check cannot compare the others, so the server has to list it once.`),
+    ...result.problems.map((problem) => `${code(problem.tool)} · ${place(problem.where)}: ${problem.reason} (${problem.severity})`),
+  ];
+}
+
+/** The low findings, folded away. */
+export function noteLines(result: CheckResult, more?: string): string[] {
+  return ["<details><summary>" + `${plural(result.notes.length, "lesser note")}, which do not fail the check` + "</summary>", "", ...listOf(result.notes.map((note) => `${code(note.tool)} · ${place(note.where)}: ${note.reason}`), more), "", "</details>", ""];
 }
 
 export interface SummaryOptions {
@@ -179,17 +208,7 @@ export function describeCheck(result: CheckResult, { target, lockfilePath, updat
 
   if (drift) {
     lines.push(result.lockfileFound ? "### What changed" : "### Tools found", "");
-    const rows = [
-      ...diff.added.map((tool) => `${code(tool.name)}: added; ${counted(tool)}`),
-      ...diff.removed.map((tool) => `${code(tool.name)}: removed`),
-      ...diff.changed.map((change) => {
-        const fields = change.fields.map((field) => `${fieldWords[field]} ${howWords[change.how[field] ?? "altered"]}`).join(", ");
-        const before = assessTool(change.before).tool, after = assessTool(change.after).tool;
-        const gained = after.does.filter((kind) => kind !== "read" && !before.does.includes(kind));
-        const wider = gained.length || (after.kind === "unclear" && before.kind !== "unclear");
-        return `${code(change.name)}: ${fields}${wider ? `; now ${counted(change.after)}, which it was not before` : ""}`;
-      }),
-    ];
+    const rows = changeRows(diff);
     lines.push(...(result.lockfileFound ? listOf(rows) : listOf(rows.map((row) => row.replace(": added; ", ": ")))), "");
   }
 
@@ -198,8 +217,7 @@ export function describeCheck(result: CheckResult, { target, lockfilePath, updat
     const rows: string[] = [];
     if (!result.lockfileFound && update !== "written") rows.push(`There is no lockfile at ${lockfile}, so nothing has been approved yet.`);
     else if (drift && update !== "written") rows.push(`${plural(drift, "tool")} differ${drift === 1 ? "s" : ""} from the lockfile, which has not been updated.`);
-    for (const name of result.repeated) rows.push(`${code(name)} is listed more than once. A client uses the first definition, and this check cannot compare the others, so the server has to list it once.`);
-    for (const problem of result.problems) rows.push(`${code(problem.tool)} · ${place(problem.where)}: ${problem.reason} (${problem.severity})`);
+    rows.push(...problemRows(result));
     lines.push(...listOf(rows), "");
   }
 
@@ -221,7 +239,7 @@ export function describeCheck(result: CheckResult, { target, lockfilePath, updat
 
   if (result.accepted.length) lines.push(`${plural(result.accepted.length, "finding")} recorded as accepted in the lockfile ${result.accepted.length === 1 ? "is" : "are"} still present.`, "");
   if (result.notes.length) {
-    lines.push("<details><summary>" + `${plural(result.notes.length, "lesser note")}, which do not fail the check` + "</summary>", "", ...listOf(result.notes.map((note) => `${code(note.tool)} · ${place(note.where)}: ${note.reason}`)), "", "</details>", "");
+    lines.push(...noteLines(result));
   }
   lines.push("The check reads the tool list the server gives and never calls a tool. Its text checks are pattern checks: a pass means nothing matched and nothing changed, not that the server is safe.");
   const text = `${lines.join("\n")}\n`;

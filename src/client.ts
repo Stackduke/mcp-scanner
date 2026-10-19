@@ -36,7 +36,7 @@ const longestName = 256;
 export class ReplyTooLarge extends Error {}
 
 /** Reads a reply a piece at a time and stops at the limit, so a huge or endless body cannot fill memory. */
-async function readCapped(response: Response, limit: number): Promise<string> {
+export async function readCapped(response: Response, limit: number): Promise<string> {
   if (!response.body) return "";
   const reader = response.body.getReader();
   const decoder = new TextDecoder();

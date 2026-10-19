@@ -101,11 +101,21 @@ export type SignedInScan =
 export async function scanSignedIn(name: string, environment: Record<string, string | undefined>, fetchImpl?: typeof fetch): Promise<SignedInScan> {
   const server = Object.hasOwn(signedInServers, name) ? signedInServers[name] : undefined;
   if (!server) return { outcome: "unknown-server" };
-  const { url, tokenVariable } = server;
-  const read = readToken(tokenFor(server, environment));
+  return listWithToken(server.url, server.tokenVariable, tokenFor(server, environment), environment, fetchImpl ? { fetchImpl } : {});
+}
+
+export interface TokenListOptions { fetchImpl?: typeof fetch; timeoutMs?: number }
+
+/**
+ * Lists one server's tools with a token, under the rules every token here follows: https only,
+ * nothing sent when certificate checking is switched off, no redirect, and nothing kept from a
+ * reply that sends the token back. The caller decides which address goes with which variable.
+ */
+export async function listWithToken(url: string, tokenVariable: string, value: string | undefined, environment: Record<string, string | undefined>, { fetchImpl, timeoutMs }: TokenListOptions = {}): Promise<SignedInScan> {
+  const read = readToken(value);
   if (!read.ok) return { outcome: "no-token", tokenVariable, reason: read.reason };
   if (environment.NODE_TLS_REJECT_UNAUTHORIZED === "0") return { outcome: "unsafe-connection", tokenVariable };
-  const result = await listTools(url, { bearerToken: read.token, ...(fetchImpl ? { fetchImpl } : {}) });
+  const result = await listTools(url, { bearerToken: read.token, ...(fetchImpl ? { fetchImpl } : {}), ...(timeoutMs ? { timeoutMs } : {}) });
   // Everything in the result is the server's text and is about to be printed and perhaps saved.
   if (JSON.stringify(result).includes(JSON.stringify(read.token).slice(1, -1))) return { outcome: "token-echoed", url };
   return { outcome: "answered", url, tokenVariable, result };
