@@ -145,7 +145,12 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     if (endpoint.changes[0] !== latestChange) changed += 1;
     if (!saved || !endpoint.file) return;
     await writeWhole(file(endpoint.file), `${JSON.stringify(saved.print)}\n`);
-    if (endpoint.signedIn) await writeWhole(file(watchedFile(endpoint.signedIn)), snapshotText(saved.snapshot));
+    // The definitions are rewritten only when the server changed them (or the file is missing), so a
+    // watched file's history is its server's history. Its takenAt is when that version was first
+    // seen; how recently it was confirmed is the endpoint's lastListed.
+    if (!endpoint.signedIn) return;
+    const watchedPath = file(watchedFile(endpoint.signedIn));
+    if (!saved.reread || !(await readSnapshot(watchedPath))) await writeWhole(watchedPath, snapshotText(saved.snapshot));
   }
 
   // Servers watched with a login. A token that is not set is recorded as a missed check, once the server is being watched.

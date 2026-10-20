@@ -287,9 +287,10 @@ export type CheckResult = ListToolsResult | { outcome: "no-token" };
 /**
  * Records one look at an endpoint. When the list is new or different, returns it to be saved, in
  * full and as a print; an unchanged list is not saved again, so the history of the saved files is
- * the history of changes.
+ * the history of changes. The same list read differently by newer rules comes back with `reread`
+ * set: its print holds the new reading and is saved, but the full list has not changed.
  */
-export function recordCheck(endpoint: Endpoint, result: CheckResult, now: string, previous: ListPrint | null): { snapshot: Snapshot; print: ListPrint } | null {
+export function recordCheck(endpoint: Endpoint, result: CheckResult, now: string, previous: ListPrint | null): { snapshot: Snapshot; print: ListPrint; reread: boolean } | null {
   // Everything that can fail on a hostile list is worked out before the endpoint is touched.
   const listed = result.outcome === "listed" ? (() => {
     const snapshot = takeSnapshot(endpoint.url, result.tools, result.server, now);
@@ -313,7 +314,7 @@ export function recordCheck(endpoint: Endpoint, result: CheckResult, now: string
   endpoint.kinds = listed.kinds;
   endpoint.labels = listed.labels;
   endpoint.file = printFile(endpoint);
-  return unchanged && !reread ? null : { snapshot: listed.snapshot, print: listed.print };
+  return unchanged && !reread ? null : { snapshot: listed.snapshot, print: listed.print, reread };
 }
 
 /** The recent checks as times and outcomes. */

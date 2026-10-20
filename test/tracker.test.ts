@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { crawl } from "../src/crawl.ts";
 import { readEntry, readRegistry, scannableAddress } from "../src/registry.ts";
+import { signedInServers } from "../src/signed-in.ts";
 import { takeSnapshot } from "../src/snapshot.ts";
 import { checkReason, track } from "../src/track.ts";
 import { buildFeed, changeBetween, keptNames, labelsOf, listHashOf, lookupOf, mergeRegistry, planChecks, printOf, recordCheck, siteOf } from "../src/tracker.ts";
@@ -207,11 +208,67 @@ test("a change to the scanner's own rules is not a change to the server", () => 
   const server = endpoint("https://mcp.example.com/mcp", { lastListed: hoursBefore(24) });
   const reread = recordCheck(server, listed(tools), now, drifted);
   assert.ok(reread, "the new reading is saved");
+  assert.equal(reread.reread, true, "and marked as a new reading of the same list");
   assert.equal(server.changes.length, 0, "and no change is recorded");
   assert.equal(recordCheck(server, listed(tools), now, reread.print), null);
   // When the server does change one tool, a tool it left alone is not called out because the rules moved.
   const after = printOf(takeSnapshot("s", [{ name: "manage_account", ...readOnly }, { name: "get_page", description: "Now with more words.", ...readOnly }], undefined, now));
   assert.deepEqual(changeBetween(drifted, after, hoursBefore(24)).moreSerious, []);
+});
+
+test("a watched server's definitions are rewritten when its tools change, not when the scanner reads them differently", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
+  const linear = signedInServers.linear;
+  assert.ok(linear);
+  let tools: ToolDefinition[] = [{ name: "get_issue", ...readOnly }, { name: "list_teams", ...readOnly }];
+  const fetchImpl = (async (_input: URL | string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
+    if (body.method === "initialize") return Response.json({ jsonrpc: "2.0", id: body.id, result: { serverInfo: { name: "Linear" } } });
+    if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools } });
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+  let clock = Date.parse(hoursBefore(72));
+  const options = { dataDir, readRegistry: false, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, environment: { [linear.tokenVariable]: "lin_api_test" }, fetchImpl, now: () => new Date(clock) };
+  const watchedPath = path.join(dataDir, "watched", "linear.json");
+  const theEndpoint = async () => (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Endpoint).find((item) => item.signedIn === "linear");
+  /** The saved print as an older scanner would have left it: the same fields, other kinds. */
+  const drift = async () => {
+    const printPath = path.join(dataDir, (await theEndpoint())?.file ?? "missing");
+    const print = JSON.parse(await readFile(printPath, "utf8")) as ReturnType<typeof printOf>;
+    await writeFile(printPath, `${JSON.stringify({ ...print, tools: print.tools.map((tool) => ({ ...tool, kind: "destructive" })) })}\n`);
+    return printPath;
+  };
+
+  await track(options);
+  const firstSeen = await readFile(watchedPath, "utf8");
+  assert.equal((JSON.parse(firstSeen) as { takenAt: string }).takenAt, hoursBefore(72));
+
+  // Newer rules read the same tools differently: the print takes the new reading, the definitions stay as they were.
+  const printPath = await drift();
+  clock = Date.parse(hoursBefore(48));
+  await track(options);
+  assert.equal(await readFile(watchedPath, "utf8"), firstSeen, "the watched file is not rewritten");
+  const reprinted = JSON.parse(await readFile(printPath, "utf8")) as ReturnType<typeof printOf>;
+  assert.deepEqual(reprinted.tools.map((tool) => tool.kind), ["read", "read"], "the print holds the new reading");
+  const confirmed = await theEndpoint();
+  assert.equal(confirmed?.lastListed, hoursBefore(48), "how recently the list was seen is kept with the endpoint");
+  assert.equal(confirmed?.changes.length, 0);
+
+  // A missing watched file is written again even when only the reading changed.
+  await drift();
+  await rm(watchedPath);
+  clock = Date.parse(hoursBefore(36));
+  await track(options);
+  assert.equal((JSON.parse(await readFile(watchedPath, "utf8")) as { takenAt: string }).takenAt, hoursBefore(36));
+
+  // The server changes a tool: now the definitions are rewritten, and the change is recorded.
+  tools = [{ name: "get_issue", description: "Reads one issue.", ...readOnly }, { name: "list_teams", ...readOnly }];
+  clock = Date.parse(hoursBefore(24));
+  await track(options);
+  const changed = JSON.parse(await readFile(watchedPath, "utf8")) as { takenAt: string; tools: ToolDefinition[] };
+  assert.equal(changed.takenAt, hoursBefore(24));
+  assert.equal(changed.tools[0]?.description, "Reads one issue.");
+  assert.equal((await theEndpoint())?.changes[0]?.at, hoursBefore(24));
 });
 
 test("a server that renames thousands of tools gets a short record with full counts", () => {
