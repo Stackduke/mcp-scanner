@@ -1,1 +1,1 @@
-{"source":"https://renewalmatrix.vercel.app/api/mcp","takenAt":"2026-10-16T18:24:28.620Z","server":{"name":"renewalmatrix","version":"1.0.0"},"tools":[{"name":"check_renewal_compliance","kind":"money","fields":{"description":"c4285641c35eb9e6","inputSchema":"b7bc0175b4c56347"}}]}
+{"source":"https://renewalmatrix.vercel.app/api/mcp","takenAt":"2026-10-20T09:45:02.695Z","server":{"name":"renewalmatrix","version":"1.0.0"},"tools":[{"name":"check_renewal_compliance","kind":"read","fields":{"description":"c4285641c35eb9e6","inputSchema":"b7bc0175b4c56347"}}]}

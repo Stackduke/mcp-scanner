@@ -1,1 +1,1 @@
-{"source":"https://returncheck.m-angelmartinez-fer.workers.dev/mcp","takenAt":"2026-10-16T18:24:31.914Z","server":{"name":"ReturnCheck","version":"1.0.0"},"tools":[{"name":"check_return","kind":"money","fields":{"description":"1ffa1394b23dca7a","inputSchema":"dfad500a4b5817ad"}}]}
+{"source":"https://returncheck.m-angelmartinez-fer.workers.dev/mcp","takenAt":"2026-10-20T09:45:04.572Z","server":{"name":"ReturnCheck","version":"1.0.0"},"tools":[{"name":"check_return","kind":"read","fields":{"description":"1ffa1394b23dca7a","inputSchema":"dfad500a4b5817ad"}}]}

@@ -1,6 +1,6 @@
 {
   "source": "https://mcp.linear.app/mcp",
-  "takenAt": "2026-10-18T06:25:14.673Z",
+  "takenAt": "2026-10-20T09:36:30.028Z",
   "server": {
     "name": "Linear MCP",
     "version": "1.0.0"
@@ -918,7 +918,7 @@
     {
       "name": "list_comments",
       "title": "List comments",
-      "description": "List comments on a Linear issue, project, initiative, document, project milestone, or project/initiative status update. Provide exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId`. For issues, projects, and initiatives this returns both top-level discussion threads and inline description comments. Inline (anchored) comments carry a non-null `quotedText` set to the snippet of description text they reference. Returned comments include `author` and nullable `onBehalfOf`; when set, `onBehalfOf` identifies the user the agent author acted for. Files uploaded in comment bodies are returned in `attachments` with titles and download URLs, not issue attachment IDs. Signed upload URLs expire after five minutes; call list_comments again to refresh them. Download documents using these URLs and process them with your own file tools.",
+      "description": "List comments on a Linear issue, project, initiative, document, project milestone, or project/initiative status update. Provide exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId`. `statusUpdateType` applies only to `statusUpdateId`; omit it for every other parent. For issues, projects, and initiatives this returns both top-level discussion threads and inline description comments. Inline (anchored) comments carry a non-null `quotedText` set to the snippet of description text they reference. Returned comments include `author` and nullable `onBehalfOf`; when set, `onBehalfOf` identifies the user the agent author acted for. Files uploaded in comment bodies are returned in `attachments` with titles and download URLs, not issue attachment IDs. Signed upload URLs expire after five minutes; call list_comments again to refresh them. Download documents using these URLs and process them with your own file tools.",
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -967,7 +967,7 @@
             "type": "string"
           },
           "statusUpdateType": {
-            "description": "Type of status update named by `statusUpdateId`, as returned by `get_status_updates`. Only valid together with `statusUpdateId`; omit to check both project and initiative status updates.",
+            "description": "Set only together with `statusUpdateId`; omit for issue, project, initiative, document, and milestone comments. Type of status update named by `statusUpdateId`, as returned by `get_status_updates`. Omit to check both project and initiative status updates.",
             "type": "string",
             "enum": [
               "project",
@@ -983,7 +983,7 @@
         "idempotentHint": true,
         "openWorldHint": false
       },
-      "hash": "3fd696d19dfb1815782d93bb4cbd084aa439c325c0cf32cb2e22f5f712d43489"
+      "hash": "7e26dcb18d404e9ecb5e5bc68421cf8f2546a06695c12c06dade8135413e489b"
     },
     {
       "name": "list_custom_views",
@@ -1447,7 +1447,7 @@
     {
       "name": "list_project_labels",
       "title": "List project labels",
-      "description": "List available project labels in a Linear workspace or team. Returns workspace labels by default; pass `team` to also include that team's labels. A team-scoped label carries a `team` field; different teams can hold same-named labels, so check it before acting on an ID. A retired label carries `retiredAt` and cannot be applied to new projects.",
+      "description": "List available project labels in a Linear workspace or team. Returns workspace labels by default; pass `team` to also include that team's labels. Pass `includeGroups` to include groups, which return `groupType`; child labels return their `parent` and `parentGroupType`. A team-scoped label carries a `team` field; different teams can hold same-named labels, so check it before acting on an ID. A retired label carries `retiredAt` and cannot be applied to new projects.",
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1498,7 +1498,7 @@
         "idempotentHint": true,
         "openWorldHint": false
       },
-      "hash": "87aba1445cd6dcdc9eccde0b3b1ef7c2cd1aa32f17770a0617a0a9a46d66701f"
+      "hash": "ea1bfa56a32adaf2fb32a192fbc085a1cfa196a47459450a94a5aeac43b91247"
     },
     {
       "name": "list_projects",
@@ -2212,7 +2212,7 @@
     {
       "name": "save_comment",
       "title": "Save comment",
-      "description": "Create or update a comment on a Linear issue, project, initiative, document, project milestone, or project/initiative status update. If `id` is provided, updates the existing comment; otherwise creates a new one. To start a new thread, pass `body` and exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId` — comments on issues/projects/initiatives become top-level discussion threads; comments on documents/milestones become description comments. A status update holds a single thread, so a comment on an update that already has one is added to it as a reply. To reply to an existing thread, pass `parentId` and `body`; the reply inherits the parent's thread type, so no entity reference is needed. Parent reference fields are ignored when `id` or `parentId` is provided (`statusUpdateType` is rejected instead).",
+      "description": "Create or update a comment on a Linear issue, project, initiative, document, project milestone, or project/initiative status update. If `id` is provided, updates the existing comment; otherwise creates a new one. To start a new thread, pass `body` and exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId` (`statusUpdateType` applies only to `statusUpdateId`; omit it for every other parent) — comments on issues/projects/initiatives become top-level discussion threads; comments on documents/milestones become description comments. A status update holds a single thread, so a comment on an update that already has one is added to it as a reply. To reply to an existing thread, pass `parentId` and `body`; the reply inherits the parent's thread type, so no entity reference is needed. Parent reference fields are ignored when `id` or `parentId` is provided (`statusUpdateType` is rejected instead).",
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2246,7 +2246,7 @@
             "type": "string"
           },
           "statusUpdateType": {
-            "description": "Type of status update named by `statusUpdateId`, as returned by `get_status_updates`. Only valid together with `statusUpdateId`; omit to check both project and initiative status updates.",
+            "description": "Set only together with `statusUpdateId`; omit for issue, project, initiative, document, and milestone comments. Type of status update named by `statusUpdateId`, as returned by `get_status_updates`. Omit to check both project and initiative status updates.",
             "type": "string",
             "enum": [
               "project",
@@ -2273,7 +2273,7 @@
         "idempotentHint": false,
         "openWorldHint": false
       },
-      "hash": "34ec9df51951caac22a91f43d56d04156ce2fc6c78eafbf1358c908f173b3000"
+      "hash": "8ac5aad3446d606c1a45a244fe208eccd8ab311e3f224bdb81e8acb6a50fc37c"
     },
     {
       "name": "save_document",
@@ -3357,6 +3357,14 @@
           "isGroup": {
             "description": "Whether the label is a group",
             "type": "boolean"
+          },
+          "groupType": {
+            "description": "Selection mode for label groups. Defaults to singleSelect when creating; omit to keep it unchanged when updating",
+            "type": "string",
+            "enum": [
+              "singleSelect",
+              "multiSelect"
+            ]
           }
         },
         "additionalProperties": false
@@ -3367,7 +3375,7 @@
         "idempotentHint": false,
         "openWorldHint": false
       },
-      "hash": "3e8b8af605d03b92880968eb7ff46c7dab5a99760e7e8e3ce7be1051224a0a66"
+      "hash": "63b4d3ff82212a6fee39f233b03c17f13043e6a9ac484b143acc0530c2c6aab1"
     },
     {
       "name": "save_release",

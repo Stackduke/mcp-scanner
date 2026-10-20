@@ -1,6 +1,6 @@
 {
   "source": "https://mcp.circleci.com/v1/mcp",
-  "takenAt": "2026-10-18T13:39:21.882Z",
+  "takenAt": "2026-10-20T09:36:36.591Z",
   "server": {
     "name": "circleci",
     "version": "e0593d04fb0943da2fd9e47c43acaf836fa76be2"
