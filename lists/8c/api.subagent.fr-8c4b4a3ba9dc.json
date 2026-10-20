@@ -1,0 +1,1 @@
+{"source":"https://api.subagent.fr/mcp","takenAt":"2026-10-20T14:55:14.734Z","server":{"name":"subagent","version":"0.12.1"},"tools":[{"name":"sign_up","kind":"write","fields":{"title":"87f402af2dc5b99e","description":"180e394d4f38c6b2","inputSchema":"23c46fe5d0926bd2","annotations":"15a577f55adeb552"}}]}

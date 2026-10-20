@@ -1,0 +1,1 @@
+{"source":"https://aidown.dev/mcp","takenAt":"2026-10-20T14:55:14.228Z","server":{"name":"AI Down","version":"0.1.0"},"tools":[{"name":"get_status","kind":"read","fields":{"description":"9f5fa9103670434c","inputSchema":"6e81251801370f9e","annotations":"8803fb4b4971327e"}}]}
