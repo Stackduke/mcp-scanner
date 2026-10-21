@@ -1,0 +1,1 @@
+{"source":"https://lead-enrichment-mcp.agent-infra.workers.dev/mcp","takenAt":"2026-10-21T09:40:29.599Z","server":{"name":"lead-enrichment-mcp","version":"1.0.0"},"tools":[{"name":"enrich_lead","kind":"read","fields":{"description":"5e16e3cbb3747fae","inputSchema":"f984b19058a1a078","outputSchema":"3f99db99c14bce0f","annotations":"9a27610ed9917e6c"}}]}

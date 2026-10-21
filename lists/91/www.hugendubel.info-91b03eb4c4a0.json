@@ -1,0 +1,1 @@
+{"source":"https://www.hugendubel.info/mcp","takenAt":"2026-10-21T09:41:16.822Z","server":{"name":"iris_query","version":"1.0.0"},"tools":[{"name":"get_product_details","kind":"read","fields":{"description":"04ba80d4007f2cf4","inputSchema":"e9aa8e51e815cc2e"}},{"name":"search_products","kind":"read","fields":{"description":"2f4c2822a65e3065","inputSchema":"6d277c3b82fd4c69"}}]}

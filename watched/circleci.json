@@ -1,9 +1,9 @@
 {
   "source": "https://mcp.circleci.com/v1/mcp",
-  "takenAt": "2026-10-20T09:36:36.591Z",
+  "takenAt": "2026-10-21T09:25:55.926Z",
   "server": {
     "name": "circleci",
-    "version": "e0593d04fb0943da2fd9e47c43acaf836fa76be2"
+    "version": "81aeb7c90aba13a5b5fe468af5d81a8690e65ab5"
   },
   "tools": [
     {
@@ -2519,6 +2519,47 @@
         "title": "Roll back deploy component"
       },
       "hash": "4ef5cd4aa33d269bda96c8e29d2259e05b161fb9890bf6d7aa7954583fb4f969"
+    },
+    {
+      "name": "send_feedback",
+      "description": "Send feedback about this server to CircleCI: an error that looks like a\nCircleCI fault, a capability you needed and could not find, or a tool whose\noutput or description misled you. message is the report itself, up to 2000\ncharacters — say what you were trying to do, which tools you called and what\nhappened; leave out secrets. tool optionally names the tool the report is\nabout (e.g. \"get_job_logs\"), up to 200 characters. A report records the\nauthenticated CircleCI user and the client's name, and returns the report's\nid. Send one report per distinct problem.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "The report itself, up to 2000 characters: what you were trying to do, which tools you called and what happened. Leave out secrets."
+          },
+          "tool": {
+            "type": "string",
+            "description": "The tool the report is about (e.g. \"get_job_logs\"), up to 200 characters. Omit it for a report that is not about one tool."
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "readOnlyHint": false,
+        "title": "Send feedback"
+      },
+      "hash": "08509fc8b9d048bb516366c60969b7fc48ed05df3ef45ac30bdbe3b060e1c101"
     },
     {
       "name": "validate_config",

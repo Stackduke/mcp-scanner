@@ -1,8 +1,8 @@
 {
-  "readAt": "2026-10-20T14:32:06.820Z",
-  "complete": true,
-  "entries": 46971,
-  "endpoints": 29777,
-  "attemptedAt": "2026-10-20T14:32:06.820Z",
-  "attemptOk": true
+  "readAt": "2026-10-21T09:24:31.225Z",
+  "complete": false,
+  "entries": 700,
+  "endpoints": 594,
+  "attemptedAt": "2026-10-21T09:24:31.225Z",
+  "attemptOk": false
 }

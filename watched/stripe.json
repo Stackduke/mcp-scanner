@@ -1,6 +1,6 @@
 {
   "source": "https://mcp.stripe.com/",
-  "takenAt": "2026-10-18T06:25:15.935Z",
+  "takenAt": "2026-10-21T09:25:46.925Z",
   "server": {
     "name": "stripe-mcp",
     "version": "1.0.0"
@@ -254,9 +254,13 @@
                 "description": "Used with execute_query_run. Optional settings for the QueryRun results.",
                 "type": "object",
                 "properties": {
-                  "compress_file": {
-                    "type": "boolean",
-                    "description": "Whether to compress the generated results file."
+                  "compression": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "zip"
+                    ],
+                    "description": "Compression applied to the generated results file. Defaults to none."
                   }
                 }
               },
@@ -336,7 +340,7 @@
         "readOnlyHint": true,
         "title": "Stripe Analytics"
       },
-      "hash": "179f3ed9a4f0367422587a288b08866a8462fc7b9457bef62727f6ddabfd7b38"
+      "hash": "3e479e4415dad021eafa0f27c4caf67d8bc259c1a8a11e0906f6e01c994aff58"
     },
     {
       "name": "stripe_api_details",
