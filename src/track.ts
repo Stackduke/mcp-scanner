@@ -103,6 +103,9 @@ export function checkReason(result: CheckResult, recorded: string | undefined): 
 
 const byId = (a: Endpoint, b: Endpoint) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
+/** A watched server whose initialize answered 424 Failed Dependency: its backend is not ready yet, often still starting. */
+const isWaking = (result: CheckResult): boolean => result.outcome === "not-usable" && result.detail === "initialize answered 424";
+
 export async function track(options: TrackOptions): Promise<TrackSummary> {
   const { dataDir, environment, fetchImpl, log = () => undefined } = options;
   const clock = options.now ?? (() => new Date());
@@ -153,7 +156,19 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     if (!saved.reread || !(await readSnapshot(watchedPath))) await writeWhole(watchedPath, snapshotText(saved.snapshot));
   }
 
+  /** One look at a server watched with a login, as the result to record. */
+  async function lookSignedIn(vendor: string): Promise<CheckResult> {
+    const scan = await scanSignedIn(vendor, environment, fetchImpl);
+    if (scan.outcome === "unsafe-connection") throw new Error("Certificate checking is switched off here, so no token was sent.");
+    if (scan.outcome === "token-echoed") log(`${vendor}: the server sent the token back. Nothing it returned was kept. Replace that token.`);
+    return scan.outcome === "answered" ? scan.result : scan.outcome === "no-token" ? { outcome: "no-token" } : { outcome: "not-usable", detail: "the server sent the token back" };
+  }
+  const logWatched = (vendor: string, endpoint: Endpoint, result: CheckResult) => log(`${vendor}: ${endpoint.outcome}${checkReason(result, endpoint.outcome)}${endpoint.tools !== undefined ? `, ${endpoint.outcome === "listed" ? "" : "last listed "}${endpoint.tools} tools` : ""}`);
+
   // Servers watched with a login. A token that is not set is recorded as a missed check, once the server is being watched.
+  // A 424 to initialize is often a hosted backend still waking up (Grafana Cloud's stack sleeps when unused and takes
+  // minutes to start), so that server is looked at once more after the crawl, and only the second look is recorded.
+  const lookAgain: Array<[string, Endpoint]> = [];
   for (const [vendor, server] of Object.entries(signedInServers)) {
     const hasToken = Boolean(tokenFor(server, environment)?.trim());
     const endpoint = watched.get(vendor) ?? (hasToken ? watchedEndpoint(vendor, server.url, startedAt) : null);
@@ -161,12 +176,14 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     watched.set(vendor, endpoint);
     endpoint.url = server.url;
     const at = clock().toISOString();
-    const scan = await scanSignedIn(vendor, environment, fetchImpl);
-    if (scan.outcome === "unsafe-connection") throw new Error("Certificate checking is switched off here, so no token was sent.");
-    if (scan.outcome === "token-echoed") log(`${vendor}: the server sent the token back. Nothing it returned was kept. Replace that token.`);
-    const result: CheckResult = scan.outcome === "answered" ? scan.result : scan.outcome === "no-token" ? { outcome: "no-token" } : { outcome: "not-usable", detail: "the server sent the token back" };
+    const result = await lookSignedIn(vendor);
+    if (isWaking(result)) {
+      log(`${vendor}: initialize answered 424, so it will be checked again after the crawl`);
+      lookAgain.push([vendor, endpoint]);
+      continue;
+    }
     await record(endpoint, result, at);
-    log(`${vendor}: ${endpoint.outcome}${checkReason(result, endpoint.outcome)}${endpoint.tools !== undefined ? `, ${endpoint.outcome === "listed" ? "" : "last listed "}${endpoint.tools} tools` : ""}`);
+    logWatched(vendor, endpoint, result);
   }
 
   // Each result is recorded as soon as it arrives, so the run holds one list at a time per check, not all of them.
@@ -180,6 +197,13 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     return endpoint.outcome;
   }, { concurrency: options.concurrency, hostGapMs: options.hostGapMs, deadline, now: () => clock().getTime() });
   log(`checked ${done.length}, not started ${notStarted.length}, changed ${changed}, could not process ${failed}`);
+
+  for (const [vendor, endpoint] of lookAgain) {
+    const at = clock().toISOString();
+    const result = await lookSignedIn(vendor);
+    await record(endpoint, result, at);
+    logWatched(vendor, endpoint, result);
+  }
 
   const endpoints = [...byUrl.values(), ...watched.values()].sort(byId);
   const reports = new Map<string, AuthorityReport>();

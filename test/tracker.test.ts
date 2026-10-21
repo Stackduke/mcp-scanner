@@ -394,3 +394,48 @@ test("a missed check on a watched server says why in the log, in the scanner's o
   assert.equal(checkReason({ outcome: "listed", server: {}, tools: [] }, "listed"), "");
   assert.equal(checkReason({ outcome: "no-token" }, "no-token"), "");
 });
+
+/** A run with one open server in the registry and Grafana watched with a token, whose initialize answers 424 until it is ready. */
+async function runWithWakingServer(readyOnLook: number) {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
+  const asked: string[] = [];
+  let looks = 0;
+  const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
+    const url = String(input);
+    if (url.startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: [{ server: { name: "com.example/open", remotes: [{ type: "streamable-http", url: "https://open.example.com/mcp" }] } }], metadata: {} });
+    const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
+    asked.push(`${new URL(url).hostname} ${body.method}`);
+    if (url === "https://mcp.grafana.com/mcp" && body.method === "initialize") {
+      looks += 1;
+      if (looks < readyOnLook) return new Response("upstream not ready", { status: 424 });
+    }
+    if (body.method === "initialize") return Response.json({ jsonrpc: "2.0", id: body.id, result: { serverInfo: { name: "Demo" } } });
+    if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "get_page", ...readOnly }] } });
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+  const lines: string[] = [];
+  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, environment: { STACKDUKE_SCAN_GRAFANA_TOKEN: "test-token" }, fetchImpl, now: () => new Date(now), log: (line) => lines.push(line) });
+  const endpoints = (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Endpoint);
+  return { summary, asked, lines, grafana: endpoints.find((item) => item.signedIn === "grafana") };
+}
+
+test("a watched server that answers 424 to initialize is looked at again after the crawl, and only that look is recorded", async () => {
+  const { summary, asked, lines, grafana } = await runWithWakingServer(2);
+  const initializes = asked.filter((line) => line.endsWith(" initialize"));
+  assert.deepEqual(initializes, ["mcp.grafana.com initialize", "open.example.com initialize", "mcp.grafana.com initialize"], "the second look comes after the crawl");
+  assert.equal(grafana?.outcome, "listed");
+  assert.equal(grafana?.tools, 1);
+  assert.equal(grafana?.checks.length, 1, "one check recorded, not a miss and then a listing");
+  assert.deepEqual(summary.watched, [{ vendor: "grafana", outcome: "listed" }]);
+  assert.ok(lines.includes("grafana: initialize answered 424, so it will be checked again after the crawl"));
+  assert.ok(!lines.some((line) => line.includes("upstream not ready")), "nothing the server said reaches the log");
+});
+
+test("a watched server that answers 424 both times is recorded as one missed check", async () => {
+  const { asked, lines, grafana } = await runWithWakingServer(Infinity);
+  assert.equal(asked.filter((line) => line === "mcp.grafana.com initialize").length, 2, "looked at twice, no more");
+  assert.equal(grafana?.outcome, "not-usable");
+  assert.equal(grafana?.checks.length, 1);
+  assert.equal(lines.filter((line) => line.startsWith("grafana: not-usable")).length, 1, "one missed check in the log");
+  assert.ok(lines.includes("grafana: not-usable (initialize answered 424)"));
+});
