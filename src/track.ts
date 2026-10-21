@@ -103,8 +103,14 @@ export function checkReason(result: CheckResult, recorded: string | undefined): 
 
 const byId = (a: Endpoint, b: Endpoint) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-/** A watched server whose initialize answered 424 Failed Dependency: its backend is not ready yet, often still starting. */
-const isWaking = (result: CheckResult): boolean => result.outcome === "not-usable" && result.detail === "initialize answered 424";
+/**
+ * A failure that may clear up within minutes, so a watched server gets a second look before it is recorded: no answer
+ * at all (a timeout or a dropped connection), or an initialize answered 424 (a backend still starting), 429 (too many
+ * requests) or 5xx (the server's own error). A refused login, a missing token or a list the scanner cannot use would
+ * be the same a few minutes later, so those are recorded at once.
+ */
+const mayClearUp = (result: CheckResult): boolean =>
+  result.outcome === "unreachable" || (result.outcome === "not-usable" && /^initialize answered (424|429|5\d\d)$/.test(result.detail));
 
 export async function track(options: TrackOptions): Promise<TrackSummary> {
   const { dataDir, environment, fetchImpl, log = () => undefined } = options;
@@ -166,8 +172,8 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   const logWatched = (vendor: string, endpoint: Endpoint, result: CheckResult) => log(`${vendor}: ${endpoint.outcome}${checkReason(result, endpoint.outcome)}${endpoint.tools !== undefined ? `, ${endpoint.outcome === "listed" ? "" : "last listed "}${endpoint.tools} tools` : ""}`);
 
   // Servers watched with a login. A token that is not set is recorded as a missed check, once the server is being watched.
-  // A 424 to initialize is often a hosted backend still waking up (Grafana Cloud's stack sleeps when unused and takes
-  // minutes to start), so that server is looked at once more after the crawl, and only the second look is recorded.
+  // A failure that may clear up (Grafana Cloud's stack, say, sleeps when unused and answers 424 for minutes while it
+  // starts) gets that server one more look after the crawl, and only the second look is recorded.
   const lookAgain: Array<[string, Endpoint]> = [];
   for (const [vendor, server] of Object.entries(signedInServers)) {
     const hasToken = Boolean(tokenFor(server, environment)?.trim());
@@ -177,8 +183,8 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     endpoint.url = server.url;
     const at = clock().toISOString();
     const result = await lookSignedIn(vendor);
-    if (isWaking(result)) {
-      log(`${vendor}: initialize answered 424, so it will be checked again after the crawl`);
+    if (mayClearUp(result)) {
+      log(`${vendor}: ${result.outcome}${checkReason(result, result.outcome)}, so it will be checked again after the crawl`);
       lookAgain.push([vendor, endpoint]);
       continue;
     }
