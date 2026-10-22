@@ -1,0 +1,15 @@
+{
+  "replayVersion": 1,
+  "provider": "anthropic",
+  "model": "claude-haiku-5-5",
+  "systemPromptFile": "system-prompt.md",
+  "inference": { "maxTokens": 1024 },
+  "runsPerSide": 10,
+  "maxSteps": 6,
+  "maxModelCalls": 400,
+  "concurrency": 4,
+  "outbound": ["web_search"],
+  "policyFile": "../../../../examples/replay-sample/stackduke-replay/policy-rules.json",
+  "casesDir": "../../../../examples/replay-sample/stackduke-replay/cases",
+  "citations": { "allow": ["help.example-shop.com"], "deny": ["forum.example.net"] }
+}
