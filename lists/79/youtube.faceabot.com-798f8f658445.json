@@ -1,0 +1,1 @@
+{"source":"https://youtube.faceabot.com/mcp","takenAt":"2026-10-22T09:52:28.748Z","server":{"name":"faceabot-youtube","version":"1.0.0"},"tools":[{"name":"get_youtube_transcript","kind":"read","fields":{"title":"270b950d3ed8b092","description":"3ba9ad254b31e103","inputSchema":"0fb8679a7c56979b","annotations":"139076388a98d13d"}}]}

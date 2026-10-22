@@ -1,0 +1,1 @@
+{"source":"https://well-010-docx-to-text.rainmaker-wells.workers.dev/mcp","takenAt":"2026-10-22T09:52:27.143Z","server":{"name":"well-010-docx-to-text","version":"1.0.0"},"tools":[{"name":"docx-to-text","kind":"read","fields":{"description":"881515b3e30ee03b","inputSchema":"789375cf6d99b444","annotations":"fbea3a5eda19333f"}}]}

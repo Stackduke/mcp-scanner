@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/stackdetect/mcp","takenAt":"2026-10-22T09:54:19.717Z","server":{"name":"stackdetect","version":"0.1.0"},"tools":[{"name":"detect_stack","kind":"read","fields":{"title":"7dcf3fa5ca7c94d6","description":"1550f53af1167308","inputSchema":"662c5f77b7b98fdb","annotations":"ac2c497580f5ea9c"}}]}

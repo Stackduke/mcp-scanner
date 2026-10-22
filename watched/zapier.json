@@ -1,6 +1,6 @@
 {
   "source": "https://mcp.zapier.com/api/v1/connect",
-  "takenAt": "2026-10-20T09:36:32.591Z",
+  "takenAt": "2026-10-22T09:39:30.382Z",
   "server": {
     "name": "zapier",
     "version": "1.0.0"
@@ -347,7 +347,7 @@
     },
     {
       "name": "get_zapier_skill",
-      "description": "Returns the full markdown definition of a saved Zapier Skill by name, along with any appended execution instructions. Typically paired with list_zapier_skills, which surfaces available skill names. The catalog includes an \"zapier:onboarding\" skill that walks new users through setting up their Zapier MCP server.",
+      "description": "Returns the full markdown definition of a saved Zapier Skill by name, along with any appended execution instructions. Typically paired with list_zapier_skills, which surfaces available skill names. The catalog includes a \"zapier:onboarding\" skill that walks new users through getting started with their Zapier MCP server.",
       "inputSchema": {
         "type": "object",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -367,7 +367,7 @@
         "destructiveHint": false,
         "openWorldHint": false
       },
-      "hash": "2652c288806023dbeeb819ee22ae4ec82b9a83888911c737f2eed643b7dfc988"
+      "hash": "345c90828b2c8055ca345901738d3a8e391629d2253151141269338c6b8223c7"
     },
     {
       "name": "inspect_zapier_actions",

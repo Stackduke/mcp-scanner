@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/payguard/mcp","takenAt":"2026-10-22T09:54:17.703Z","server":{"name":"payguard","version":"0.2.0"},"tools":[{"name":"screen_address","kind":"read","fields":{"title":"956eae42dbdcbfe1","description":"02b3c9c2a79b64e6","inputSchema":"b9623b716da338f3","annotations":"461c740b05709ab0"}}]}

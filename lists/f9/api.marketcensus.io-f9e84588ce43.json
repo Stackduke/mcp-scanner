@@ -1,1 +1,1 @@
-{"source":"https://api.marketcensus.io/mcp","takenAt":"2026-10-19T10:04:26.478Z","server":{"name":"market-census","version":"1.0.5"},"tools":[{"name":"get_ticker_score","kind":"write","fields":{"title":"ac78d6e660c8c62e","description":"16359cce221373d6","inputSchema":"e6b4f54aa4ecff39"}}]}
+{"source":"https://api.marketcensus.io/mcp","takenAt":"2026-10-22T09:40:49.876Z","server":{"name":"market-census","version":"1.0.6"},"tools":[]}

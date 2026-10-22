@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/agentgate/mcp","takenAt":"2026-10-22T09:52:03.874Z","server":{"name":"agentgate","version":"0.2.3"},"tools":[{"name":"check_agent","kind":"read","fields":{"title":"4b9b59606fc40451","description":"53a2233470b5ac99","inputSchema":"66deeeece007fcec","annotations":"dc58e55a8287733e"}}]}

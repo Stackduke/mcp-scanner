@@ -1,6 +1,6 @@
 {
   "source": "https://mcp.grafana.com/mcp",
-  "takenAt": "2026-10-20T14:55:06.393Z",
+  "takenAt": "2026-10-22T09:39:33.271Z",
   "server": {
     "name": "mcp-grafana-cloud",
     "version": "0.1.0"
@@ -1447,7 +1447,7 @@
     },
     {
       "name": "get_panel_image",
-      "description": "Render a Grafana dashboard panel, full dashboard or Explore view as a PNG image. Returns the image as base64 encoded data. Requires the Grafana Image Renderer service to be installed. Exactly one of dashboardUid (for stored dashboards), provisioningPreview (for dashboards staged on a provisioning repository branch, e.g. a git-sync PR) or explore (an ad-hoc datasource query rendered in Explore, no saved dashboard needed) must be supplied. Use this for generating visual snapshots of dashboards for reports, alerts, or presentations.",
+      "description": "Render a Grafana dashboard panel, full dashboard or Explore view as a PNG image. Returns the image as base64 encoded data. Requires the Grafana Image Renderer service to be installed. Exactly one of dashboardUid (for stored dashboards), provisioningPreview (for dashboards staged on a provisioning repository branch, e.g. a git-sync PR) or explore (an ad-hoc datasource query rendered in Explore, no saved dashboard needed) must be supplied. Defaults in CSS pixels: panel 1000x750, dashboard 1200x900, Explore 1000x1000. Scale defaults to 1 for all views and is clamped to 1-3. Use this for generating visual snapshots of dashboards for reports, alerts, or presentations.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1477,7 +1477,7 @@
           },
           "height": {
             "type": "integer",
-            "description": "Height of the rendered image in pixels. Defaults to 500 (1000 for explore)"
+            "description": "Positive viewport height in CSS pixels, or -1 for full-page rendering. See tool description for per-view defaults. Positive heights are capped so height times scale is at most 3000. The renderer may raise values below its configured minimum (500 by default)."
           },
           "panelId": {
             "type": "integer",
@@ -1507,7 +1507,7 @@
           },
           "scale": {
             "type": "integer",
-            "description": "Scale factor for the image (1-3). Defaults to 1"
+            "description": "Image scale factor. See tool description for default and limits. Higher scales reduce the maximum allowed viewport dimensions."
           },
           "theme": {
             "type": "string",
@@ -1529,7 +1529,7 @@
           },
           "timeout": {
             "type": "integer",
-            "description": "Rendering timeout in seconds. Defaults to 60"
+            "description": "Rendering timeout in seconds. Defaults to 60, capped at 120"
           },
           "variables": {
             "additionalProperties": {
@@ -1550,7 +1550,7 @@
           },
           "width": {
             "type": "integer",
-            "description": "Width of the rendered image in pixels. Defaults to 1000"
+            "description": "Positive viewport width in CSS pixels. See tool description for per-view defaults. Capped so width times scale is at most 3000. The renderer may raise values below its configured minimum (1000 by default)."
           }
         },
         "additionalProperties": false
@@ -1562,7 +1562,7 @@
         "readOnlyHint": true,
         "title": "Get panel or dashboard image"
       },
-      "hash": "2e77844559844d47487adb3c967eb34785741154422feabdb229aecd3bde4e76"
+      "hash": "d66eaddcc1157968bd9e4e542a88272eec37b5f43543ce96644d1e39480b44ed"
     },
     {
       "name": "get_plugin",
@@ -3189,10 +3189,25 @@
     },
     {
       "name": "list_users_by_org",
-      "description": "List users in the Grafana organization. Returns a list of organization users with details like userid, email, role etc.",
+      "description": "List users in the Grafana organization, optionally filtered by a search query. Results are paginated; the response includes totalCount, page and perPage alongside organization users with details like userid, email, role etc.",
       "inputSchema": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of users to return (max 1000)",
+            "default": 100
+          },
+          "page": {
+            "type": "integer",
+            "description": "Page number for pagination (1-indexed)",
+            "default": 1
+          },
+          "query": {
+            "type": "string",
+            "description": "Optional search string matched against login, email and name"
+          }
+        },
         "additionalProperties": false
       },
       "annotations": {
@@ -3202,7 +3217,7 @@
         "readOnlyHint": true,
         "title": "List users by org"
       },
-      "hash": "f5f054aa9873f58d3dd0f91cbc51cbe4ede250f0ec42d7c1edf9a54e2904f7d9"
+      "hash": "74befdbe6cdffaa2bdfe600584fef75f1a1d2f0dbb3078aa5fb745179b04ae37"
     },
     {
       "name": "query_cloudwatch",

@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/injectscan/mcp","takenAt":"2026-10-22T09:54:16.691Z","server":{"name":"injectscan","version":"0.1.4"},"tools":[{"name":"scan_text","kind":"read","fields":{"title":"f5f058cce9ec1183","description":"7912e0119bce5027","inputSchema":"75724d739553544c","annotations":"461c740b05709ab0"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://well-005-csv-to-table.rainmaker-wells.workers.dev/mcp","takenAt":"2026-10-22T09:52:27.051Z","server":{"name":"well-005-csv-to-table","version":"1.0.0"},"tools":[{"name":"csv-to-table","kind":"read","fields":{"description":"0ffb51ee9909fe80","inputSchema":"c36a4d50108e3a30","annotations":"c4aaf5fa09c010cb"}}]}
