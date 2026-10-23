@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/tokenverdict/mcp","takenAt":"2026-10-23T10:03:28.532Z","server":{"name":"tokenverdict","version":"0.1.0"},"tools":[{"name":"check_token","kind":"money","fields":{"title":"2abbb34c5d3bd5df","description":"c5c4a3a3c56a8f37","inputSchema":"4574e5430449f241","annotations":"ac2c497580f5ea9c"}}]}

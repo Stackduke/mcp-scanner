@@ -1,0 +1,1 @@
+{"source":"https://istointents.org/mcp","takenAt":"2026-10-23T10:01:16.196Z","server":{"name":"istointents-registry","version":"0.2.0"},"tools":[{"name":"registry_find_holders","kind":"read","fields":{"title":"13d8340dbedd524c","description":"7d35021ad5918fd0","inputSchema":"e11b912cfe67eed5","outputSchema":"f892b3fab04adb4e","annotations":"ae78503371695cf7"}}]}

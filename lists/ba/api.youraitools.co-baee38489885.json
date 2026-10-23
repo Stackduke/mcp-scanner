@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/perpradar/mcp","takenAt":"2026-10-23T10:03:23.531Z","server":{"name":"perpradar","version":"0.1.0"},"tools":[{"name":"perp_positioning","kind":"read","fields":{"title":"38224892f62c7421","description":"f41f41e06d84b328","inputSchema":"e48e33ddd45a464b","annotations":"49d42b0c11cb4189"}}]}

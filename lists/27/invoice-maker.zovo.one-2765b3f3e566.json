@@ -1,0 +1,1 @@
+{"source":"https://invoice-maker.zovo.one/mcp","takenAt":"2026-10-23T10:01:15.502Z","server":{"name":"invoice-maker","version":"1.0.0"},"tools":[{"name":"generate_invoice","kind":"read","fields":{"title":"fd3d96614f575ec8","description":"bfdec8fcbc58298a","inputSchema":"3c64b263f1cb1cfd","outputSchema":"f97dc9a913df7fd6","annotations":"343973fdb0c20c21"}}]}

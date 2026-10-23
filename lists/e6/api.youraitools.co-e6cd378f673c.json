@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/signcheck/mcp","takenAt":"2026-10-23T10:03:24.532Z","server":{"name":"signcheck","version":"0.2.0"},"tools":[{"name":"check_signature","kind":"money","fields":{"title":"d79c3b10eb8f8e05","description":"75ea8794d80257f1","inputSchema":"26311fee77ebb4bd","annotations":"ac2c497580f5ea9c"}}]}

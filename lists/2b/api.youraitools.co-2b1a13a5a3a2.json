@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/counterpartycheck/mcp","takenAt":"2026-10-23T10:03:21.531Z","server":{"name":"counterpartycheck","version":"0.1.1"},"tools":[{"name":"check_counterparty","kind":"money","fields":{"title":"0a93e8574aa4817c","description":"9acef44375ef0e18","inputSchema":"dd35e1c9df8e70c8","annotations":"ac2c497580f5ea9c"}}]}

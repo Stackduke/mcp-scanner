@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/solverdict/mcp","takenAt":"2026-10-23T10:03:26.532Z","server":{"name":"solverdict","version":"0.1.0"},"tools":[{"name":"check_solana_token","kind":"money","fields":{"title":"04747131292af01e","description":"c6983e74ee787fa2","inputSchema":"ce45f6c291dd0f64","annotations":"ac2c497580f5ea9c"}}]}

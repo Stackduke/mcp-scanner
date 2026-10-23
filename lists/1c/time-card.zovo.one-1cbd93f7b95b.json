@@ -1,0 +1,1 @@
+{"source":"https://time-card.zovo.one/mcp","takenAt":"2026-10-23T10:01:33.660Z","server":{"name":"time-card","version":"1.0.0"},"tools":[{"name":"calculate_hours","kind":"read","fields":{"title":"e0696870b65e0bcc","description":"f65b76f5cc208f68","inputSchema":"63cf24d33cabd563","outputSchema":"1c9a9929e1db09ba","annotations":"2179a0282c2d9f15"}}]}

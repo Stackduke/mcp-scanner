@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/leakguard/mcp","takenAt":"2026-10-23T10:03:22.531Z","server":{"name":"leakguard","version":"0.1.0"},"tools":[{"name":"scan_for_leaks","kind":"read","fields":{"title":"7846ed084217bbe6","description":"dd507e7671d32e71","inputSchema":"d537dafd30538976","annotations":"461c740b05709ab0"}}]}

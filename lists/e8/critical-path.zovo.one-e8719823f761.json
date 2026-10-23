@@ -1,0 +1,1 @@
+{"source":"https://critical-path.zovo.one/mcp","takenAt":"2026-10-23T10:01:11.236Z","server":{"name":"critical-path","version":"1.0.0"},"tools":[{"name":"calculate_critical_path","kind":"read","fields":{"title":"fc369ae751a5f0a0","description":"a2c364b1e0246e0e","inputSchema":"195445d1aa5609c0","outputSchema":"1622e781cb01c8dd","annotations":"7fc0a000c37a9f26"}}]}

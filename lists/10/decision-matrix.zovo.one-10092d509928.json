@@ -1,0 +1,1 @@
+{"source":"https://decision-matrix.zovo.one/mcp","takenAt":"2026-10-23T10:01:11.591Z","server":{"name":"decision-matrix","version":"1.0.0"},"tools":[{"name":"calculate_decision_matrix","kind":"read","fields":{"title":"1e44f97ae5f82fc8","description":"7453a100e17ce27d","inputSchema":"d5aa2f8eaf9f25a9","outputSchema":"08cb00531a4ce5e5","annotations":"9b60c9032ef57ef0"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://api.crimemetric.com/mcp","takenAt":"2026-10-23T10:01:04.181Z","server":{"name":"crimemetric","version":"1.0.0"},"tools":[{"name":"crime_index","kind":"read","fields":{"description":"7fd6f53b1e1f881e","inputSchema":"653a0fde43896c0d","outputSchema":"41f6ac3da34e482c","annotations":"f57097c4d247c816"}}]}

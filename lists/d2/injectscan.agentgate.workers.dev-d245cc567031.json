@@ -1,0 +1,1 @@
+{"source":"https://injectscan.agentgate.workers.dev/mcp","takenAt":"2026-10-23T10:01:15.257Z","server":{"name":"injectscan","version":"0.1.4"},"tools":[{"name":"scan_text","kind":"read","fields":{"title":"f5f058cce9ec1183","description":"7912e0119bce5027","inputSchema":"75724d739553544c","annotations":"461c740b05709ab0"}}]}

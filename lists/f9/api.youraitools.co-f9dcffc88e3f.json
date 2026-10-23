@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/tasignal/mcp","takenAt":"2026-10-23T10:03:27.532Z","server":{"name":"tasignal","version":"0.1.0"},"tools":[{"name":"ta_bias","kind":"read","fields":{"title":"e79dee2469aefaf3","description":"3da528d6921eb97b","inputSchema":"a08c8dfd8570f736","annotations":"49d42b0c11cb4189"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://agentgate.agentgate.workers.dev/mcp","takenAt":"2026-10-23T10:01:01.234Z","server":{"name":"agentgate","version":"0.2.3"},"tools":[{"name":"check_agent","kind":"read","fields":{"title":"4b9b59606fc40451","description":"53a2233470b5ac99","inputSchema":"66deeeece007fcec","annotations":"dc58e55a8287733e"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://api.youraitools.co/agentready/mcp","takenAt":"2026-10-23T10:03:20.531Z","server":{"name":"agentready","version":"0.1.0"},"tools":[{"name":"audit_website","kind":"read","fields":{"title":"062710118fc505b0","description":"2e80900589116a41","inputSchema":"a9997588658f7716","annotations":"ac2c497580f5ea9c"}}]}
