@@ -1,6 +1,12 @@
 # The public tracker: once a day, read the MCP registry, list the tools of the servers due a look,
 # and commit what changed to the `data` branch. stackduke.com/tracker reads data/feed.json from there.
 #
+# Servers that need a sign-in are tracked privately (since 24 October 2026): what they list goes to the
+# `tracker-private` branch of the private Stackduke/stackduke-intelligence repository, never to `data`,
+# and this public log only counts them. That branch is reached with a key from the same GitHub App,
+# made for the two steps that read and write it. Until the app may write there, those steps fail, and
+# the private servers are not looked at at all.
+#
 # Nothing here calls a tool or runs a server's code. Each vendor token is a repository secret, handed
 # only to the step that needs it, read from the environment and sent only to that vendor's fixed address.
 #
@@ -47,12 +53,39 @@ jobs:
         with:
           node-version: "22"
 
+      # A key that may read and write the private repository's contents, for the checkout and commit of the
+      # private data only. Until the app is installed there with that permission, this step fails, the
+      # private data is not checked out, and the scan leaves the private servers alone.
+      - name: Key for the private data
+        id: private-key
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.STACKDUKE_SIGN_IN_APP_CLIENT_ID }}
+          private-key: ${{ secrets.STACKDUKE_SIGN_IN_APP_KEY }}
+          owner: Stackduke
+          repositories: stackduke-intelligence
+          permission-contents: write
+
+      - name: Check out the private data
+        id: private-data
+        if: ${{ steps.private-key.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Stackduke/stackduke-intelligence
+          ref: tracker-private
+          path: private-data
+          token: ${{ steps.private-key.outputs.token }}
+          persist-credentials: false
+
       # The private notice needs watched/ as it was before this scan, to tell new findings from known ones.
-      # The copy is kept outside tracker-data, so it is never committed.
+      # Only servers watched with a login have watched/, and they are all private now. The copy is kept
+      # outside both checkouts, so it is never committed.
       - name: Keep the watched definitions from before the scan
         run: |
           mkdir -p "$RUNNER_TEMP/watched-before"
-          if [ -d tracker-data/watched ]; then cp -R tracker-data/watched/. "$RUNNER_TEMP/watched-before/"; fi
+          if [ -d private-data/watched ]; then cp -R private-data/watched/. "$RUNNER_TEMP/watched-before/"; fi
 
       # The key is made for the renew step alone, limited to this repository's secrets, and revoked when
       # the job ends. Until the app is set up this step fails, and the renew step renews nothing.
@@ -72,7 +105,6 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.sign-in-key.outputs.token }}
           REPOSITORY: ${{ github.repository }}
-          STACKDUKE_OAUTH_AIRTABLE: ${{ secrets.STACKDUKE_OAUTH_AIRTABLE }}
           STACKDUKE_OAUTH_DROPBOX: ${{ secrets.STACKDUKE_OAUTH_DROPBOX }}
           STACKDUKE_OAUTH_ZAPIER: ${{ secrets.STACKDUKE_OAUTH_ZAPIER }}
           STACKDUKE_OAUTH_CONTENTFUL: ${{ secrets.STACKDUKE_OAUTH_CONTENTFUL }}
@@ -86,12 +118,14 @@ jobs:
       - name: Scan
         id: scan
         if: ${{ !cancelled() }}
-        run: node src/cli.ts track --data=tracker-data --budget-minutes=55 --sign-ins="$RUNNER_TEMP/sign-ins"
+        # The private servers are looked at only when their data was checked out.
+        run: node src/cli.ts track --data=tracker-data --budget-minutes=55 --sign-ins="$RUNNER_TEMP/sign-ins" ${PRIVATE_DATA:+--private-data="$PRIVATE_DATA"}
         env:
           STACKDUKE_SCAN_GITHUB_TOKEN: ${{ secrets.STACKDUKE_SCAN_GITHUB_TOKEN }}
           STACKDUKE_SCAN_LINEAR_TOKEN: ${{ secrets.STACKDUKE_SCAN_LINEAR_TOKEN }}
           STACKDUKE_SCAN_STRIPE_TOKEN: ${{ secrets.STACKDUKE_SCAN_STRIPE_TOKEN }}
           STACKDUKE_SCAN_SUPABASE_TOKEN: ${{ secrets.STACKDUKE_SCAN_SUPABASE_TOKEN }}
+          PRIVATE_DATA: ${{ steps.private-data.outcome == 'success' && 'private-data' || '' }}
 
       # Findings go to Stackduke's maintainer alone, through Stackduke's endpoint. The request is made on every
       # run, empty or not, and the step prints only fixed lines and never fails, so this public log says nothing
@@ -99,8 +133,8 @@ jobs:
       # The notice token is handed to this step only.
       - name: Private notice
         # Runs whenever the scan did, as the commit step does, whatever happened to the sign-in steps.
-        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
-        run: node src/cli.ts notice --before="$RUNNER_TEMP/watched-before" --data=tracker-data
+        if: ${{ !cancelled() && steps.scan.outcome == 'success' && steps.private-data.outcome == 'success' }}
+        run: node src/cli.ts notice --before="$RUNNER_TEMP/watched-before" --data=private-data
         env:
           STACKDUKE_NOTICE_URL: ${{ secrets.STACKDUKE_NOTICE_URL }}
           STACKDUKE_NOTICE_TOKEN: ${{ secrets.STACKDUKE_NOTICE_TOKEN }}
@@ -118,6 +152,33 @@ jobs:
           if git diff --cached --quiet; then echo "Nothing to commit."; exit 0; fi
           git commit -q -m "Scan $(date -u +%Y-%m-%d)"
           git -c "http.extraheader=Authorization: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" push -q "https://github.com/$REPOSITORY.git" HEAD:data
+
+      # The private repository's commit gets a fresh key: the one made before the scan may have run out.
+      - name: Key for saving the private data
+        id: private-save-key
+        if: ${{ !cancelled() && steps.scan.outcome == 'success' && steps.private-data.outcome == 'success' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.STACKDUKE_SIGN_IN_APP_CLIENT_ID }}
+          private-key: ${{ secrets.STACKDUKE_SIGN_IN_APP_KEY }}
+          owner: Stackduke
+          repositories: stackduke-intelligence
+          permission-contents: write
+
+      - name: Commit the private data
+        if: ${{ !cancelled() && steps.private-save-key.outcome == 'success' }}
+        working-directory: private-data
+        env:
+          PRIVATE_TOKEN: ${{ steps.private-save-key.outputs.token }}
+        # Prints nothing about what changed: this log is public.
+        run: |
+          git config user.name "stackduke-tracker[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "Nothing to commit."; exit 0; fi
+          git commit -q -m "Private scan $(date -u +%Y-%m-%d)"
+          git -c "http.extraheader=Authorization: basic $(printf 'x-access-token:%s' "$PRIVATE_TOKEN" | base64 -w0)" push -q "https://github.com/Stackduke/stackduke-intelligence.git" HEAD:tracker-private
+          echo "Saved."
 
       # Runs whatever happened above, so a lost sign-in, or sign-in steps that did not finish, reach a person.
       - name: Tell a person about sign-ins

@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { assessTool, authorityOf, canDo, confined, plural, seriousFirst, shownName } from "./authority.ts";
 import type { AuthorityKind, AuthorityReport } from "./authority.ts";
 import type { ListToolsResult } from "./client.ts";
-import { catalog } from "./catalog.ts";
+import { catalog, publicList } from "./catalog.ts";
+import type { PublicServer } from "./catalog.ts";
 import type { ChangedField } from "./diff.ts";
 import type { RegistryRead } from "./registry.ts";
 import { canonical, takeSnapshot, toolKey } from "./snapshot.ts";
@@ -420,7 +421,55 @@ export interface Feed {
 
 const mostChanges = 300;
 
-export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, AuthorityReport>, registry: RegistryState, now: string): { feed: Feed; servers: FeedServer[] } {
+/** An address without a trailing slash, so the public list and the registry can be matched. */
+const plainUrl = (url: string) => url.replace(/\/$/, "");
+
+const shorterChange = (change: ChangeRecord): ChangeRecord => ({
+  ...change,
+  added: change.added.slice(0, feedNames), removed: change.removed.slice(0, feedNames),
+  changed: change.changed.slice(0, feedNames), moreSerious: change.moreSerious.slice(0, feedNames),
+});
+
+/** One server for a page about it, from its endpoint. The caller names the vendor. */
+function watchedEntry(endpoint: Endpoint, groups: FeedWatched["groups"]): FeedWatched {
+  return {
+    id: endpoint.id, vendor: endpoint.signedIn ?? "", url: endpoint.url, firstSeen: endpoint.firstSeen,
+    ...(endpoint.lastChecked ? { lastChecked: endpoint.lastChecked } : {}),
+    ...(endpoint.lastListed ? { lastListed: endpoint.lastListed } : {}),
+    ...(endpoint.outcome ? { outcome: endpoint.outcome } : {}),
+    ...(endpoint.tools !== undefined ? { tools: endpoint.tools } : {}),
+    ...(endpoint.kinds ? { kinds: endpoint.kinds } : {}),
+    groups,
+    checks: checksOf(endpoint),
+    changes: endpoint.changes.slice(0, 5).map(shorterChange),
+  };
+}
+
+/** The servers watched with a login, each with its name and website from the catalog. */
+export function watchedOf(endpoints: Endpoint[], reports: Map<string, AuthorityReport>): FeedWatched[] {
+  return endpoints.filter((endpoint) => endpoint.signedIn).map((endpoint) => {
+    const report = reports.get(endpoint.id);
+    const groups = report ? report.groups.map((group) => ({ kind: group.kind, tools: group.tools.map((tool) => tool.name) })) : [];
+    return { ...watchedEntry(endpoint, groups), ...catalogFacts(endpoint.signedIn as string) };
+  }).sort((a, b) => (a.vendor < b.vendor ? -1 : 1));
+}
+
+/**
+ * Tool names under the most serious thing each is counted as doing, from a saved tool list. A server
+ * read with no sign-in has only this list (no full definitions are kept), which is all the page needs.
+ */
+export function groupsOfPrint(print: ListPrint | null): FeedWatched["groups"] {
+  if (!print) return [];
+  return seriousFirst.flatMap((kind) => {
+    const tools = print.tools.filter((tool) => tool.kind === kind).map((tool) => tool.name).sort();
+    return tools.length ? [{ kind, tools }] : [];
+  });
+}
+
+export function buildFeed(
+  endpoints: Endpoint[], watchedReports: Map<string, AuthorityReport>, registry: RegistryState, now: string,
+  publicGroups: Map<string, FeedWatched["groups"]> = new Map(), publicServers: readonly PublicServer[] = publicList.servers,
+): { feed: Feed; servers: FeedServer[] } {
   const at = Date.parse(now);
   const public_ = endpoints.filter((endpoint) => !endpoint.signedIn && endpoint.inRegistry);
   const count = (outcome: CheckOutcome) => public_.filter((endpoint) => endpoint.outcome === outcome).length;
@@ -432,15 +481,10 @@ export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, Aut
   };
   const ofEndpoint = (endpoint: Endpoint) => ({ id: endpoint.id, url: endpoint.url, names: endpoint.names, firstSeen: endpoint.firstSeen });
 
-  const shorter = (change: ChangeRecord): ChangeRecord => ({
-    ...change,
-    added: change.added.slice(0, feedNames), removed: change.removed.slice(0, feedNames),
-    changed: change.changed.slice(0, feedNames), moreSerious: change.moreSerious.slice(0, feedNames),
-  });
   const allChanges = public_
     .flatMap((endpoint) => {
       const inPeriod = recent(endpoint);
-      return inPeriod[0] ? [{ ...ofEndpoint(endpoint), ...shorter(inPeriod[0]), changesIn30Days: inPeriod.length, watchIn30Days: watchOf(endpoint) }] : [];
+      return inPeriod[0] ? [{ ...ofEndpoint(endpoint), ...shorterChange(inPeriod[0]), changesIn30Days: inPeriod.length, watchIn30Days: watchOf(endpoint) }] : [];
     })
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.url < b.url ? -1 : 1));
   const changes: FeedChange[] = [];
@@ -451,20 +495,17 @@ export function buildFeed(endpoints: Endpoint[], watchedReports: Map<string, Aut
     changes.push(change);
   }
 
-  const watched: FeedWatched[] = endpoints.filter((endpoint) => endpoint.signedIn).map((endpoint) => {
-    const report = watchedReports.get(endpoint.id);
-    return {
-      id: endpoint.id, vendor: endpoint.signedIn as string, ...catalogFacts(endpoint.signedIn as string), url: endpoint.url, firstSeen: endpoint.firstSeen,
-      ...(endpoint.lastChecked ? { lastChecked: endpoint.lastChecked } : {}),
-      ...(endpoint.lastListed ? { lastListed: endpoint.lastListed } : {}),
-      ...(endpoint.outcome ? { outcome: endpoint.outcome } : {}),
-      ...(endpoint.tools !== undefined ? { tools: endpoint.tools } : {}),
-      ...(endpoint.kinds ? { kinds: endpoint.kinds } : {}),
-      groups: report ? report.groups.map((group) => ({ kind: group.kind, tools: group.tools.map((tool) => tool.name) })) : [],
-      checks: checksOf(endpoint),
-      changes: endpoint.changes.slice(0, 5).map(shorter),
-    };
-  }).sort((a, b) => (a.vendor < b.vendor ? -1 : 1));
+  // The servers the page shows: those watched with a login that are published (none since 24 October
+  // 2026), and the official servers that answer with no sign-in. A server tracked privately is never in
+  // these endpoints: its files live in the private folder.
+  const signedIn = watchedOf(endpoints.filter((endpoint) => endpoint.signedIn), watchedReports);
+  const open = new Map(endpoints.filter((endpoint) => !endpoint.signedIn).map((endpoint) => [plainUrl(endpoint.url), endpoint]));
+  const official = publicServers.flatMap((server): FeedWatched[] => {
+    const endpoint = open.get(plainUrl(server.url));
+    if (!endpoint) return [];
+    return [{ ...watchedEntry(endpoint, publicGroups.get(endpoint.id) ?? []), vendor: server.id, name: server.name, site: server.site }];
+  });
+  const watched: FeedWatched[] = [...signedIn, ...official].sort((a, b) => (a.vendor < b.vendor ? -1 : 1));
 
   const servers: FeedServer[] = public_
     .flatMap((endpoint) => endpoint.lastListed && endpoint.kinds && endpoint.lastChecked && endpoint.outcome ? [{

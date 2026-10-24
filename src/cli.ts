@@ -452,7 +452,7 @@ async function main(argv: string[]): Promise<number> {
     for (const flag of flags) {
       const match = /^--([a-z-]+)(?:=(.+))?$/.exec(flag);
       const name = match?.[1] ?? "", value = match?.[2];
-      const known = name === "skip-registry" ? value === undefined : (Object.hasOwn(defaults, name) || name === "sign-ins") && value !== undefined;
+      const known = name === "skip-registry" ? value === undefined : (Object.hasOwn(defaults, name) || name === "sign-ins" || name === "private-data") && value !== undefined;
       if (!known || given.has(name)) { console.error(`track does not take ${flag.split("=")[0]}, or took it twice.`); return 2; }
       given.set(name, value ?? "");
     }
@@ -471,6 +471,7 @@ async function main(argv: string[]): Promise<number> {
       maxChecks: value["max-checks"] as number, perHost: value["per-host"] as number, perSite: value["per-site"] as number, concurrency: value.concurrency as number,
       hostGapMs: value["host-gap-ms"] as number, budgetMinutes: value["budget-minutes"] as number,
       environment, log: (line) => console.log(line),
+      ...(given.has("private-data") ? { privateDataDir: given.get("private-data") as string } : {}),
     });
     console.log(`Done: ${summary.checked} of ${summary.planned} checks made, ${summary.changed} with a change, ${summary.notStarted} left for the next run.`);
     return 0;

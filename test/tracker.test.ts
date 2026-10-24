@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -9,7 +9,7 @@ import { signedInServers } from "../src/signed-in.ts";
 import { takeSnapshot } from "../src/snapshot.ts";
 import { checkReason, track } from "../src/track.ts";
 import { buildFeed, changeBetween, keptNames, labelsOf, listHashOf, lookupOf, mergeRegistry, planChecks, printOf, recordCheck, siteOf } from "../src/tracker.ts";
-import type { Endpoint, Feed } from "../src/tracker.ts";
+import type { Endpoint, Feed, FeedWatched } from "../src/tracker.ts";
 import type { ToolDefinition } from "../src/types.ts";
 
 const now = "2026-10-16T04:00:00.000Z";
@@ -182,7 +182,7 @@ test("a run reads the registry, looks at the servers, saves fingerprints, and a 
     return new Response(null, { status: 202 });
   }) as typeof fetch;
   let clock = Date.parse(now) - 24 * 3_600_000;
-  const options = { dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, environment: {}, fetchImpl, now: () => new Date(clock) };
+  const options = { dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], environment: {}, fetchImpl, now: () => new Date(clock) };
 
   const first = await track(options);
   assert.deepEqual([first.checked, first.changed, first.watched.length], [2, 0, 0]);
@@ -228,12 +228,14 @@ test("a watched server's definitions are rewritten when its tools change, not wh
     return new Response(null, { status: 202 });
   }) as typeof fetch;
   let clock = Date.parse(hoursBefore(72));
-  const options = { dataDir, readRegistry: false, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, environment: { [linear.tokenVariable]: "lin_api_test" }, fetchImpl, now: () => new Date(clock) };
-  const watchedPath = path.join(dataDir, "watched", "linear.json");
-  const theEndpoint = async () => (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Endpoint).find((item) => item.signedIn === "linear");
+  // Linear is tracked privately: its files are in the private folder, never the public one.
+  const privateDir = await mkdtemp(path.join(tmpdir(), "tracker-private-"));
+  const options = { dataDir, privateDataDir: privateDir, readRegistry: false, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], environment: { [linear.tokenVariable]: "lin_api_test" }, fetchImpl, now: () => new Date(clock) };
+  const watchedPath = path.join(privateDir, "watched", "linear.json");
+  const theEndpoint = async () => (await readFile(path.join(privateDir, "endpoints.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Endpoint).find((item) => item.signedIn === "linear");
   /** The saved print as an older scanner would have left it: the same fields, other kinds. */
   const drift = async () => {
-    const printPath = path.join(dataDir, (await theEndpoint())?.file ?? "missing");
+    const printPath = path.join(privateDir, (await theEndpoint())?.file ?? "missing");
     const print = JSON.parse(await readFile(printPath, "utf8")) as ReturnType<typeof printOf>;
     await writeFile(printPath, `${JSON.stringify({ ...print, tools: print.tools.map((tool) => ({ ...tool, kind: "destructive" })) })}\n`);
     return printPath;
@@ -269,6 +271,8 @@ test("a watched server's definitions are rewritten when its tools change, not wh
   assert.equal(changed.takenAt, hoursBefore(24));
   assert.equal(changed.tools[0]?.description, "Reads one issue.");
   assert.equal((await theEndpoint())?.changes[0]?.at, hoursBefore(24));
+  assert.equal((await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim(), "", "nothing about Linear is in the public folder");
+  assert.deepEqual((JSON.parse(await readFile(path.join(dataDir, "feed.json"), "utf8")) as Feed).watched, []);
 });
 
 test("a server that renames thousands of tools gets a short record with full counts", () => {
@@ -303,7 +307,7 @@ test("a list the scanner cannot process fails that server only, and the run goes
     if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "get_x", inputSchema: url.includes("deep") ? deep : {} }] } });
     return new Response(null, { status: 202 });
   }) as typeof fetch;
-  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, environment: {}, fetchImpl });
+  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], environment: {}, fetchImpl });
   assert.equal(summary.checked, 2);
   const endpoints = (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Endpoint);
   assert.deepEqual(endpoints.map((item) => [item.url, item.outcome]).sort(), [["https://deep.example.com/mcp", "not-usable"], ["https://fine.example.com/mcp", "listed"]]);
@@ -329,7 +333,7 @@ test("a run whose checks stall still finishes and writes its files", async () =>
     // A reply that never comes, cancelled only by the request's own abort signal, as a stalled server behaves.
     return new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
   }) as typeof fetch;
-  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, checkTimeoutMs: 50, environment: {}, fetchImpl });
+  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], checkTimeoutMs: 50, environment: {}, fetchImpl });
   assert.equal(summary.checked, 1);
   const [line] = (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n");
   assert.equal((JSON.parse(line ?? "{}") as Endpoint).outcome, "unreachable");
@@ -366,7 +370,7 @@ test("no address on the sites of a vendor whose terms forbid publishing is conta
     if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "get_page", ...readOnly }] } });
     return new Response(null, { status: 202 });
   }) as typeof fetch;
-  await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, environment: {}, fetchImpl, now: () => new Date(now) });
+  await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], environment: {}, fetchImpl, now: () => new Date(now) });
   assert.ok(!contacted.some((url) => url.includes("sentry.dev")));
   const kept = await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8");
   assert.ok(!kept.includes("sentry"));
@@ -396,8 +400,9 @@ test("a missed check on a watched server says why in the log, in the scanner's o
 });
 
 /**
- * A run with one open server in the registry and Grafana watched with a token, whose initialize fails with `failure`
- * until look number `readyOnLook`. A failure that throws stands for a request that got no answer.
+ * A run with one open server in the registry and one official server the page shows, read with no sign-in on every
+ * run, whose initialize fails with `failure` until look number `readyOnLook`. A failure that throws stands for a
+ * request that got no answer. Servers watched with a login get the same second look.
  */
 async function runWithFlakyServer(failure: () => Response, readyOnLook: number) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
@@ -408,7 +413,7 @@ async function runWithFlakyServer(failure: () => Response, readyOnLook: number) 
     if (url.startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: [{ server: { name: "com.example/open", remotes: [{ type: "streamable-http", url: "https://open.example.com/mcp" }] } }], metadata: {} });
     const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
     asked.push(`${new URL(url).hostname} ${body.method}`);
-    if (url === "https://mcp.grafana.com/mcp" && body.method === "initialize") {
+    if (url === "https://flaky.example.com/mcp" && body.method === "initialize") {
       looks += 1;
       if (looks < readyOnLook) return failure();
     }
@@ -417,10 +422,11 @@ async function runWithFlakyServer(failure: () => Response, readyOnLook: number) 
     return new Response(null, { status: 202 });
   }) as typeof fetch;
   const lines: string[] = [];
-  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, environment: { STACKDUKE_SCAN_GRAFANA_TOKEN: "test-token" }, fetchImpl, now: () => new Date(now), log: (line) => lines.push(line) });
+  const flakyServer = { id: "flaky", name: "Flaky", url: "https://flaky.example.com/mcp", site: "https://flaky.example.com" };
+  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [flakyServer], environment: {}, fetchImpl, now: () => new Date(now), log: (line) => lines.push(line) });
   const endpoints = (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Endpoint);
-  const grafanaLooks = asked.filter((line) => line === "mcp.grafana.com initialize").length;
-  return { summary, asked, lines, grafanaLooks, grafana: endpoints.find((item) => item.signedIn === "grafana") };
+  const grafanaLooks = asked.filter((line) => line === "flaky.example.com initialize").length;
+  return { summary, asked, lines, grafanaLooks, grafana: endpoints.find((item) => item.url === flakyServer.url) };
 }
 
 const answering = (status: number) => () => new Response("upstream not ready", { status });
@@ -429,12 +435,12 @@ const timingOut = () => { throw new DOMException("The operation timed out.", "Ti
 test("a watched server that answers 424 to initialize is looked at again after the crawl, and only that look is recorded", async () => {
   const { summary, asked, lines, grafana } = await runWithFlakyServer(answering(424), 2);
   const initializes = asked.filter((line) => line.endsWith(" initialize"));
-  assert.deepEqual(initializes, ["mcp.grafana.com initialize", "open.example.com initialize", "mcp.grafana.com initialize"], "the second look comes after the crawl");
+  assert.deepEqual(initializes, ["flaky.example.com initialize", "open.example.com initialize", "flaky.example.com initialize"], "the second look comes after the crawl");
   assert.equal(grafana?.outcome, "listed");
   assert.equal(grafana?.tools, 1);
   assert.equal(grafana?.checks.length, 1, "one check recorded, not a miss and then a listing");
-  assert.deepEqual(summary.watched, [{ vendor: "grafana", outcome: "listed" }]);
-  assert.ok(lines.includes("grafana: not-usable (initialize answered 424), so it will be checked again after the crawl"));
+  assert.deepEqual(summary.watched, []);
+  assert.ok(lines.includes("flaky: not-usable (initialize answered 424), so it will be checked again after the crawl"));
   assert.ok(!lines.some((line) => line.includes("upstream not ready")), "nothing the server said reaches the log");
 });
 
@@ -443,7 +449,7 @@ test("a watched server that fails both looks is recorded as one missed check", a
   assert.equal(grafanaLooks, 2, "looked at twice, no more");
   assert.equal(grafana?.outcome, "not-usable");
   assert.equal(grafana?.checks.length, 1);
-  assert.deepEqual(lines.filter((line) => line.startsWith("grafana: not-usable") && !line.endsWith("after the crawl")), ["grafana: not-usable (initialize answered 424)"], "one missed check in the log");
+  assert.deepEqual(lines.filter((line) => line.startsWith("flaky: not-usable") && !line.endsWith("after the crawl")), ["flaky: not-usable (initialize answered 424)"], "one missed check in the log");
 });
 
 test("a watched server that times out or answers 429 or 5xx to initialize is looked at again too", async () => {
@@ -457,7 +463,7 @@ test("a watched server that times out or answers 429 or 5xx to initialize is loo
     assert.equal(grafanaLooks, 2, name);
     assert.equal(grafana?.outcome, "listed", name);
     assert.equal(grafana?.checks.length, 1, name);
-    assert.ok(lines.includes(`grafana: ${said}, so it will be checked again after the crawl`), name);
+    assert.ok(lines.includes(`flaky: ${said}, so it will be checked again after the crawl`), name);
   }
 });
 
@@ -469,4 +475,95 @@ test("a watched server that refuses its login, or answers initialize in a way th
     assert.equal(grafana?.checks.length, 1, name);
     assert.ok(!lines.some((line) => line.endsWith("after the crawl")), name);
   }
+});
+
+/** A run with Grafana watched with a token. Grafana is tracked privately, as every server that needs a sign-in is. */
+async function runWithPrivateServer(privateDataDir: string | undefined, dataDir?: string) {
+  const publicDir = dataDir ?? await mkdtemp(path.join(tmpdir(), "tracker-"));
+  const asked: string[] = [];
+  const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
+    const url = String(input);
+    const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
+    asked.push(`${new URL(url).hostname} ${body.method}`);
+    if (body.method === "initialize") return Response.json({ jsonrpc: "2.0", id: body.id, result: { serverInfo: { name: "Demo" } } });
+    if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "list_dashboards", ...readOnly }, { name: "delete_dashboard" }] } });
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+  const lines: string[] = [];
+  const summary = await track({ dataDir: publicDir, ...(privateDataDir ? { privateDataDir } : {}), readRegistry: false, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], environment: { STACKDUKE_SCAN_GRAFANA_TOKEN: "test-token" }, fetchImpl, now: () => new Date(now), log: (line) => lines.push(line) });
+  return { publicDir, summary, asked, lines };
+}
+
+/** Every file under a folder, as text, so a test can say a word appears in none of them. */
+async function allText(dir: string): Promise<string> {
+  const names = await readdir(dir, { recursive: true });
+  const texts = await Promise.all(names.map((name) => readFile(path.join(dir, String(name)), "utf8").catch(() => "")));
+  return texts.join("\n");
+}
+
+test("a server tracked privately is recorded in the private folder only, and the public log does not name it", async () => {
+  const privateDir = await mkdtemp(path.join(tmpdir(), "tracker-private-"));
+  const { publicDir, summary, asked, lines } = await runWithPrivateServer(privateDir);
+  assert.ok(asked.includes("mcp.grafana.com tools/list"), "it is looked at");
+  const privateEndpoints = (await readFile(path.join(privateDir, "endpoints.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Endpoint);
+  assert.deepEqual(privateEndpoints.map((endpoint) => [endpoint.signedIn, endpoint.outcome, endpoint.tools]), [["grafana", "listed", 2]]);
+  const privateFeed = JSON.parse(await readFile(path.join(privateDir, "feed.json"), "utf8")) as { watched: FeedWatched[] };
+  assert.deepEqual(privateFeed.watched.map((entry) => [entry.vendor, entry.groups.map((group) => group.kind)]), [["grafana", ["destructive", "read"]]]);
+  assert.ok((await readFile(path.join(privateDir, "watched", "grafana.json"), "utf8")).includes("delete_dashboard"));
+
+  assert.ok(!(await allText(publicDir)).includes("grafana"), "no public file mentions it");
+  assert.ok(!(await allText(publicDir)).includes("delete_dashboard"), "nor any tool it lists");
+  assert.ok(!lines.some((line) => /grafana|delete_dashboard/i.test(line)), "nor the public log");
+  assert.ok(lines.includes("privately tracked: 1 servers looked at"));
+  assert.deepEqual(summary.watched, []);
+  assert.equal(summary.privately, 1);
+});
+
+test("without a private folder, a server tracked privately is not looked at at all", async () => {
+  const { publicDir, asked, lines } = await runWithPrivateServer(undefined);
+  assert.deepEqual(asked, [], "nothing is sent to it, so nothing it lists can land anywhere");
+  assert.ok(!(await allText(publicDir)).includes("grafana"));
+  assert.ok(lines.some((line) => line.startsWith("1 privately tracked servers were not looked at")) || lines.some((line) => /privately tracked servers were not looked at/.test(line)));
+});
+
+test("a server once published that is now tracked privately leaves the public folder, and its history moves to the private one", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
+  const privateDir = await mkdtemp(path.join(tmpdir(), "tracker-private-"));
+  // The public folder as the tracker left it before 24 October 2026, with Grafana published.
+  const old = { id: "signed-in-grafana", url: "https://mcp.grafana.com/mcp", names: [], signedIn: "grafana", firstSeen: hoursBefore(96), inRegistry: false, checks: [`${hoursBefore(48)} L`], changes: [], file: "lists/si/mcp.grafana.com-signed-in-grafana.json", lastListed: hoursBefore(48), outcome: "listed", tools: 1 };
+  await writeFile(path.join(dataDir, "endpoints.jsonl"), `${JSON.stringify(old)}\n`);
+  await mkdir(path.join(dataDir, "watched"), { recursive: true });
+  await mkdir(path.join(dataDir, "lists", "si"), { recursive: true });
+  await writeFile(path.join(dataDir, "watched", "grafana.json"), `${JSON.stringify(takeSnapshot(old.url, [{ name: "list_dashboards", ...readOnly }], undefined, hoursBefore(48)))}\n`);
+  await writeFile(path.join(dataDir, old.file), `${JSON.stringify(printOf(takeSnapshot(old.url, [{ name: "list_dashboards", ...readOnly }], undefined, hoursBefore(48))))}\n`);
+
+  const { lines } = await runWithPrivateServer(privateDir, dataDir);
+  assert.ok(!(await allText(dataDir)).includes("grafana"), "the public folder no longer mentions it");
+  const moved = (await readFile(path.join(privateDir, "endpoints.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Endpoint);
+  assert.equal(moved[0]?.firstSeen, hoursBefore(96), "its history came along");
+  assert.equal(moved[0]?.checks.length, 2, "the old check and today's");
+  assert.equal(moved[0]?.changes[0]?.added[0], "delete_dashboard", "today's change is seen against the moved list");
+  assert.ok(lines.includes("1 servers watched with a login are no longer published, and left the public data"));
+});
+
+test("the official servers the page shows are looked at on every run, and the feed lists them by their own names", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
+  const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
+    const url = String(input);
+    if (url.startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: [{ server: { name: "com.example/docs", remotes: [{ type: "streamable-http", url: "https://docs.example.com/mcp" }] } }], metadata: {} });
+    const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
+    if (body.method === "initialize") return Response.json({ jsonrpc: "2.0", id: body.id, result: { serverInfo: { name: "Docs" } } });
+    if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "search_docs", ...readOnly }, { name: "delete_page" }] } });
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+  const docs = { id: "example-docs", name: "Example Docs", url: "https://docs.example.com/mcp", site: "https://example.com" };
+  const notInRegistry = { id: "example-other", name: "Example Other", url: "https://other.example.com/mcp", site: "https://example.com" };
+  await track({ dataDir, readRegistry: true, maxChecks: 0 + 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [docs, notInRegistry], environment: {}, fetchImpl, now: () => new Date(now) });
+  const feed = JSON.parse(await readFile(path.join(dataDir, "feed.json"), "utf8")) as Feed;
+  assert.deepEqual(feed.watched.map((entry) => [entry.vendor, entry.name, entry.site, entry.outcome, entry.tools]), [
+    ["example-docs", "Example Docs", "https://example.com", "listed", 2],
+    ["example-other", "Example Other", "https://example.com", "listed", 2],
+  ]);
+  assert.deepEqual(feed.watched[0]?.groups, [{ kind: "destructive", tools: ["delete_page"] }, { kind: "read", tools: ["search_docs"] }]);
+  assert.equal(feed.coverage.endpoints, 1, "a server the registry does not list is shown, but not counted as the registry's");
 });

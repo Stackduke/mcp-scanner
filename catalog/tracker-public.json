@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "about": "Official MCP servers the public tracker shows. Each answers its tool list with no sign-in, so it is read the way any MCP client would read it, with no account and no terms accepted. Servers that need a sign-in are in servers.json and are tracked privately, never published here. Decided by Dom on 24 October 2026.",
+  "servers": [
+    { "id": "google-compute", "name": "Google Cloud Compute Engine", "url": "https://compute.googleapis.com/mcp", "site": "https://cloud.google.com/compute" },
+    { "id": "google-gke", "name": "Google Kubernetes Engine", "url": "https://container.googleapis.com/mcp", "site": "https://cloud.google.com/kubernetes-engine" },
+    { "id": "google-firestore", "name": "Google Cloud Firestore", "url": "https://firestore.googleapis.com/mcp", "site": "https://cloud.google.com/firestore" },
+    { "id": "google-bigtable", "name": "Google Cloud Bigtable", "url": "https://bigtableadmin.googleapis.com/mcp", "site": "https://cloud.google.com/bigtable" },
+    { "id": "google-memorystore", "name": "Google Cloud Memorystore", "url": "https://memorystore.googleapis.com/mcp", "site": "https://cloud.google.com/memorystore" },
+    { "id": "google-monitoring", "name": "Google Cloud Monitoring", "url": "https://monitoring.googleapis.com/mcp", "site": "https://cloud.google.com/monitoring" },
+    { "id": "google-datastream", "name": "Google Cloud Datastream", "url": "https://datastream.googleapis.com/mcp", "site": "https://cloud.google.com/datastream" },
+    { "id": "google-maps", "name": "Google Maps", "url": "https://mapstools.googleapis.com/mcp", "site": "https://developers.google.com/maps" },
+    { "id": "microsoft-learn", "name": "Microsoft Learn", "url": "https://learn.microsoft.com/api/mcp", "site": "https://learn.microsoft.com" },
+    { "id": "huggingface", "name": "Hugging Face", "url": "https://huggingface.co/mcp", "site": "https://huggingface.co" },
+    { "id": "cloudflare-docs", "name": "Cloudflare Docs", "url": "https://docs.mcp.cloudflare.com/mcp", "site": "https://developers.cloudflare.com" },
+    { "id": "mapbox-docs", "name": "Mapbox Docs", "url": "https://mcp-docs.mapbox.com/mcp", "site": "https://docs.mapbox.com" },
+    { "id": "context7", "name": "Context7", "url": "https://mcp.context7.com/mcp", "site": "https://context7.com" },
+    { "id": "exa", "name": "Exa", "url": "https://mcp.exa.ai/mcp", "site": "https://exa.ai" },
+    { "id": "firecrawl", "name": "Firecrawl", "url": "https://mcp.firecrawl.dev/v2/mcp", "site": "https://www.firecrawl.dev" }
+  ]
+}

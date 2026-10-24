@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { catalog, catalogProblems, readCatalog } from "../src/catalog.ts";
+import { catalog, catalogProblems, publicList, publicListProblems, readCatalog } from "../src/catalog.ts";
 import { oauthServers, oauthServersOf, signedInServers, signedInServersOf } from "../src/signed-in.ts";
 
 const server = (changes: Record<string, unknown> = {}) => ({
@@ -16,7 +16,7 @@ test("the catalog in the repository is usable", () => {
   assert.ok(catalog.servers.length > 0);
 });
 
-test("the tracker sends tokens to the same four keyed addresses as before the catalog, and four browser sign-ins", () => {
+test("the tracker sends tokens to the same addresses as before: four keys and five browser sign-ins, all tracked privately", () => {
   assert.deepEqual(Object.fromEntries(Object.entries(signedInServers).map(([id, entry]) => [id, [entry.url, entry.tokenVariable, entry.kind]])), {
     github: ["https://api.githubcopilot.com/mcp/", "STACKDUKE_SCAN_GITHUB_TOKEN", "api-key"],
     linear: ["https://mcp.linear.app/mcp", "STACKDUKE_SCAN_LINEAR_TOKEN", "api-key"],
@@ -26,14 +26,17 @@ test("the tracker sends tokens to the same four keyed addresses as before the ca
     contentful: ["https://mcp.contentful.com/mcp", "STACKDUKE_SCAN_CONTENTFUL_TOKEN", "oauth"],
     grafana: ["https://mcp.grafana.com/mcp", "STACKDUKE_SCAN_GRAFANA_TOKEN", "oauth"],
     circleci: ["https://mcp.circleci.com/v1/mcp", "STACKDUKE_SCAN_CIRCLECI_TOKEN", "oauth"],
+    dropbox: ["https://mcp.dropbox.com/claude_app_mcp", "STACKDUKE_SCAN_DROPBOX_TOKEN", "oauth"],
   });
   assert.equal(signedInServers.github?.formerVariable, "AETHIS_SCAN_GITHUB_TOKEN");
+  // Dom, 24 October 2026: every server that needs a sign-in is tracked privately, never published.
+  assert.deepEqual(Object.values(signedInServers).filter((entry) => entry.publish), []);
 });
 
-test("a server the tracker does not publish is never given a token", () => {
+test("a server neither published nor tracked privately is never given a token", () => {
   const listed = signedInServersOf([server({ id: "kept-quiet", tracker: { publish: false, reason: "Its terms forbid it." } })] as never);
   assert.deepEqual(listed, {});
-  for (const quiet of catalog.servers.filter((entry) => !entry.tracker.publish)) assert.ok(!Object.hasOwn(signedInServers, quiet.id));
+  for (const quiet of catalog.servers.filter((entry) => !entry.tracker.publish && !("private" in entry.tracker))) assert.ok(!Object.hasOwn(signedInServers, quiet.id));
 });
 
 test("Sentry and Intercom are in the catalog, never published, and marked as forbidden by their terms", () => {
@@ -111,7 +114,7 @@ test("a browser sign-in may be kept for a server that is not published yet, and 
 
 test("a published browser sign-in is watched under its server's token variable, and still needs its terms read", () => {
   assert.deepEqual(problemsOf(server({ tracker: { publish: true, access: oauth() } })), []);
-  assert.deepEqual(signedInServersOf([server({ tracker: { publish: true, access: oauth() } })] as never), { demo: { url: "https://mcp.demo.example/mcp", tokenVariable: "STACKDUKE_SCAN_DEMO_TOKEN", kind: "oauth" } });
+  assert.deepEqual(signedInServersOf([server({ tracker: { publish: true, access: oauth() } })] as never), { demo: { url: "https://mcp.demo.example/mcp", tokenVariable: "STACKDUKE_SCAN_DEMO_TOKEN", publish: true, kind: "oauth" } });
   assert.deepEqual(problemsOf(server({ termsCheckedOn: null, tracker: { publish: true, access: oauth() } })), ["demo: is published, but nobody has read its terms"]);
 });
 
@@ -130,7 +133,34 @@ test("a vendor whose terms forbid publishing keeps no sign-in, and an unpublishe
   assert.deepEqual(problemsOf(server({ tracker: { publish: false, reason: "Not yet.", access: server().tracker.access } })), ["demo: a server that is not published can keep only a browser sign-in"]);
 });
 
-test("of the six vendors signed in through a browser on 18 October, Dom cleared four to publish on reading their terms", () => {
-  assert.deepEqual(oauthServers.map((entry) => [entry.id, entry.publish]), [["airtable", false], ["dropbox", false], ["zapier", true], ["contentful", true], ["grafana", true], ["circleci", true]]);
-  for (const entry of oauthServers) assert.equal(catalog.servers.find((server) => server.id === entry.id)?.termsCheckedOn, entry.publish ? "2026-10-18" : null);
+test("of the six vendors signed in through a browser on 18 October, Airtable is paused and the other five are tracked privately", () => {
+  assert.deepEqual(oauthServers.map((entry) => [entry.id, entry.publish, entry.tracked]), [["dropbox", false, true], ["zapier", false, true], ["contentful", false, true], ["grafana", false, true], ["circleci", false, true]]);
+  // Dom, 24 October 2026: Airtable's acceptable use policy bans automated access, so no sign-in is kept and it is not looked at.
+  const airtable = catalog.servers.find((server) => server.id === "airtable");
+  assert.equal(airtable?.tracker.publish, false);
+  assert.equal(airtable && "access" in airtable.tracker ? airtable.tracker.access : undefined, undefined);
+  assert.match(airtable && "reason" in airtable.tracker ? airtable.tracker.reason : "", /^Paused on 24 October 2026/);
+});
+
+test("a server tracked privately keeps its access, of either kind, and cannot be one whose terms forbid it", () => {
+  const privately = (tracker: Record<string, unknown>) => server({ tracker: { publish: false, private: true, reason: "Tracked privately.", ...tracker } });
+  assert.deepEqual(problemsOf(privately({ access: oauth() })), []);
+  assert.deepEqual(signedInServersOf([privately({ access: oauth() })] as never), { demo: { url: "https://mcp.demo.example/mcp", tokenVariable: "STACKDUKE_SCAN_DEMO_TOKEN", publish: false, kind: "oauth" } });
+  assert.deepEqual(problemsOf(privately({})), ["demo: tracker access must be an api-key or oauth"]);
+  assert.deepEqual(problemsOf(privately({ access: oauth(), forbidden: true })), ["demo: is marked forbidden, so it is not tracked, privately or not"]);
+  assert.deepEqual(problemsOf(server({ tracker: { publish: false, private: false, reason: "No." } })), ["demo: private can only be true"]);
+});
+
+test("the public list names only servers read with no sign-in, never one the catalog tracks with a login", () => {
+  assert.ok(publicList.servers.length >= 15);
+  const servers = catalog.servers;
+  const one = (entry: Record<string, unknown>) => publicListProblems({ version: 1, servers: [{ id: "docs", name: "Docs", url: "https://docs.example.com/mcp", site: "https://example.com", ...entry }] }, servers);
+  assert.deepEqual(one({}), []);
+  assert.deepEqual(one({ url: "https://mcp.grafana.com/mcp" }), ["docs: url is a server the catalog tracks with a sign-in, which is never published"]);
+  assert.deepEqual(one({ id: "grafana" }), ["grafana: id is already a server in the catalog"]);
+  assert.deepEqual(one({ url: "http://docs.example.com/mcp" }), ["docs: url must be a plain https address"]);
+  assert.deepEqual(one({ token: "x" }), ["docs: has a field this version does not know: token"]);
+  assert.deepEqual(publicListProblems({ version: 2, servers: [] }, servers), ["the public list must be { version: 1, servers: [...] }"]);
+  const signedIn = new Set(servers.map((entry) => entry.url.replace(/\/$/, "")));
+  for (const entry of publicList.servers) assert.ok(!signedIn.has(entry.url.replace(/\/$/, "")), entry.id);
 });

@@ -17,7 +17,7 @@ const tokenEndpoint = `${issuer}/token`;
 const clientSecret = "made-up-client-secret";
 const now = new Date("2026-10-18T04:20:00Z");
 
-const demo: OAuthServer = Object.freeze({ id: "demo", name: "Demo", url, publish: true, tokenVariable: "STACKDUKE_SCAN_DEMO_TOKEN", signInSecret: "STACKDUKE_OAUTH_DEMO", issuer, scopes: [], scopeAdvice: "The tracker's own account." });
+const demo: OAuthServer = Object.freeze({ id: "demo", name: "Demo", url, publish: true, tracked: true, tokenVariable: "STACKDUKE_SCAN_DEMO_TOKEN", signInSecret: "STACKDUKE_OAUTH_DEMO", issuer, scopes: [], scopeAdvice: "The tracker's own account." });
 
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
 
@@ -208,10 +208,24 @@ test("each browser sign-in reaches the renew step only, and the scan step gets o
   assert.match(all.get("Forget the sign-ins") as string, /if: always\(\)/);
 });
 
-test("the scan is handed the access tokens of published servers only", () => {
-  const quiet: OAuthServer = { ...demo, id: "quiet", publish: false, tokenVariable: "STACKDUKE_SCAN_QUIET_TOKEN", signInSecret: "STACKDUKE_OAUTH_QUIET" };
-  const handed = handOver({ demo: "access-1", quiet: "access-q" }, [demo, quiet], { PATH: "/bin" });
-  assert.deepEqual(handed, { PATH: "/bin", STACKDUKE_SCAN_DEMO_TOKEN: "access-1" });
+test("the scan is handed the access tokens of servers it tracks, published or privately, and of no other", () => {
+  const quiet: OAuthServer = { ...demo, id: "quiet", publish: false, tracked: false, tokenVariable: "STACKDUKE_SCAN_QUIET_TOKEN", signInSecret: "STACKDUKE_OAUTH_QUIET" };
+  const hidden: OAuthServer = { ...demo, id: "hidden", publish: false, tracked: true, tokenVariable: "STACKDUKE_SCAN_HIDDEN_TOKEN", signInSecret: "STACKDUKE_OAUTH_HIDDEN" };
+  const handed = handOver({ demo: "access-1", quiet: "access-q", hidden: "access-h" }, [demo, quiet, hidden], { PATH: "/bin" });
+  assert.deepEqual(handed, { PATH: "/bin", STACKDUKE_SCAN_DEMO_TOKEN: "access-1", STACKDUKE_SCAN_HIDDEN_TOKEN: "access-h" });
+});
+
+test("the private data is reached only by its own checkout and commit, and the public log is told nothing about it", () => {
+  const all = steps();
+  const usesKey = [...all].filter(([, block]) => /steps\.private(-save)?-key\.outputs\.token/.test(block)).map(([name]) => name);
+  assert.deepEqual(usesKey, ["Check out the private data", "Commit the private data"]);
+  for (const name of ["Key for the private data", "Key for saving the private data"]) {
+    assert.match(all.get(name) as string, /repositories: stackduke-intelligence/, name);
+    assert.match(all.get(name) as string, /permission-contents: write/, name);
+  }
+  assert.match(all.get("Scan") as string, /--private-data=/);
+  assert.match(all.get("Private notice") as string, /--data=private-data/);
+  assert.ok(!/echo .*\$\(|git (log|diff)(?! --cached --quiet)/.test(all.get("Commit the private data") as string), "it prints nothing about what changed");
 });
 
 test("the files the sign-in steps leave are readable by this user only", async () => {
