@@ -262,13 +262,19 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   // The official servers the page shows that answer with no sign-in, whether or not the crawl would reach them today.
   const official = new Set<string>();
   const publicServers = options.publicServers ?? publicList.servers;
+  const looks: Look[] = [];
   for (const server of publicServers) {
     const url = plainUrl(server.url);
     const endpoint = byUrl.get(url) ?? byUrl.get(`${url}/`) ?? { id: endpointId(server.url), url: server.url, names: [], firstSeen: startedAt, inRegistry: false, checks: [], changes: [] };
     byUrl.set(endpoint.url, endpoint);
     official.add(endpoint.url);
-    await lookNow({ endpoint, look: () => lookOpen(endpoint.url), store: publicStore, name: server.id });
+    looks.push({ endpoint, look: () => lookOpen(endpoint.url), store: publicStore, name: server.id });
   }
+  // A few at a time, in the list's order, so one slow server does not hold the rest back for long.
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(8, looks.length) }, async () => {
+    while (next < looks.length) await lookNow(looks[next++] as Look);
+  }));
 
   // Each result is recorded as soon as it arrives, so the run holds one list at a time per check, not all of them.
   const plan = planChecks([...byUrl.values()].filter((endpoint) => !official.has(endpoint.url)), startedAt, { maxChecks: options.maxChecks, perHost: options.perHost, perSite: options.perSite });
