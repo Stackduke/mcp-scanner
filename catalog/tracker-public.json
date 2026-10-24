@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "Official MCP servers the public tracker shows. Each answers its tool list with no sign-in, so it is read the way any MCP client would read it, with no account and no terms accepted. Servers that need a sign-in are in servers.json and are tracked privately, never published here. Decided by Dom on 24 October 2026.",
+  "about": "Official MCP servers the public tracker shows. Each answers its tool list with no sign-in, so it is read the way any MCP client would read it, with no account and no sign-up. Some vendors still say that using their server means accepting their general terms (Microsoft does), so each entry is a choice, not a free pass. Servers that need a sign-in are in servers.json and are tracked privately, never published here. Decided by Dom on 24 October 2026.",
   "servers": [
     { "id": "google-compute", "name": "Google Cloud Compute Engine", "url": "https://compute.googleapis.com/mcp", "site": "https://cloud.google.com/compute" },
     { "id": "google-gke", "name": "Google Kubernetes Engine", "url": "https://container.googleapis.com/mcp", "site": "https://cloud.google.com/kubernetes-engine" },

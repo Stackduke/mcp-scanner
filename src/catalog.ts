@@ -83,7 +83,7 @@ export type TrackerEntry =
 /**
  * A server the public tracker shows that answers its tool list with no sign-in, from
  * `catalog/tracker-public.json`. It is read the way any MCP client reads it: no account, no token
- * and no terms accepted.
+ * and no sign-up. A vendor's general terms may still cover using its server.
  */
 export interface PublicServer {
   id: string;
