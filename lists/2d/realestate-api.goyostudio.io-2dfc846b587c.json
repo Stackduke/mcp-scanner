@@ -1,0 +1,1 @@
+{"source":"https://realestate-api.goyostudio.io/mcp","takenAt":"2026-10-24T06:18:09.063Z","server":{"name":"io.github.goyo-studio/korean-real-estate-mcp","version":"1.0.0"},"tools":[{"name":"get_korean_real_estate_transactions","kind":"read","fields":{"description":"8651e546943b9590","inputSchema":"389718f380a11858"}}]}

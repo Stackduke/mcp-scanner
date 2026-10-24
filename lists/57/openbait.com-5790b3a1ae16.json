@@ -1,0 +1,1 @@
+{"source":"https://openbait.com/api/mcp","takenAt":"2026-10-24T06:18:07.790Z","server":{"name":"openbait","version":"1.0.0"},"tools":[{"name":"check_lookalike_domains","kind":"read","fields":{"title":"07b3e3c41bb37290","description":"31d6d71a8dc7e371","inputSchema":"8524d4b4ec07b7ac","outputSchema":"96cf04f758b1ca80","annotations":"77782ce318e4e173"}}]}

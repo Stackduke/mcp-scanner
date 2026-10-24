@@ -1,0 +1,1 @@
+{"source":"https://govapiatlas.com/mcp","takenAt":"2026-10-24T06:18:03.643Z","server":{"name":"govapi-atlas","version":"1.0.0"},"tools":[{"name":"list_countries","kind":"read","fields":{"description":"d6f1b4f8741edf6f","inputSchema":"efddc7bd8bbcef73"}},{"name":"search_gov_apis","kind":"read","fields":{"description":"6adffc2062abcd1d","inputSchema":"24b435a6420eb797"}}]}

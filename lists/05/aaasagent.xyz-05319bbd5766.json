@@ -1,0 +1,1 @@
+{"source":"https://aaasagent.xyz/api/v1/mcp","takenAt":"2026-10-24T06:17:56.988Z","server":{"name":"aaasagent-mcp","version":"1.0.0"},"tools":[{"name":"list_templates","kind":"read","fields":{"description":"f7481f32236c93e5","inputSchema":"138a1086e0a571b6"}}]}
