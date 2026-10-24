@@ -567,3 +567,13 @@ test("the official servers the page shows are looked at on every run, and the fe
   assert.deepEqual(feed.watched[0]?.groups, [{ kind: "destructive", tools: ["delete_page"] }, { kind: "read", tools: ["search_docs"] }]);
   assert.equal(feed.coverage.endpoints, 1, "a server the registry does not list is shown, but not counted as the registry's");
 });
+
+test("a run that would drop a server's history, for want of a private folder, stops and changes nothing", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
+  const old = { id: "signed-in-grafana", url: "https://mcp.grafana.com/mcp", names: [], signedIn: "grafana", firstSeen: hoursBefore(96), inRegistry: false, checks: [`${hoursBefore(48)} L`], changes: [] };
+  const line = `${JSON.stringify(old)}
+`;
+  await writeFile(path.join(dataDir, "endpoints.jsonl"), line);
+  await assert.rejects(runWithPrivateServer(undefined, dataDir), /no private data folder was given to move it to/);
+  assert.equal(await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8"), line, "the public data is as it was");
+});

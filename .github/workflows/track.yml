@@ -83,8 +83,10 @@ jobs:
       # Only servers watched with a login have watched/, and they are all private now. The copy is kept
       # outside both checkouts, so it is never committed.
       - name: Keep the watched definitions from before the scan
+        # On the day the servers move, their definitions are still in the public data, so those count as before too.
         run: |
           mkdir -p "$RUNNER_TEMP/watched-before"
+          if [ -d tracker-data/watched ]; then cp -R tracker-data/watched/. "$RUNNER_TEMP/watched-before/"; fi
           if [ -d private-data/watched ]; then cp -R private-data/watched/. "$RUNNER_TEMP/watched-before/"; fi
 
       # The key is made for the renew step alone, limited to this repository's secrets, and revoked when
@@ -139,20 +141,9 @@ jobs:
           STACKDUKE_NOTICE_URL: ${{ secrets.STACKDUKE_NOTICE_URL }}
           STACKDUKE_NOTICE_TOKEN: ${{ secrets.STACKDUKE_NOTICE_TOKEN }}
 
-      - name: Commit what changed
-        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
-        working-directory: tracker-data
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          git config user.name "stackduke-tracker[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then echo "Nothing to commit."; exit 0; fi
-          git commit -q -m "Scan $(date -u +%Y-%m-%d)"
-          git -c "http.extraheader=Authorization: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" push -q "https://github.com/$REPOSITORY.git" HEAD:data
-
+      # The private data is saved before the public data, and the public commit waits for it: on the day the
+      # servers that need a sign-in move out of the public data, their history must reach the private
+      # repository before it leaves the public one.
       # The private repository's commit gets a fresh key: the one made before the scan may have run out.
       - name: Key for saving the private data
         id: private-save-key
@@ -166,6 +157,7 @@ jobs:
           permission-contents: write
 
       - name: Commit the private data
+        id: private-commit
         if: ${{ !cancelled() && steps.private-save-key.outcome == 'success' }}
         working-directory: private-data
         env:
@@ -179,6 +171,20 @@ jobs:
           git commit -q -m "Private scan $(date -u +%Y-%m-%d)"
           git -c "http.extraheader=Authorization: basic $(printf 'x-access-token:%s' "$PRIVATE_TOKEN" | base64 -w0)" push -q "https://github.com/Stackduke/stackduke-intelligence.git" HEAD:tracker-private
           echo "Saved."
+
+      - name: Commit what changed
+        if: ${{ !cancelled() && steps.scan.outcome == 'success' && (steps.private-data.outcome != 'success' || steps.private-commit.outcome == 'success') }}
+        working-directory: tracker-data
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git config user.name "stackduke-tracker[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "Nothing to commit."; exit 0; fi
+          git commit -q -m "Scan $(date -u +%Y-%m-%d)"
+          git -c "http.extraheader=Authorization: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" push -q "https://github.com/$REPOSITORY.git" HEAD:data
 
       # Runs whatever happened above, so a lost sign-in, or sign-in steps that did not finish, reach a person.
       - name: Tell a person about sign-ins

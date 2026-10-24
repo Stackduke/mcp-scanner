@@ -183,7 +183,8 @@
       "termsCheckedOn": "2026-10-18",
       "tracker": {
         "publish": false,
-        "reason": "Paused on 24 October 2026: Airtable's acceptable use policy bans automated access to and collection of its service, so the tracker keeps no sign-in for it and does not look at it."
+        "forbidden": true,
+        "reason": "Paused on 24 October 2026: Airtable's acceptable use policy bans automated access to and collection of its service, so the tracker keeps no sign-in for it and checks no address on its sites."
       }
     },
     {

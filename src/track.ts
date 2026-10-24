@@ -154,13 +154,19 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   // A server watched with a login that is no longer published leaves the public folder. When it is now
   // tracked privately and the private folder has no history for it yet, its history moves there first.
   const leaving = all.filter((endpoint) => endpoint.signedIn && !published(endpoint.signedIn));
+  // Without the private folder the history would be dropped, not moved, so the run stops before touching anything.
+  const stranded = leaving.filter((endpoint) => signedInServers[endpoint.signedIn as string] !== undefined && !privateStore.watched.has(endpoint.signedIn as string));
+  if (stranded.length && privateDataDir === undefined) {
+    throw new Error(`${stranded.length} servers now tracked privately still have their history in the public data, and no private data folder was given to move it to. Nothing was changed. Run with --private-data once it can be checked out.`);
+  }
   for (const endpoint of leaving) {
     const vendor = endpoint.signedIn as string;
     const moves = privateDataDir !== undefined && signedInServers[vendor] !== undefined && !privateStore.watched.has(vendor);
     for (const relative of [watchedFile(vendor), ...(endpoint.file ? [endpoint.file] : [])]) {
       if (moves) {
         await mkdir(path.dirname(privateFile(relative)), { recursive: true });
-        await copyFile(file(relative), privateFile(relative)).catch(() => undefined);
+        // Only a file that is not there is skipped; any other failure stops the run before the public copy is removed.
+        await copyFile(file(relative), privateFile(relative)).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
       }
       await rm(file(relative), { force: true });
     }
@@ -194,10 +200,11 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     let saved: ReturnType<typeof recordCheck> = null;
     try { saved = recordCheck(endpoint, result, at, previous); }
     catch {
-      failed += 1;
+      if (store === publicStore) failed += 1;
       recordCheck(endpoint, { outcome: "not-usable", detail: "the list could not be processed" }, at, null);
     }
-    if (endpoint.changes[0] !== latestChange) changed += 1;
+    // The public log's count leaves out servers tracked privately, so it says nothing about them.
+    if (endpoint.changes[0] !== latestChange && store === publicStore) changed += 1;
     if (!saved || !endpoint.file) return;
     await writeWhole(store.file(endpoint.file), `${JSON.stringify(saved.print)}\n`);
     // The definitions are rewritten only when the server changed them (or the file is missing), so a
