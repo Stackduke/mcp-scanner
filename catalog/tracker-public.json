@@ -26,7 +26,6 @@
     { "id": "devexpress-docs", "name": "DevExpress Docs", "url": "https://api.devexpress.com/mcp/docs", "site": "https://www.devexpress.com" },
     { "id": "dm-drogerie-markt", "name": "dm-drogerie markt", "url": "https://mcp.dm.de/mcp", "site": "https://www.dm.de" },
     { "id": "drawio", "name": "draw.io", "url": "https://mcp.draw.io/mcp", "site": "https://www.drawio.com" },
-    { "id": "etherscan", "name": "Etherscan", "url": "https://mcp-keyless.etherscan.io/mcp", "site": "https://etherscan.io" },
     { "id": "gameanalytics-docs", "name": "GameAnalytics Docs", "url": "https://mcp.docs.gameanalytics.com/", "site": "https://gameanalytics.com" },
     { "id": "google-android-management", "name": "Google Android Management", "url": "https://androidmanagement.googleapis.com/mcp", "site": "https://developers.google.com/android/management" },
     { "id": "google-cloud-run", "name": "Google Cloud Run", "url": "https://run.googleapis.com/mcp", "site": "https://cloud.google.com/run" },
@@ -35,7 +34,6 @@
     { "id": "google-developer-knowledge", "name": "Google Developer Knowledge", "url": "https://developerknowledge.googleapis.com/mcp", "site": "https://developers.google.com" },
     { "id": "google-stitch", "name": "Google Stitch", "url": "https://stitch.googleapis.com/mcp", "site": "https://stitch.withgoogle.com" },
     { "id": "hebcal", "name": "Hebcal", "url": "https://www.hebcal.com/mcp", "site": "https://www.hebcal.com" },
-    { "id": "icecat", "name": "Icecat", "url": "https://mcp.icecat.biz/", "site": "https://icecat.biz" },
     { "id": "imagekit", "name": "ImageKit", "url": "https://devtools-mcp.imagekit.io/mcp", "site": "https://imagekit.io" },
     { "id": "kochava", "name": "Kochava", "url": "https://analytics.mcp.kochava.com/mcp", "site": "https://www.kochava.com" },
     { "id": "lambdatest", "name": "LambdaTest", "url": "https://mcp.lambdatest.com/mcp", "site": "https://www.lambdatest.com" },
@@ -52,7 +50,6 @@
     { "id": "string-db", "name": "STRING", "url": "https://mcp.string-db.org/", "site": "https://string-db.org" },
     { "id": "svelte", "name": "Svelte", "url": "https://mcp.svelte.dev/mcp", "site": "https://svelte.dev" },
     { "id": "thousandeyes", "name": "Cisco ThousandEyes", "url": "https://api.thousandeyes.com/mcp-public", "site": "https://www.thousandeyes.com" },
-    { "id": "tipranks", "name": "TipRanks", "url": "https://mcp.tipranks.com/mcp/", "site": "https://www.tipranks.com" },
     { "id": "trivago", "name": "trivago", "url": "https://mcp.trivago.com/mcp", "site": "https://www.trivago.com" },
     { "id": "web3auth", "name": "Web3Auth", "url": "https://mcp.web3auth.io/", "site": "https://web3auth.io" },
     { "id": "wolfram", "name": "Wolfram", "url": "https://agenttools.wolfram.com/mcp", "site": "https://www.wolfram.com" }
