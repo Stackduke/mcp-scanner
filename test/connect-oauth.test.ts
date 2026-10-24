@@ -12,7 +12,7 @@ const access = "made-up-access-token";
 const refresh = "made-up-refresh-token";
 const clientSecret = "made-up-client-secret";
 
-const demo: OAuthServer = Object.freeze({ id: "demo", name: "Demo", url, publish: false, tokenVariable: "STACKDUKE_SCAN_DEMO_TOKEN", signInSecret: "STACKDUKE_OAUTH_DEMO", issuer, scopes: ["things:read"], scopeAdvice: "Use the tracker's own account." });
+const demo: OAuthServer = Object.freeze({ id: "demo", name: "Demo", url, publish: false, tracked: false, tokenVariable: "STACKDUKE_SCAN_DEMO_TOKEN", signInSecret: "STACKDUKE_OAUTH_DEMO", issuer, scopes: ["things:read"], scopeAdvice: "Use the tracker's own account." });
 
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
 

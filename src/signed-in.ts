@@ -18,6 +18,8 @@ export type SignedInServer = {
   tokenVariable: string;
   /** A name the variable had before, still read when the current one is unset. */
   formerVariable?: string;
+  /** False for a server tracked privately: what it lists never reaches the public data. */
+  publish: boolean;
 } & (
   /** Where the account owner makes the token, and what to make: the least the server needs to list its tools. */
   | { kind: "api-key"; keyPage: string; keyAdvice: string }
@@ -30,6 +32,8 @@ export interface OAuthServer {
   name: string;
   url: string;
   publish: boolean;
+  /** Scanned each day, published or privately. A server kept signed in only, ready for later, is not. */
+  tracked: boolean;
   tokenVariable: string;
   signInSecret: string;
   issuer: string;
@@ -42,25 +46,29 @@ export function oauthServersOf(servers: readonly CatalogServer[]): readonly OAut
     const access = server.tracker.access;
     if (access?.kind !== "oauth") return [];
     const { signInSecret, issuer, scopes, scopeAdvice } = access;
-    return [Object.freeze({ id: server.id, name: server.name, url: server.url, publish: server.tracker.publish, tokenVariable: tokenVariableOf(server.id), signInSecret, issuer, scopes: Object.freeze([...scopes]), scopeAdvice })];
+    const tracked = server.tracker.publish || ("private" in server.tracker && server.tracker.private === true);
+    return [Object.freeze({ id: server.id, name: server.name, url: server.url, publish: server.tracker.publish, tracked, tokenVariable: tokenVariableOf(server.id), signInSecret, issuer, scopes: Object.freeze([...scopes]), scopeAdvice })];
   }));
 }
 
 export const oauthServers: readonly OAuthServer[] = oauthServersOf(catalog.servers);
 
 /**
- * The servers in the catalog that the tracker watches with a key and publishes. Each token should
- * belong to an account made for the tracker that holds nothing of value: the server shows the tools
- * that token may see, and the token sits in the tracker's secrets. A server whose terms forbid
- * publishing, or that is not published yet, is in the catalog but not here.
+ * The servers in the catalog that the tracker watches with its own account: those it publishes, and
+ * those it tracks privately (`publish` false), whose files never reach the public data. Each token
+ * should belong to an account made for the tracker that holds nothing of value: the server shows
+ * the tools that token may see, and the token sits in the tracker's secrets. A server whose terms
+ * forbid it, or that is kept signed in only, is in the catalog but not here.
  */
 export function signedInServersOf(servers: readonly CatalogServer[]): Readonly<Record<string, SignedInServer>> {
   const entries = servers.flatMap((server): Array<readonly [string, SignedInServer]> => {
-    if (!server.tracker.publish) return [];
-    const access = server.tracker.access;
-    if (access.kind === "oauth") return [[server.id, Object.freeze({ url: server.url, tokenVariable: tokenVariableOf(server.id), kind: "oauth" as const })]];
+    const tracker = server.tracker;
+    const access = tracker.publish ? tracker.access : "private" in tracker && tracker.private === true ? tracker.access : undefined;
+    if (!access) return [];
+    const publish = tracker.publish;
+    if (access.kind === "oauth") return [[server.id, Object.freeze({ url: server.url, tokenVariable: tokenVariableOf(server.id), publish, kind: "oauth" as const })]];
     const { tokenVariable, formerVariable, keyPage, keyAdvice } = access;
-    return [[server.id, Object.freeze({ url: server.url, tokenVariable, ...(formerVariable ? { formerVariable } : {}), kind: "api-key" as const, keyPage, keyAdvice })]];
+    return [[server.id, Object.freeze({ url: server.url, tokenVariable, ...(formerVariable ? { formerVariable } : {}), publish, kind: "api-key" as const, keyPage, keyAdvice })]];
   });
   return Object.freeze(Object.fromEntries(entries));
 }

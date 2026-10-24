@@ -70,7 +70,29 @@ export type TrackerEntry =
    * A browser sign-in may be kept for a server that is not published yet, so it is ready the day
    * its terms are read: the daily run renews it and checks it works, and keeps nothing it lists.
    */
-  | { publish: false; reason: string; forbidden?: boolean; access?: TrackerOAuth };
+  | { publish: false; reason: string; forbidden?: boolean; access?: TrackerOAuth }
+  /**
+   * Tracked privately: watched with the tracker's own account every day, like a published server,
+   * but nothing it lists reaches the public data. Its files go to a private folder that the daily
+   * run commits to a private repository, and the run skips it when that folder is not given.
+   * Decided by Dom on 24 October 2026 for every server that needs a sign-in: publishing about them
+   * carries terms risk, so the public tracker shows only servers that answer with no sign-in.
+   */
+  | { publish: false; private: true; reason: string; access: TrackerAccess };
+
+/**
+ * A server the public tracker shows that answers its tool list with no sign-in, from
+ * `catalog/tracker-public.json`. It is read the way any MCP client reads it: no account, no token
+ * and no sign-up. A vendor's general terms may still cover using its server.
+ */
+export interface PublicServer {
+  id: string;
+  name: string;
+  url: string;
+  site: string;
+}
+
+export interface PublicList { version: 1; about?: string; servers: PublicServer[] }
 
 export interface CatalogServer {
   /** Short and stable: used in file names, addresses and the tracker's data. */
@@ -129,6 +151,12 @@ export function catalogProblems(value: unknown): string[] {
       if (!isText(tracker.reason, 300)) problem("a server the tracker does not publish needs a reason");
       if (tracker.forbidden !== undefined && typeof tracker.forbidden !== "boolean") problem("forbidden must be true or false");
       if (tracker.forbidden === true && server.termsCheckedOn === null) problem("is marked forbidden, but nobody has read its terms");
+      if (tracker.private !== undefined && tracker.private !== true) problem("private can only be true");
+      if (tracker.private === true) {
+        // A vendor whose terms forbid publishing may still be tracked privately; one marked forbidden is not touched at all.
+        if (tracker.forbidden === true) return problem("is marked forbidden, so it is not tracked, privately or not");
+        return accessProblems(server, tracker.access, problem, variables);
+      }
       if (tracker.access === undefined) return;
       // A vendor whose terms forbid publishing is not signed in to at all.
       if (tracker.forbidden === true) return problem("is marked forbidden, so it keeps no sign-in");
@@ -137,21 +165,63 @@ export function catalogProblems(value: unknown): string[] {
     }
     // Publishing is the one thing a vendor's terms can forbid, so nobody publishes before reading them.
     if (server.termsCheckedOn === null) problem("is published, but nobody has read its terms");
-    const access = tracker.access;
-    if (isRecord(access) && access.kind === "oauth") return oauthProblems(server, access, problem, variables);
-    if (!isRecord(access) || access.kind !== "api-key") return problem("tracker access must be an api-key or oauth");
-    // The variable is named after the server, so an edit cannot hand one vendor's token to another.
-    const expected = tokenVariableOf(String(server.id));
-    if (access.tokenVariable !== expected) problem(`its token variable must be ${expected}`);
-    if (access.formerVariable !== undefined && access.formerVariable !== `AETHIS_SCAN_${String(server.id).toUpperCase().replaceAll("-", "_")}_TOKEN`) problem("a former token variable can only be the AETHIS_SCAN_ name for the same server");
-    for (const name of [access.tokenVariable, access.formerVariable]) {
-      if (typeof name !== "string") continue;
-      if (variables.has(name)) problem(`${name} is used twice`); else variables.add(name);
-    }
-    if (!isPlainHttps(access.keyPage)) problem("keyPage must be a plain https address");
-    if (!isText(access.keyAdvice, 300)) problem("needs keyAdvice");
+    return accessProblems(server, tracker.access, problem, variables);
   });
   return problems;
+}
+
+/** The tracker's access to a server it watches with its own account, published or tracked privately. */
+function accessProblems(server: Record<string, unknown>, access: unknown, problem: (text: string) => void, variables: Set<string>): void {
+  if (isRecord(access) && access.kind === "oauth") return oauthProblems(server, access, problem, variables);
+  if (!isRecord(access) || access.kind !== "api-key") return problem("tracker access must be an api-key or oauth");
+  // The variable is named after the server, so an edit cannot hand one vendor's token to another.
+  const expected = tokenVariableOf(String(server.id));
+  if (access.tokenVariable !== expected) problem(`its token variable must be ${expected}`);
+  if (access.formerVariable !== undefined && access.formerVariable !== `AETHIS_SCAN_${String(server.id).toUpperCase().replaceAll("-", "_")}_TOKEN`) problem("a former token variable can only be the AETHIS_SCAN_ name for the same server");
+  for (const name of [access.tokenVariable, access.formerVariable]) {
+    if (typeof name !== "string") continue;
+    if (variables.has(name)) problem(`${name} is used twice`); else variables.add(name);
+  }
+  if (!isPlainHttps(access.keyPage)) problem("keyPage must be a plain https address");
+  if (!isText(access.keyAdvice, 300)) problem("needs keyAdvice");
+}
+
+/** Every problem with the public list, or none. It must not name a server the catalog tracks with a sign-in. */
+export function publicListProblems(value: unknown, servers: readonly CatalogServer[]): string[] {
+  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.servers)) return ["the public list must be { version: 1, servers: [...] }"];
+  if (value.about !== undefined && !isText(value.about, 600)) return ["about must be plain text"];
+  const problems: string[] = [];
+  const catalogIds = new Set(servers.map((server) => server.id));
+  const catalogUrls = new Set(servers.map((server) => server.url.replace(/\/$/, "")));
+  const ids = new Set<string>(), urls = new Set<string>();
+  value.servers.forEach((server: unknown, index) => {
+    const at = isRecord(server) && typeof server.id === "string" ? server.id : `server ${index + 1}`;
+    const problem = (text: string) => problems.push(`${at}: ${text}`);
+    if (!isRecord(server)) return problem("must be an object");
+    const known = new Set(["id", "name", "url", "site"]);
+    for (const key of Object.keys(server)) if (!known.has(key)) problem(`has a field this version does not know: ${key}`);
+    if (typeof server.id !== "string" || !/^[a-z][a-z0-9-]{1,39}$/.test(server.id)) problem("id must be lower-case letters, digits and hyphens");
+    else if (ids.has(server.id)) problem("id is used twice");
+    else if (catalogIds.has(server.id)) problem("id is already a server in the catalog");
+    else ids.add(server.id);
+    if (!isText(server.name, 80)) problem("needs a name");
+    if (!isPlainHttps(server.url)) problem("url must be a plain https address");
+    else {
+      const url = (server.url as string).replace(/\/$/, "");
+      if (urls.has(url)) problem("url is used twice");
+      else if (catalogUrls.has(url)) problem("url is a server the catalog tracks with a sign-in, which is never published");
+      else urls.add(url);
+    }
+    if (!isPlainHttps(server.site)) problem("site must be a plain https address");
+  });
+  return problems;
+}
+
+export function readPublicList(text: string, servers: readonly CatalogServer[]): PublicList {
+  const value: unknown = JSON.parse(text);
+  const problems = publicListProblems(value, servers);
+  if (problems.length) throw new Error(`catalog/tracker-public.json is not usable:\n  ${problems.join("\n  ")}`);
+  return value as PublicList;
 }
 
 /** The variable a server's token is read from. For a browser sign-in, the run's renewed access token is handed over under it. */
@@ -180,6 +250,9 @@ export function readCatalog(text: string): Catalog {
 }
 
 export const catalog: Readonly<Catalog> = readCatalog(readFileSync(new URL("../catalog/servers.json", import.meta.url), "utf8"));
+
+/** The servers the public tracker shows, all answering with no sign-in. */
+export const publicList: Readonly<PublicList> = readPublicList(readFileSync(new URL("../catalog/tracker-public.json", import.meta.url), "utf8"), catalog.servers);
 
 /**
  * How a server signs in, from what it says about itself: what a new catalog entry's `signIn`

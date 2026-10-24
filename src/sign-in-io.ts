@@ -40,11 +40,12 @@ export const isReports = <T extends { vendor: string; status: string }>(value: u
 
 /**
  * The environment for the scan: each renewed access token under its server's token variable, for
- * published servers only. A server not published yet is never scanned into the public data.
+ * servers the tracker scans, published or privately. A server kept signed in only is not scanned,
+ * and the scan keeps what a privately tracked server lists out of the public data.
  */
 export function handOver(access: Record<string, string>, servers: readonly OAuthServer[], environment: Record<string, string | undefined>): Record<string, string | undefined> {
   const handed = { ...environment };
-  for (const server of servers) if (server.publish && Object.hasOwn(access, server.id)) handed[server.tokenVariable] = access[server.id];
+  for (const server of servers) if (server.tracked && Object.hasOwn(access, server.id)) handed[server.tokenVariable] = access[server.id];
   return handed;
 }
 

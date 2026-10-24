@@ -18,10 +18,10 @@ import type { Snapshot, ToolDefinition } from "./types.ts";
  * Each run gets every server's current tools and compares them with the approved list, as `check`
  * does for a server a repository builds. The tools come from one of two places:
  *
- * - the public tracker's copy, for a server it watches with a sign-in (GitHub, Linear, Stripe and
- *   the rest of the catalog's published servers). It is read from the tracker's `data` branch on
- *   GitHub, the same files stackduke.com/tracker shows. Those tools are the ones the tracker's own
- *   test account is shown, which may not be what the repository's account is shown;
+ * - the public tracker's copy, for a server it publishes after watching it with a sign-in. It is
+ *   read from the tracker's `data` branch on GitHub, the same files stackduke.com/tracker shows.
+ *   Since 24 October 2026 the tracker publishes no such server (servers that need a sign-in are
+ *   tracked privately), so this path is used only if one is published again;
  * - the server itself, for any other server, or for one given a `tokenVariable`: then the token in
  *   that environment variable is sent to that server, and to nothing else, under the rules every
  *   token here follows.
@@ -172,6 +172,8 @@ function readFeed(text: string): FeedRead {
   const entries: FeedEntry[] = [];
   for (const item of parsed.watched) {
     if (!isRecord(item) || typeof item.vendor !== "string" || typeof item.url !== "string") continue;
+    // A server the page shows that answers with no sign-in has no saved definitions: it is asked directly.
+    if (typeof item.id === "string" && !item.id.startsWith("signed-in-")) continue;
     const address = serverAddress(item.url);
     if (!address.ok) continue;
     const groups = Array.isArray(item.groups) ? item.groups : null;
@@ -260,10 +262,17 @@ export interface WatchOptions {
   trackerData?: string;
   maxAgeHours?: number;
   now?: Date;
+  /** The addresses the tracker publishes after a sign-in. Default: from the catalog, which has none since 24 October 2026. */
+  publishedAddresses?: ReadonlySet<string>;
 }
 
-/** The addresses the tracker publishes, from the catalog this copy carries. The feed may list more. */
-const catalogAddresses = new Set(Object.values(signedInServers).flatMap((server) => { const address = serverAddress(server.url); return address.ok ? [address.url] : []; }));
+/**
+ * The addresses the tracker publishes after watching them with a sign-in, from the catalog this copy
+ * carries: the only servers whose tools are read from the tracker's saved copy. A server tracked
+ * privately is not one of them, and neither is a server the page shows that answers with no sign-in:
+ * those are read from the server itself.
+ */
+const catalogAddresses = new Set(Object.values(signedInServers).flatMap((server) => { if (!server.publish) return []; const address = serverAddress(server.url); return address.ok ? [address.url] : []; }));
 
 const said = (detail: string) => confined(detail, /[^A-Za-z0-9 ,.()_:-]+/g, 160) || "no reason was given";
 
@@ -280,7 +289,7 @@ function fromServer(result: ListToolsResult, tokenVariable: string | undefined):
 }
 
 export async function runWatch(servers: WatchedServer[], options: WatchOptions): Promise<ServerOutcome[]> {
-  const { env, fetchImpl = fetch, timeoutMs = 15_000, trackerData: data = trackerData, maxAgeHours = defaultMaxAgeHours, now = new Date() } = options;
+  const { env, fetchImpl = fetch, timeoutMs = 15_000, trackerData: data = trackerData, maxAgeHours = defaultMaxAgeHours, now = new Date(), publishedAddresses: published = catalogAddresses } = options;
   const read = (file: string) => readData(data, file, fetchImpl, timeoutMs);
   let feed: Promise<FeedRead> | null = null;
   const theFeed = () => (feed ??= read("feed.json").then((file) => (file.ok ? readFeed(file.text) : { ok: false as const, why: `the tracker's feed could not be read: ${file.why}` })));
@@ -304,7 +313,7 @@ export async function runWatch(servers: WatchedServer[], options: WatchOptions):
         const copy = await trackerCopy(entry, read, now, maxAgeHours);
         via = { from: "tracker", listedAt: copy.ok ? copy.listedAt : entry.lastListed ?? "" };
         listed = copy.ok ? copy : { ok: false, why: copy.why, code: 4 };
-      } else if (catalogAddresses.has(server.url)) {
+      } else if (published.has(server.url)) {
         // A server the tracker publishes, and no copy to be had: say so, rather than ask it without a sign-in.
         outcomes.push({ url: server.url, checked: false, via: null, why: known.ok ? "the tracker watches this server, but its feed has no entry for it today" : known.why, code: 4 });
         continue;

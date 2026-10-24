@@ -66,7 +66,9 @@ function trackerWith(...servers: Array<ReturnType<typeof trackerFiles>>): Record
 
 const approved = (tools: Tool[]) => tools.map(({ name, description, inputSchema, annotations }) => ({ name, ...(description ? { description } : {}), ...(inputSchema ? { inputSchema } : {}), ...(annotations ? { annotations } : {}) })) as WatchedServer["tools"];
 const run = (servers: WatchedServer[], network: ReturnType<typeof fakeNetwork>, env: Record<string, string | undefined> = {}, maxAgeHours?: number) =>
-  runWatch(servers, { env, fetchImpl: network.fetchImpl, trackerData: data, now, ...(maxAgeHours ? { maxAgeHours } : {}) });
+  // These tests cover the tracker's saved copy, so Stripe stands in for a server the tracker publishes after a sign-in.
+  // Since 24 October 2026 the real catalog publishes none; the last test here covers that.
+  runWatch(servers, { env, fetchImpl: network.fetchImpl, trackerData: data, now, publishedAddresses: new Set([stripe]), ...(maxAgeHours ? { maxAgeHours } : {}) });
 const only = (outcomes: ServerOutcome[]) => { assert.equal(outcomes.length, 1); return outcomes[0] as ServerOutcome; };
 
 test("the watch file is read strictly, and written back sorted and the same", () => {
@@ -395,4 +397,21 @@ test("the watch command: start a watch file, pass, fail on a change, and approve
   const broken = await command([using, "--watchfile=broken.json"], folder);
   assert.equal(broken.code, 2);
   assert.match(broken.stdout, /could not run/);
+});
+
+test("with the real catalog, a server that needs a sign-in is asked directly and the run says to give it a token", async () => {
+  const network = fakeNetwork({ files: trackerWith(), servers: { [stripe]: { tools: [], status: 401 } } });
+  const outcome = only(await runWatch([{ url: stripe, tools: approved([readNotes]) }], { env: {}, fetchImpl: network.fetchImpl, trackerData: data, now }));
+  assert.ok(!outcome.checked);
+  assert.equal(outcome.code, 3);
+  assert.match(outcome.why, /Give it a token: name a STACKDUKE_WATCH_ variable as its tokenVariable/);
+});
+
+test("a server the page shows that answers with no sign-in is asked directly, even when the feed lists it", async () => {
+  const open = "https://docs.example.com/mcp";
+  const feed = JSON.stringify({ version: 1, generatedAt: listedAt, watched: [{ id: "0123456789ab", vendor: "example-docs", url: open, lastListed: listedAt, outcome: "listed", tools: 1, groups: [{ kind: "read", tools: ["read_notes"] }], changes: [] }] });
+  const network = fakeNetwork({ files: { "feed.json": feed }, servers: { [open]: { tools: [readNotes] } } });
+  const outcome = only(await runWatch([{ url: open, tools: approved([readNotes]) }], { env: {}, fetchImpl: network.fetchImpl, trackerData: data, now }));
+  assert.ok(outcome.checked && outcome.result.passed);
+  assert.deepEqual(outcome.via, { from: "server" });
 });

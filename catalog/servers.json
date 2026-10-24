@@ -11,7 +11,9 @@
       "signInCheckedOn": "2026-10-17",
       "termsCheckedOn": "2026-10-16",
       "tracker": {
-        "publish": true,
+        "publish": false,
+        "private": true,
+        "reason": "Tracked privately since 24 October 2026: it needs a sign-in, so it is watched with the tracker's own account and nothing it lists is published. Its files go to a private repository.",
         "access": {
           "kind": "api-key",
           "tokenVariable": "STACKDUKE_SCAN_GITHUB_TOKEN",
@@ -31,7 +33,9 @@
       "signInCheckedOn": "2026-10-17",
       "termsCheckedOn": "2026-10-16",
       "tracker": {
-        "publish": true,
+        "publish": false,
+        "private": true,
+        "reason": "Tracked privately since 24 October 2026: it needs a sign-in, so it is watched with the tracker's own account and nothing it lists is published. Its files go to a private repository.",
         "access": {
           "kind": "api-key",
           "tokenVariable": "STACKDUKE_SCAN_LINEAR_TOKEN",
@@ -50,7 +54,9 @@
       "signInCheckedOn": "2026-10-17",
       "termsCheckedOn": "2026-10-16",
       "tracker": {
-        "publish": true,
+        "publish": false,
+        "private": true,
+        "reason": "Tracked privately since 24 October 2026: it needs a sign-in, so it is watched with the tracker's own account and nothing it lists is published. Its files go to a private repository.",
         "access": {
           "kind": "api-key",
           "tokenVariable": "STACKDUKE_SCAN_STRIPE_TOKEN",
@@ -69,7 +75,9 @@
       "signInCheckedOn": "2026-10-17",
       "termsCheckedOn": "2026-10-16",
       "tracker": {
-        "publish": true,
+        "publish": false,
+        "private": true,
+        "reason": "Tracked privately since 24 October 2026: it needs a sign-in, so it is watched with the tracker's own account and nothing it lists is published. Its files go to a private repository.",
         "access": {
           "kind": "api-key",
           "tokenVariable": "STACKDUKE_SCAN_SUPABASE_TOKEN",
@@ -172,22 +180,11 @@
       "category": "Work apps",
       "signIn": "oauth-dcr",
       "signInCheckedOn": "2026-10-18",
-      "termsCheckedOn": null,
+      "termsCheckedOn": "2026-10-18",
       "tracker": {
         "publish": false,
-        "reason": "Signed in with the tracker's own account, but not published until someone has read its terms in full.",
-        "access": {
-          "kind": "oauth",
-          "signInSecret": "STACKDUKE_OAUTH_AIRTABLE",
-          "issuer": "https://airtable.com/oauth2/v1",
-          "scopes": [
-            "data.records:read",
-            "schema.bases:read",
-            "data.recordComments:read",
-            "workspacesAndBases:read"
-          ],
-          "scopeAdvice": "Sign in as tracker+airtable@stackduke.com, an account that holds nothing. Only the read scopes are asked for."
-        }
+        "forbidden": true,
+        "reason": "Paused on 24 October 2026: Airtable's acceptable use policy bans automated access to and collection of its service, so the tracker keeps no sign-in for it and checks no address on its sites."
       }
     },
     {
@@ -201,7 +198,8 @@
       "termsCheckedOn": null,
       "tracker": {
         "publish": false,
-        "reason": "Signed in with the tracker's own account, but not published until someone has read its terms in full.",
+        "private": true,
+        "reason": "Tracked privately since 24 October 2026: it needs a sign-in, so it is watched with the tracker's own account and nothing it lists is published. Its files go to a private repository.",
         "access": {
           "kind": "oauth",
           "signInSecret": "STACKDUKE_OAUTH_DROPBOX",
@@ -227,7 +225,9 @@
       "signInCheckedOn": "2026-10-18",
       "termsCheckedOn": "2026-10-18",
       "tracker": {
-        "publish": true,
+        "publish": false,
+        "private": true,
+        "reason": "Tracked privately since 24 October 2026: it needs a sign-in, so it is watched with the tracker's own account and nothing it lists is published. Its files go to a private repository.",
         "access": {
           "kind": "oauth",
           "signInSecret": "STACKDUKE_OAUTH_ZAPIER",
@@ -251,7 +251,9 @@
       "signInCheckedOn": "2026-10-18",
       "termsCheckedOn": "2026-10-18",
       "tracker": {
-        "publish": true,
+        "publish": false,
+        "private": true,
+        "reason": "Tracked privately since 24 October 2026: it needs a sign-in, so it is watched with the tracker's own account and nothing it lists is published. Its files go to a private repository.",
         "access": {
           "kind": "oauth",
           "signInSecret": "STACKDUKE_OAUTH_CONTENTFUL",
@@ -271,7 +273,9 @@
       "signInCheckedOn": "2026-10-18",
       "termsCheckedOn": "2026-10-18",
       "tracker": {
-        "publish": true,
+        "publish": false,
+        "private": true,
+        "reason": "Tracked privately since 24 October 2026: it needs a sign-in, so it is watched with the tracker's own account and nothing it lists is published. Its files go to a private repository.",
         "access": {
           "kind": "oauth",
           "signInSecret": "STACKDUKE_OAUTH_GRAFANA",
@@ -293,7 +297,9 @@
       "signInCheckedOn": "2026-10-18",
       "termsCheckedOn": "2026-10-18",
       "tracker": {
-        "publish": true,
+        "publish": false,
+        "private": true,
+        "reason": "Tracked privately since 24 October 2026: it needs a sign-in, so it is watched with the tracker's own account and nothing it lists is published. Its files go to a private repository.",
         "access": {
           "kind": "oauth",
           "signInSecret": "STACKDUKE_OAUTH_CIRCLECI",
