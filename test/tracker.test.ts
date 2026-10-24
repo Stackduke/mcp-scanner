@@ -394,3 +394,79 @@ test("a missed check on a watched server says why in the log, in the scanner's o
   assert.equal(checkReason({ outcome: "listed", server: {}, tools: [] }, "listed"), "");
   assert.equal(checkReason({ outcome: "no-token" }, "no-token"), "");
 });
+
+/**
+ * A run with one open server in the registry and Grafana watched with a token, whose initialize fails with `failure`
+ * until look number `readyOnLook`. A failure that throws stands for a request that got no answer.
+ */
+async function runWithFlakyServer(failure: () => Response, readyOnLook: number) {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "tracker-"));
+  const asked: string[] = [];
+  let looks = 0;
+  const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
+    const url = String(input);
+    if (url.startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: [{ server: { name: "com.example/open", remotes: [{ type: "streamable-http", url: "https://open.example.com/mcp" }] } }], metadata: {} });
+    const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
+    asked.push(`${new URL(url).hostname} ${body.method}`);
+    if (url === "https://mcp.grafana.com/mcp" && body.method === "initialize") {
+      looks += 1;
+      if (looks < readyOnLook) return failure();
+    }
+    if (body.method === "initialize") return Response.json({ jsonrpc: "2.0", id: body.id, result: { serverInfo: { name: "Demo" } } });
+    if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "get_page", ...readOnly }] } });
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+  const lines: string[] = [];
+  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, environment: { STACKDUKE_SCAN_GRAFANA_TOKEN: "test-token" }, fetchImpl, now: () => new Date(now), log: (line) => lines.push(line) });
+  const endpoints = (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as Endpoint);
+  const grafanaLooks = asked.filter((line) => line === "mcp.grafana.com initialize").length;
+  return { summary, asked, lines, grafanaLooks, grafana: endpoints.find((item) => item.signedIn === "grafana") };
+}
+
+const answering = (status: number) => () => new Response("upstream not ready", { status });
+const timingOut = () => { throw new DOMException("The operation timed out.", "TimeoutError"); };
+
+test("a watched server that answers 424 to initialize is looked at again after the crawl, and only that look is recorded", async () => {
+  const { summary, asked, lines, grafana } = await runWithFlakyServer(answering(424), 2);
+  const initializes = asked.filter((line) => line.endsWith(" initialize"));
+  assert.deepEqual(initializes, ["mcp.grafana.com initialize", "open.example.com initialize", "mcp.grafana.com initialize"], "the second look comes after the crawl");
+  assert.equal(grafana?.outcome, "listed");
+  assert.equal(grafana?.tools, 1);
+  assert.equal(grafana?.checks.length, 1, "one check recorded, not a miss and then a listing");
+  assert.deepEqual(summary.watched, [{ vendor: "grafana", outcome: "listed" }]);
+  assert.ok(lines.includes("grafana: not-usable (initialize answered 424), so it will be checked again after the crawl"));
+  assert.ok(!lines.some((line) => line.includes("upstream not ready")), "nothing the server said reaches the log");
+});
+
+test("a watched server that fails both looks is recorded as one missed check", async () => {
+  const { lines, grafanaLooks, grafana } = await runWithFlakyServer(answering(424), Infinity);
+  assert.equal(grafanaLooks, 2, "looked at twice, no more");
+  assert.equal(grafana?.outcome, "not-usable");
+  assert.equal(grafana?.checks.length, 1);
+  assert.deepEqual(lines.filter((line) => line.startsWith("grafana: not-usable") && !line.endsWith("after the crawl")), ["grafana: not-usable (initialize answered 424)"], "one missed check in the log");
+});
+
+test("a watched server that times out or answers 429 or 5xx to initialize is looked at again too", async () => {
+  for (const [name, failure, said] of [
+    ["a timeout", timingOut, "unreachable (TimeoutError)"],
+    ["429", answering(429), "not-usable (initialize answered 429)"],
+    ["500", answering(500), "not-usable (initialize answered 500)"],
+    ["503", answering(503), "not-usable (initialize answered 503)"],
+  ] as const) {
+    const { lines, grafanaLooks, grafana } = await runWithFlakyServer(failure, 2);
+    assert.equal(grafanaLooks, 2, name);
+    assert.equal(grafana?.outcome, "listed", name);
+    assert.equal(grafana?.checks.length, 1, name);
+    assert.ok(lines.includes(`grafana: ${said}, so it will be checked again after the crawl`), name);
+  }
+});
+
+test("a watched server that refuses its login, or answers initialize in a way that will not change, is recorded at once", async () => {
+  for (const [name, status, outcome] of [["401", 401, "sign-in-required"], ["403", 403, "sign-in-required"], ["400", 400, "not-usable"], ["404", 404, "not-usable"]] as const) {
+    const { lines, grafanaLooks, grafana } = await runWithFlakyServer(answering(status), 2);
+    assert.equal(grafanaLooks, 1, `${name} is not looked at again`);
+    assert.equal(grafana?.outcome, outcome, name);
+    assert.equal(grafana?.checks.length, 1, name);
+    assert.ok(!lines.some((line) => line.endsWith("after the crawl")), name);
+  }
+});
