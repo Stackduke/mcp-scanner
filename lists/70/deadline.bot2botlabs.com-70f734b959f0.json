@@ -1,0 +1,1 @@
+{"source":"https://deadline.bot2botlabs.com/mcp","takenAt":"2026-10-25T09:27:42.887Z","server":{"name":"deadline-desk","version":"0.1.0"},"tools":[{"name":"get_receipt","kind":"read","fields":{"description":"14198838ee0e2442","inputSchema":"66ae127b592869f9"}},{"name":"lookup_policy","kind":"read","fields":{"description":"d6c7e46738ea9dc7","inputSchema":"42b9f1c0292f5a4e"}}]}

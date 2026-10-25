@@ -1,0 +1,1 @@
+{"source":"https://mcp.edeputat.com/eurostat-statistics/mcp","takenAt":"2026-10-25T09:27:47.334Z","server":{"name":"eurostat-statistics","version":""},"tools":[{"name":"get_population","kind":"read","fields":{"description":"b65597b081f0f3fa","inputSchema":"0b5542f7c07bdb2c"}}]}

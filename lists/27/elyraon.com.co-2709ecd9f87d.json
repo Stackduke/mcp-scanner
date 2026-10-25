@@ -1,0 +1,1 @@
+{"source":"https://elyraon.com.co/agents/mcp","takenAt":"2026-10-25T09:27:43.223Z","server":{"name":"elyreon-workflow-rescue","version":"1.0.0"},"tools":[{"name":"check_n8n_workflow","kind":"read","fields":{"description":"72139b53737bdce8","inputSchema":"17368c4345aaad44","annotations":"ae78503371695cf7"}}]}
