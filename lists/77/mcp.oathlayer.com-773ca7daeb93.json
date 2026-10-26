@@ -1,1 +1,1 @@
-{"source":"https://mcp.oathlayer.com/","takenAt":"2026-10-16T18:20:16.258Z","server":{"name":"oathlayer","version":"1.0.0"},"tools":[{"name":"verify_output","kind":"write","fields":{"description":"141886a8c2a990d2","inputSchema":"468b66bb3714450f"}}]}
+{"source":"https://mcp.oathlayer.com/","takenAt":"2026-10-26T10:20:13.312Z","server":{"name":"oathlayer","version":"1.0.0"},"tools":[{"name":"verify_output","kind":"read","fields":{"description":"09f24116fbe993df","inputSchema":"dc87eb3169cd2e96"}}]}

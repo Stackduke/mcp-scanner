@@ -1,1 +1,1 @@
-{"source":"https://www.statis-tir.fr/_mcp","takenAt":"2026-10-16T18:02:02.375Z","server":{"name":"statistir","version":"1.0.0"},"tools":[{"name":"list_organisation_competitions","kind":"read","fields":{"description":"f6d2b9ca42c1948b","inputSchema":"efddc7bd8bbcef73"}}]}
+{"source":"https://www.statis-tir.fr/_mcp","takenAt":"2026-10-26T10:29:13.985Z","server":{"name":"statistir","version":"1.0.0"},"tools":[{"name":"list_organisation_competitions","kind":"read","fields":{"description":"f6d2b9ca42c1948b","inputSchema":"efddc7bd8bbcef73"}}]}

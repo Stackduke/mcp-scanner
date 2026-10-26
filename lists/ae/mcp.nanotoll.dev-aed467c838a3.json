@@ -1,1 +1,1 @@
-{"source":"https://mcp.nanotoll.dev/mcp","takenAt":"2026-10-24T06:11:57.253Z","server":{"name":"rmcp","version":"3.4.0"},"tools":[{"name":"compress","kind":"write","fields":{"description":"da81f011ed4c0d11","inputSchema":"6a45c72b7361b344","annotations":"c2a9e1364ae97a8f"}}]}
+{"source":"https://mcp.nanotoll.dev/mcp","takenAt":"2026-10-26T10:20:09.463Z","server":{"name":"rmcp","version":"3.4.0"},"tools":[{"name":"compress","kind":"write","fields":{"description":"da81f011ed4c0d11","inputSchema":"40306ef9e22fc0fb","annotations":"c2a9e1364ae97a8f"}}]}
