@@ -1,0 +1,1 @@
+{"source":"https://mcp.spotafraud.ai/mcp","takenAt":"2026-10-27T10:07:00.754Z","server":{"name":"spotafraud","version":"0.1.0"},"tools":[{"name":"check_au_domain","kind":"read","fields":{"title":"b327ee4f843a0fc4","description":"e5a892999e31c2e9","inputSchema":"05308653dd084f41","outputSchema":"2abd52d2ec0ebe41","annotations":"85b6031591a95e13"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://agent-verifier.agent-verifier.workers.dev/mcp","takenAt":"2026-10-27T10:06:55.752Z","server":{"name":"agent-verifier","version":"0.1.0"},"tools":[{"name":"verify_numbers","kind":"read","fields":{"title":"b4d4529f83bb8b13","description":"ede08a36728cb68e","inputSchema":"59fb450c2f4b0505"}}]}
