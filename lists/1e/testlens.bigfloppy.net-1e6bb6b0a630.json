@@ -1,0 +1,1 @@
+{"source":"https://testlens.bigfloppy.net/mcp","takenAt":"2026-10-27T01:51:15.536Z","server":{"name":"testlens","version":"1.1.0"},"tools":[{"name":"testlens_health","kind":"unclear","fields":{"description":"19537c060c7300d3","inputSchema":"efddc7bd8bbcef73"}},{"name":"testlens_mutate","kind":"write","fields":{"description":"3de4a52f918c64e5","inputSchema":"18d01399afda7d43"}}]}

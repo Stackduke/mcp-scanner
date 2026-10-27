@@ -1,0 +1,1 @@
+{"source":"https://aiagent.jirventures.com/mcp/sales-agent","takenAt":"2026-10-27T01:52:27.503Z","server":{"name":"Sales_Agent_MCP","version":"0.1.0"},"tools":[{"name":"prepare_campaign","kind":"unclear","fields":{"description":"e0e27693c3956211","inputSchema":"4c29cd6e897cf0b3"}}]}

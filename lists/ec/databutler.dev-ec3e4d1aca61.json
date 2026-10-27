@@ -1,0 +1,1 @@
+{"source":"https://databutler.dev/api/mcp/jp-vehicle-costs","takenAt":"2026-10-27T01:52:22.051Z","server":{"name":"databutler-jp-vehicle-costs","version":"1.1.0"},"tools":[{"name":"jp_vehicle_costs_lookup","kind":"read","fields":{"title":"19bdafda430f1dee","description":"6ebea99ae4e4a10b","inputSchema":"580e885866b70793","annotations":"42f06141f15ae087"}}]}

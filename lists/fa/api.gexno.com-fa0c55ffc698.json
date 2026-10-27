@@ -1,0 +1,1 @@
+{"source":"https://api.gexno.com/mcp","takenAt":"2026-10-27T01:50:47.959Z","server":{"name":"gexno-web3","version":"0.1.2"},"tools":[{"name":"lookup_nft","kind":"read","fields":{"description":"64cad0e53a17e62d","inputSchema":"2d5271e03555817c"}},{"name":"lookup_wallet","kind":"read","fields":{"description":"900be22fd13fe5f2","inputSchema":"bc39d8eab52de82a"}}]}

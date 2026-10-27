@@ -1,0 +1,1 @@
+{"source":"https://databutler.dev/api/mcp/jp-living-costs","takenAt":"2026-10-27T01:50:53.905Z","server":{"name":"databutler-jp-living-costs","version":"1.1.0"},"tools":[{"name":"jp_living_costs_lookup","kind":"read","fields":{"title":"1611b833b4971a3b","description":"40b3d1cc5b1f9d4c","inputSchema":"da2294bb6c604ab3","annotations":"aa5c09eecae210f0"}}]}

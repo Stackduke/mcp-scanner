@@ -1,0 +1,1 @@
+{"source":"https://flowsimp.com/mcp","takenAt":"2026-10-27T01:50:56.611Z","server":{"name":"flowsimp","version":"1.0.0"},"tools":[{"name":"create_flowchart","kind":"write","fields":{"description":"3ded67166677da96","inputSchema":"06040ee02cb73e2e"}},{"name":"list_templates","kind":"read","fields":{"description":"64a6ef4cd0719bd4","inputSchema":"efddc7bd8bbcef73"}}]}
