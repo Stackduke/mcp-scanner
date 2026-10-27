@@ -52,6 +52,18 @@
     { "id": "thousandeyes", "name": "Cisco ThousandEyes", "url": "https://api.thousandeyes.com/mcp-public", "site": "https://www.thousandeyes.com" },
     { "id": "trivago", "name": "trivago", "url": "https://mcp.trivago.com/mcp", "site": "https://www.trivago.com" },
     { "id": "web3auth", "name": "Web3Auth", "url": "https://mcp.web3auth.io/", "site": "https://web3auth.io" },
-    { "id": "wolfram", "name": "Wolfram", "url": "https://agenttools.wolfram.com/mcp", "site": "https://www.wolfram.com" }
+    { "id": "wolfram", "name": "Wolfram", "url": "https://agenttools.wolfram.com/mcp", "site": "https://www.wolfram.com" },
+    { "id": "oneuptime", "name": "OneUptime", "url": "https://oneuptime.com/mcp", "site": "https://oneuptime.com" },
+    { "id": "apis-io", "name": "APIs.io", "url": "https://apis.io/mcp", "site": "https://apis.io" },
+    { "id": "edge-network", "name": "Edge", "url": "https://edge.network/mcp", "site": "https://edge.network" },
+    { "id": "ex2", "name": "Ex2", "url": "https://www.ex2.com/mcp", "site": "https://www.ex2.com" },
+    { "id": "simplyprint", "name": "SimplyPrint", "url": "https://simplyprint.io/api/mcp", "site": "https://simplyprint.io" },
+    { "id": "appcreator24", "name": "AppCreator24", "url": "https://www.appcreator24.com/api_ai/mcp/mcp.php", "site": "https://www.appcreator24.com" },
+    { "id": "dmca", "name": "DMCA.com", "url": "https://mcp.dmca.com/runtime/webhooks/mcp", "site": "https://www.dmca.com" },
+    { "id": "panda-video", "name": "Panda Video", "url": "https://mcp.pandavideo.com/mcp", "site": "https://pandavideo.com" },
+    { "id": "beeimg", "name": "BeeIMG", "url": "https://beeimg.com/mcp", "site": "https://beeimg.com" },
+    { "id": "pith", "name": "Pith", "url": "https://pith.science/mcp", "site": "https://pith.science" },
+    { "id": "tech-eu", "name": "Tech.eu Funding Explorer", "url": "https://funding.tech.eu/api/mcp", "site": "https://funding.tech.eu" },
+    { "id": "kari", "name": "Kari", "url": "https://mcp.kari.com/mcp", "site": "https://kari.com" }
   ]
 }
