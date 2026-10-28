@@ -64,6 +64,27 @@
     { "id": "beeimg", "name": "BeeIMG", "url": "https://beeimg.com/mcp", "site": "https://beeimg.com" },
     { "id": "pith", "name": "Pith", "url": "https://pith.science/mcp", "site": "https://pith.science" },
     { "id": "tech-eu", "name": "Tech.eu Funding Explorer", "url": "https://funding.tech.eu/api/mcp", "site": "https://funding.tech.eu" },
-    { "id": "kari", "name": "Kari", "url": "https://mcp.kari.com/mcp", "site": "https://kari.com" }
+    { "id": "kari", "name": "Kari", "url": "https://mcp.kari.com/mcp", "site": "https://kari.com" },
+    { "id": "authorized-by", "name": "Authorized.by", "url": "https://app.authorized.by/api/public/mcp", "site": "https://www.authorized.by" },
+    { "id": "finder", "name": "Finder", "url": "https://mcp.finder.work/mcp", "site": "https://finder.work" },
+    { "id": "stealth", "name": "Stealth", "url": "https://stealth.net/mcp", "site": "https://stealth.net" },
+    { "id": "gdacs", "name": "GDACS", "url": "https://api.gdacs.org/mcp", "site": "https://www.gdacs.org" },
+    { "id": "nichedb", "name": "NicheDB", "url": "https://nichedb.dev/mcp", "site": "https://nichedb.dev" },
+    { "id": "ctxt", "name": "Context (ctxt.io)", "url": "https://ctxt.io/mcp", "site": "https://ctxt.io" },
+    { "id": "carat-hunter", "name": "Carat Hunter", "url": "https://carathunter.com/mcp", "site": "https://carathunter.com" },
+    { "id": "skillmd", "name": "SkillMD", "url": "https://api.skillmd.com/mcp", "site": "https://skillmd.com" },
+    { "id": "most-recommended-books", "name": "Most Recommended Books", "url": "https://mostrecommendedbooks.com/api/mcp", "site": "https://mostrecommendedbooks.com" },
+    { "id": "chessigma", "name": "Chessigma", "url": "https://www.chessigma.com/api/mcp", "site": "https://www.chessigma.com" },
+    { "id": "ufcalendar", "name": "UFCalendar", "url": "https://api.ufcalendar.com/mcp", "site": "https://ufcalendar.com" },
+    { "id": "sunrise-sunset", "name": "Sunrise-Sunset", "url": "https://api.sunrise-sunset.org/mcp", "site": "https://sunrise-sunset.org" },
+    { "id": "engagemii", "name": "Engagemii", "url": "https://api.engagemii.com/api/mcp", "site": "https://engagemii.com" },
+    { "id": "agentage", "name": "Agentage", "url": "https://catalog.agentage.io/mcp", "site": "https://agentage.io" },
+    { "id": "dataart", "name": "DataArt", "url": "https://mcp.dataart.com/mcp", "site": "https://www.dataart.com" },
+    { "id": "uscodex", "name": "US Codex", "url": "https://uscodex.org/mcp", "site": "https://uscodex.org" },
+    { "id": "tudetic", "name": "Tudetic", "url": "https://www.tudetic.com/mcp/", "site": "https://www.tudetic.com" },
+    { "id": "alphagrowth", "name": "AlphaGrowth", "url": "https://alphagrowth.io/mcp", "site": "https://alphagrowth.io" },
+    { "id": "emeditor", "name": "EmEditor", "url": "https://help.emeditor.com/mcp", "site": "https://www.emeditor.com" },
+    { "id": "oh-my-posh", "name": "Oh My Posh", "url": "https://ohmyposh.dev/api/mcp", "site": "https://ohmyposh.dev" },
+    { "id": "steamgpt", "name": "SteamGPT", "url": "https://steamgpt.net/mcp", "site": "https://steamgpt.net" }
   ]
 }
