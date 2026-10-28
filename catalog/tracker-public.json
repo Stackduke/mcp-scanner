@@ -84,7 +84,6 @@
     { "id": "tudetic", "name": "Tudetic", "url": "https://www.tudetic.com/mcp/", "site": "https://www.tudetic.com" },
     { "id": "alphagrowth", "name": "AlphaGrowth", "url": "https://alphagrowth.io/mcp", "site": "https://alphagrowth.io" },
     { "id": "emeditor", "name": "EmEditor", "url": "https://help.emeditor.com/mcp", "site": "https://www.emeditor.com" },
-    { "id": "oh-my-posh", "name": "Oh My Posh", "url": "https://ohmyposh.dev/api/mcp", "site": "https://ohmyposh.dev" },
-    { "id": "steamgpt", "name": "SteamGPT", "url": "https://steamgpt.net/mcp", "site": "https://steamgpt.net" }
+    { "id": "oh-my-posh", "name": "Oh My Posh", "url": "https://ohmyposh.dev/api/mcp", "site": "https://ohmyposh.dev" }
   ]
 }
