@@ -1,0 +1,1 @@
+{"source":"https://api.rohnelt.dev/csv-repair/mcp","takenAt":"2026-10-28T10:54:09.636Z","server":{"name":"CSV Repair","version":"1.0.0"},"tools":[{"name":"repair_csv","kind":"read","fields":{"description":"2b6f8542e6bebcd5","inputSchema":"8d4e3d82877ea6f2","annotations":"ae78503371695cf7"}}]}

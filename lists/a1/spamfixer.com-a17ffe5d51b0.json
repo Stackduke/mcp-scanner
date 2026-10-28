@@ -1,0 +1,1 @@
+{"source":"https://spamfixer.com/mcp","takenAt":"2026-10-28T10:54:34.081Z","server":{"name":"spamfixer","version":"1.0.0"},"tools":[{"name":"check_email_deliverability","kind":"read","fields":{"title":"8381387b1b6bd777","description":"04554e23cf67546b","inputSchema":"52a946ac51818d0b","outputSchema":"fd26edca6f4c85fd","annotations":"139076388a98d13d"}}]}
