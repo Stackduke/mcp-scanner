@@ -1,0 +1,1 @@
+{"source":"https://agentshield.live/mcp","takenAt":"2026-10-28T17:08:43.963Z","server":{"name":"agentshield-facts","version":"1.0.0"},"tools":[{"name":"describe_route","kind":"read","fields":{"description":"a38f9a07b935571b","inputSchema":"fce0e9d902808f1e"}},{"name":"list_routes","kind":"read","fields":{"description":"9f2d593d6f06689d","inputSchema":"99334726611ccf58"}}]}

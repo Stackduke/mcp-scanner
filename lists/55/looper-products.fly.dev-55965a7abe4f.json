@@ -1,0 +1,1 @@
+{"source":"https://looper-products.fly.dev/mcp-statuspage/","takenAt":"2026-10-28T17:09:00.866Z","server":{"name":"statuspage-incidents","version":"0.1.0"},"tools":[{"name":"get_statuspage_incidents","kind":"read","fields":{"description":"0c0b4128ae627fd3","inputSchema":"14e837936195d420"}}]}

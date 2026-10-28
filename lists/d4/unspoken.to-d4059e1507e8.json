@@ -1,0 +1,1 @@
+{"source":"https://unspoken.to/api/mcp","takenAt":"2026-10-28T17:08:52.521Z","server":{"name":"unspoken-conversation-exercises","version":"1.0.0"},"tools":[{"name":"get_conversation_exercise","kind":"read","fields":{"title":"55ffa25235c1494b","description":"6fb104a5dbef7282","inputSchema":"163bd0105770a792","annotations":"ae78503371695cf7"}}]}
