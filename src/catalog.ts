@@ -204,7 +204,8 @@ export function publicListProblems(value: unknown, servers: readonly CatalogServ
     else if (ids.has(server.id)) problem("id is used twice");
     else if (catalogIds.has(server.id)) problem("id is already a server in the catalog");
     else ids.add(server.id);
-    if (!isText(server.name, 80)) problem("needs a name");
+    // Radar refuses the whole list if one name breaks this rule (SERVER_NAME_PATTERN in its types.ts).
+    if (typeof server.name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,59}$/.test(server.name)) problem("name must be letters, digits, spaces, dots, underscores or hyphens, up to 60 characters");
     if (!isPlainHttps(server.url)) problem("url must be a plain https address");
     else {
       const url = (server.url as string).replace(/\/$/, "");

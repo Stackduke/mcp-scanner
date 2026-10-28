@@ -70,7 +70,7 @@
     { "id": "stealth", "name": "Stealth", "url": "https://stealth.net/mcp", "site": "https://stealth.net" },
     { "id": "gdacs", "name": "GDACS", "url": "https://api.gdacs.org/mcp", "site": "https://www.gdacs.org" },
     { "id": "nichedb", "name": "NicheDB", "url": "https://nichedb.dev/mcp", "site": "https://nichedb.dev" },
-    { "id": "ctxt", "name": "Context (ctxt.io)", "url": "https://ctxt.io/mcp", "site": "https://ctxt.io" },
+    { "id": "ctxt", "name": "ctxt.io", "url": "https://ctxt.io/mcp", "site": "https://ctxt.io" },
     { "id": "carat-hunter", "name": "Carat Hunter", "url": "https://carathunter.com/mcp", "site": "https://carathunter.com" },
     { "id": "skillmd", "name": "SkillMD", "url": "https://api.skillmd.com/mcp", "site": "https://skillmd.com" },
     { "id": "most-recommended-books", "name": "Most Recommended Books", "url": "https://mostrecommendedbooks.com/api/mcp", "site": "https://mostrecommendedbooks.com" },
