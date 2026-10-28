@@ -160,6 +160,7 @@ test("the public list names only servers read with no sign-in, never one the cat
   assert.deepEqual(one({ id: "grafana" }), ["grafana: id is already a server in the catalog"]);
   assert.deepEqual(one({ url: "http://docs.example.com/mcp" }), ["docs: url must be a plain https address"]);
   assert.deepEqual(one({ token: "x" }), ["docs: has a field this version does not know: token"]);
+  assert.deepEqual(one({ name: "Context (ctxt.io)" }), ["docs: name must be letters, digits, spaces, dots, underscores or hyphens, up to 60 characters"]);
   assert.deepEqual(publicListProblems({ version: 2, servers: [] }, servers), ["the public list must be { version: 1, servers: [...] }"]);
   const signedIn = new Set(servers.map((entry) => entry.url.replace(/\/$/, "")));
   for (const entry of publicList.servers) assert.ok(!signedIn.has(entry.url.replace(/\/$/, "")), entry.id);
