@@ -1,0 +1,1 @@
+{"source":"https://ai-factory-mcp.ryuamarines.workers.dev/text-slugifier/mcp","takenAt":"2026-10-29T11:19:45.310Z","server":{"name":"ai-factory-text-slugifier","version":"1.0.0"},"tools":[{"name":"text_slugifier","kind":"write","fields":{"title":"577b2a9ead8b1acb","description":"4b045a7c51aea4ec","inputSchema":"0684b43bdd9f3a70"}}]}

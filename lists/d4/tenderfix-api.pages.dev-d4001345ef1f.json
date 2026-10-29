@@ -1,0 +1,1 @@
+{"source":"https://tenderfix-api.pages.dev/mcp","takenAt":"2026-10-29T11:17:01.856Z","server":{"name":"tenderfix","version":"0.1.0"},"tools":[{"name":"search_tenders","kind":"read","fields":{"description":"12746f2f6b982a2a","inputSchema":"9d1c87f36cc0ba38"}}]}

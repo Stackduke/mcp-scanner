@@ -1,0 +1,1 @@
+{"source":"https://ai-factory-mcp.ryuamarines.workers.dev/email-extractor/mcp","takenAt":"2026-10-29T11:19:32.293Z","server":{"name":"ai-factory-email-extractor","version":"1.0.0"},"tools":[{"name":"email_extractor","kind":"send","fields":{"title":"eba758b36a65a34d","description":"34f6f6ed9e5368af","inputSchema":"bcb7bd484887f930"}}]}

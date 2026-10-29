@@ -1,0 +1,1 @@
+{"source":"https://bari.tours/mcp","takenAt":"2026-10-29T11:16:44.833Z","server":{"name":"bari.tours","version":"1.0.0"},"tools":[{"name":"get_destination","kind":"read","fields":{"description":"033cb2a928a2cc16","inputSchema":"27e9cc9f22ba457d"}},{"name":"list_day_trips_from_bari","kind":"write","fields":{"description":"98899c5f9aef8221","inputSchema":"a142dc126d12808d"}}]}
