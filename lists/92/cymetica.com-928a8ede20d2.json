@@ -1,0 +1,1 @@
+{"source":"https://cymetica.com/mcp/v1/summarize","takenAt":"2026-10-30T11:14:34.861Z","server":{"name":"tuatara-summarize","version":"1.0.0"},"tools":[{"name":"summarize_document","kind":"read","fields":{"title":"a8bc37b4c2bf5846","description":"d196eb9bd497bfe8","inputSchema":"e9712b438b4c3fdb","annotations":"958ebcba0d04fcf4"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://agentfeed.bigfloppy.net/mcp","takenAt":"2026-10-30T11:11:27.664Z","server":{"name":"agentfeed","version":"1.4"},"tools":[{"name":"fetch_article","kind":"read","fields":{"description":"1db4f249a266f191","inputSchema":"cd77c8f548179149"}},{"name":"fetch_feed","kind":"read","fields":{"description":"a2a1a02b872aaf95","inputSchema":"add1c02c6437d4d8"}}]}

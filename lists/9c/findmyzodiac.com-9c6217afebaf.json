@@ -1,0 +1,1 @@
+{"source":"https://findmyzodiac.com/mcp","takenAt":"2026-10-30T11:11:39.928Z","server":{"name":"findmyzodiac","version":"1.0.0"},"tools":[{"name":"check_compatibility","kind":"write","fields":{"description":"5639a42c5a9cf6c0","inputSchema":"42bc265e0f86e2a7"}},{"name":"get_zodiac_sign","kind":"read","fields":{"description":"9634528364db639f","inputSchema":"49faf96e5635b80f"}}]}

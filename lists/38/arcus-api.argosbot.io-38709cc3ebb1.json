@@ -1,0 +1,1 @@
+{"source":"https://arcus-api.argosbot.io/mcp","takenAt":"2026-10-30T11:11:34.460Z","server":{"name":"Argos Bot CTS Bridge Lookup","version":"1.0.0"},"tools":[{"name":"lookup_ownerless_bridge","kind":"write","fields":{"title":"9ca3e13cd00c61a0","description":"fd4fa6fa784aa017","inputSchema":"fd4ff58d58f4fdb3","annotations":"99300d9e2937ba92"}}]}

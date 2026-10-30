@@ -1,0 +1,1 @@
+{"source":"https://wanhetools.top/mcp","takenAt":"2026-10-30T11:12:21.514Z","server":{"name":"wanhe-compliance-http","version":"1.1.0"},"tools":[{"name":"check_ai_label","kind":"read","fields":{"description":"dc424184c13bff22","inputSchema":"1777a101846b2f16"}},{"name":"check_content","kind":"read","fields":{"description":"ba87d0211aea1b34","inputSchema":"c6b114bdccf6d527"}}]}

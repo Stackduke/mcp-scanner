@@ -1,0 +1,1 @@
+{"source":"https://api.brek.ai/mcp","takenAt":"2026-10-30T11:11:30.450Z","server":{"name":"brek","version":"2.2.0"},"tools":[{"name":"lookup_direct_booking","kind":"read","fields":{"title":"28505b620874263c","description":"11f6410eaf6144b3","inputSchema":"d5b75882657a2b8b","outputSchema":"d4ca85db27d5e39b","annotations":"c7b206c9281913e6"}}]}

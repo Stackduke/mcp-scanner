@@ -1,0 +1,1 @@
+{"source":"https://luckyvehiclenumber.com/mcp","takenAt":"2026-10-30T11:11:44.892Z","server":{"name":"luckyvehiclenumber","version":"1.0.0"},"tools":[{"name":"plateTotal","kind":"write","fields":{"description":"15d9dbe2d84ad06a","inputSchema":"e548bfb7fb080c6e"}},{"name":"vehicleLuck","kind":"write","fields":{"description":"4e77f644225a8370","inputSchema":"352c38ea81542154"}}]}

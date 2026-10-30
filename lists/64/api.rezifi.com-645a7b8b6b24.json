@@ -1,0 +1,1 @@
+{"source":"https://api.rezifi.com/mcp","takenAt":"2026-10-30T11:11:32.904Z","server":{"name":"rezifi-jobs","version":"1.0.0"},"tools":[{"name":"search_jobs","kind":"read","fields":{"title":"cf1c3f6417af7e33","description":"d7ffc1b8c3e8f1d9","inputSchema":"f03911b6dc233296","annotations":"89ac702bab69d4fc"}}]}
