@@ -1,0 +1,1 @@
+{"source":"https://wondaverse.com/check/mcp","takenAt":"2026-10-31T10:48:43.566Z","server":{"name":"agent-readiness","version":"1.0.0"},"tools":[{"name":"check_site","kind":"read","fields":{"title":"d42865725642460c","description":"7697cac1d501db63","inputSchema":"10eb8fdb8e127a8a"}}]}

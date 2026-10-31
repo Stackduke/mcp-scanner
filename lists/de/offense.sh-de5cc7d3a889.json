@@ -1,0 +1,1 @@
+{"source":"https://offense.sh/mcp","takenAt":"2026-10-31T10:45:48.282Z","server":{"name":"offense","version":"0.7.0"},"tools":[{"name":"offense.audit_dependencies","kind":"read","fields":{"title":"bc7e796647a7c912","description":"d313ff514785f392","inputSchema":"5af234a85b3c52f0","outputSchema":"c052889cd905eca4","annotations":"139076388a98d13d"}}]}

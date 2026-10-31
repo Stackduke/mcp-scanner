@@ -1,0 +1,1 @@
+{"source":"https://tryhanko.vercel.app/api/mcp","takenAt":"2026-10-31T10:45:53.128Z","server":{"name":"hanko-exit-liquidity","version":"2.0.0"},"tools":[{"name":"exit_liquidity","kind":"destructive","fields":{"title":"9169fb87a4f7112d","description":"038dc1504db01f8f","inputSchema":"7df1d8f8b41194df","annotations":"294baf9a03fe50cb"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://api.holidayready.com/mcp","takenAt":"2026-10-31T10:45:22.655Z","server":{"name":"travel-quote-mcp","version":"1.0.0"},"tools":[{"name":"get_travel_quotes","kind":"read","fields":{"description":"ff977f9d776ff9a2","inputSchema":"8bf21bae1d69d078","outputSchema":"e59a8425a9ba0904","annotations":"8803fb4b4971327e"}}]}
