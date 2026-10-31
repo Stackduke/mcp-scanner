@@ -42,6 +42,12 @@ jobs:
           RESULT: ${{ steps.changed.outputs.result }}
         run: test "$RESULT" = failed
 
+      - name: The reach report alone, on an agent config with the sample server
+        uses: ./
+        with:
+          reach-config: examples/reach/mcp.json
+          reach-run-local: "true"
+
   # Runs the watch action against a copy of the tracker's files made here, dated now, so it reaches
   # no server: once as approved, where it must pass, and once with a tool added, where it must fail.
   watch:
