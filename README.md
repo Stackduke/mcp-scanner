@@ -26,6 +26,7 @@ A connected MCP server can change what an agent can do without anyone on the age
 - It cannot sign in through a browser. A server that takes only a browser sign-in cannot be scanned.
 - The text checks are pattern checks. They find text worth a person's attention; they cannot tell intent, they flag some honest descriptions, and careful wording gets past them. "Nothing matched" does not mean "safe".
 - A label guessed from a name can be wrong in either direction. Names are read as English words split at underscores, hyphens and capitals, so `rm_user` or `supprimer_compte` is not understood. Wherever the server's label, the name and the description disagree, the scanner goes with whichever says most.
+- Labels are often wrong, mostly by warning too much. On 1 November 2026, 198 tools from servers the tracker lists without a sign-in were labelled by hand and compared with the scanner ([eval/](eval/README.md)). Counted by how common each label is in the tracker, the scanner's label matched for about 71% of tools (95% interval 58% to 81%), and it gave no label for about 10%. The risky labels over-warn: of the tools it labelled destructive, about a third were (34%); money, about one in six (17%); send, under half (46%). The opposite mistake is rarer: one tool in the set that changes something was labelled read. How many money and send tools it misses is known only roughly (anywhere from about 15% to 85% of them), because they are rare among the many tools labelled read or write. Servers' own annotations did no better than the guesses: many mark as destructive tools that delete nothing.
 - A scan sees one moment. A change made and undone between two looks is not seen.
 - It refuses a tool list it cannot read to the end (more than 50 pages, or a reply over 4 MB), because a partial list would look like removed tools in the next comparison. It reports a server that redirects or holds its reply open as unreachable.
 - Everything a server sends is data, never instructions. In a terminal it is printed with control and invisible characters made visible. In the reports and the tracker, a server's descriptions are never quoted: only tool names appear, as identifiers.
@@ -315,6 +316,7 @@ To add a vendor: it must sign in with automatic registration (`oauth-dcr`). Give
 - `src/connect-oauth.ts`, `src/sign-in-store.ts`, `src/renew.ts`, `src/sign-in-io.ts`: keeping browser sign-ins: adding one, how it is stored, and the daily run's renew, check and issue steps.
 - `src/sources/github-snapshots.ts`: definitions a repository publishes as files.
 - `src/cli.ts`: the commands. `test/`: the tests. None reaches another machine: the check's tests start the sample server as a program, and one serves it on 127.0.0.1.
+- `eval/`: [how accurate the labels are](eval/README.md): a hand-labelled set of tools and the script that scores the current rules against it.
 - `docs/`: [the reports](docs/reports.md) and [what the first look found](docs/first-look.md).
 
 ## Others doing this
