@@ -1,0 +1,1 @@
+{"source":"https://za.bydleno.cz/api/mcp/","takenAt":"2026-11-01T11:40:23.907Z","server":{"name":"bydleno","version":"1"},"tools":[{"name":"search_sales","kind":"read","fields":{"title":"888ed3f9d1557fe1","description":"0747d9526450f2b0","inputSchema":"2b630888ed7db818","outputSchema":"272e9e6cea7fae60","annotations":"b85f31ecc2581a2a"}}]}

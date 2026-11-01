@@ -1,0 +1,1 @@
+{"source":"https://cvss.my.id/mcp","takenAt":"2026-11-01T11:40:03.872Z","server":{"name":"cvss-calculator-mcp","version":"1.0.0"},"tools":[{"name":"calculate_cvss","kind":"read","fields":{"description":"6768d5ae490c8db4","inputSchema":"6ee06012874d67bb"}}]}
