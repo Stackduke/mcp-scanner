@@ -1,10 +1,10 @@
 /**
- * How often the scanner's labels agree with a person's, over a hand-labelled set of tools.
+ * How often the scanner's labels agree with a reader's, over a labelled set of tools.
  *
- *   node eval/score.ts [eval/labels-2026-11.jsonl]
+ *   node eval/score.ts [eval/labels-2026-11.jsonl] [--unweighted]
  *
  * Reads no network. Each line of the set holds a tool's definition as its server listed it, the
- * label a person gave it from its name, description and arguments, and why. The script labels each
+ * label a reader gave it from its name, description and arguments, and why. The script labels each
  * tool with the current rules, as the tracker shows them (`assessTool`), and prints precision and
  * recall for each label, with destructive, money and send on their own.
  *
@@ -43,11 +43,11 @@ export interface SetEntry {
   tool: ToolDefinition;
   /** The cell it was drawn from, under the rules on the day it was drawn. */
   sampledAs: Cell;
-  /** What a person says the tool does. Empty until labelled. */
+  /** What a reader says the tool does, from its definition. Empty until labelled. */
   expected: Label[];
   /** Why, in one line. */
   reason: string;
-  /** Set when the person was unsure: what makes it arguable. */
+  /** Set when the label is arguable: what makes it so. */
   doubt?: string;
 }
 
@@ -83,7 +83,7 @@ export interface Score {
   bySource: Array<{ source: string; size: number; right: number }>;
   /** Tools that change something, labelled as reading only: the miss that hides what a review is for. */
   actingShownAsRead: Row[];
-  /** Tools a person said were risky, missing that risky label. */
+  /** Tools expected to be risky, missing that risky label. */
   riskyMissed: Row[];
   wrong: Row[];
 }
@@ -121,6 +121,7 @@ export interface Weights {
 /** Each cell's share of the tracker's tools: the kind's share, split by source as seen while drawing. */
 function cellShares(weights: Weights): Map<Cell, number> {
   const total = Object.values(weights.kindCountsInTracker).reduce((sum, count) => sum + (count ?? 0), 0);
+  if (!(total > 0)) throw new Error("the weights hold no tool counts");
   const shares = new Map<Cell, number>();
   for (const cell of cells) {
     const kind = cell.split("/")[0] as AuthorityKind;
@@ -131,6 +132,59 @@ function cellShares(weights: Weights): Map<Cell, number> {
     shares.set(cell, seen ? kindShare * ((cell.endsWith("/server") ? server : byWords) / seen) : kindShare / 2);
   }
   return shares;
+}
+
+/** A small seeded generator (mulberry32), so the simulated intervals come out the same on every run. */
+function seeded(start: number): () => number {
+  let state = start >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** A gamma draw (Marsaglia and Tsang), for Dirichlet draws below. */
+function gamma(shape: number, next: () => number): number {
+  if (shape < 1) return gamma(shape + 1, next) * Math.pow(next() || Number.MIN_VALUE, 1 / shape);
+  const d = shape - 1 / 3, c = 1 / Math.sqrt(9 * d);
+  for (;;) {
+    const normal = Math.sqrt(-2 * Math.log(next() || Number.MIN_VALUE)) * Math.cos(2 * Math.PI * next());
+    const v = (1 + c * normal) ** 3;
+    if (v <= 0) continue;
+    if (Math.log(next() || Number.MIN_VALUE) < 0.5 * normal * normal + d - d * v + d * Math.log(v)) return d * v;
+  }
+}
+
+/**
+ * A 95% interval for a label's recall, simulated cell by cell. Recall's denominator is the tools a
+ * reader gives the label, and those hide mostly in the big cells: a cell where none turned up among 18
+ * tools may still hold some. So each cell's share of found and missed tools is drawn afresh (a
+ * Dirichlet with a prior of a third per outcome), weighted by the cell's size, and recall recomputed.
+ */
+function simulatedRecall(rows: Row[], label: Label, shares: Map<Cell, number>, draws = 4000): { low: number; middle: number; high: number } {
+  const next = seeded(20261101);
+  const counts = cells.map((cell) => {
+    const of = rows.filter((row) => row.entry.sampledAs === cell);
+    const found = of.filter((row) => row.expected.includes(label) && row.predicted.includes(label)).length;
+    const missed = of.filter((row) => row.expected.includes(label) && !row.predicted.includes(label)).length;
+    return { share: shares.get(cell) ?? 0, found, missed, other: of.length - found - missed, size: of.length };
+  }).filter((cell) => cell.size > 0);
+  const results: number[] = [];
+  for (let draw = 0; draw < draws; draw += 1) {
+    let found = 0, labelled = 0;
+    for (const cell of counts) {
+      const a = gamma(cell.found + 1 / 3, next), b = gamma(cell.missed + 1 / 3, next), c = gamma(cell.other + 1 / 3, next);
+      found += (cell.share * a) / (a + b + c);
+      labelled += (cell.share * (a + b)) / (a + b + c);
+    }
+    if (labelled > 0) results.push(found / labelled);
+  }
+  results.sort((x, y) => x - y);
+  const at = (quantile: number) => results[Math.min(results.length - 1, Math.floor(results.length * quantile))] ?? 0;
+  return { low: at(0.025), middle: at(0.5), high: at(0.975) };
 }
 
 export function score(entries: SetEntry[], weights?: Weights): Score {
@@ -152,7 +206,13 @@ export function score(entries: SetEntry[], weights?: Weights): Score {
       falsePositives: rows.filter((row) => predicts(row) && !expects(row)).length,
       falseNegatives: rows.filter((row) => !predicts(row) && expects(row)).length,
       precision: shareOf(rows, predicts, expects),
-      recall: shareOf(rows, expects, predicts),
+      recall: (() => {
+        const recall = shareOf(rows, expects, predicts);
+        if (!shares || recall.value === null) return recall;
+        // The middle of the simulation, not the plain ratio, which counts a cell with none found as holding none.
+        const { low, middle, high } = simulatedRecall(rows, label, shares);
+        return { ...recall, value: middle, low, high };
+      })(),
     };
   });
   const sourceName: Record<AuthorityBasis, string> = { server: "server's annotations", name: "words in the name", description: "words in the description", none: "nothing to go on" };
@@ -179,6 +239,20 @@ export function score(entries: SetEntry[], weights?: Weights): Score {
   };
 }
 
+/**
+ * How much the arguable labels move the result: scored once without them, and once with each
+ * of them given the scanner's label, the most the scanner could gain from them.
+ */
+export function sensitivity(entries: SetEntry[], weights?: Weights): { withoutDoubtful: Score; doubtfulAsScanner: Score; doubtful: number } {
+  const doubtful = entries.filter((entry) => entry.doubt);
+  const asScanner = entries.map((entry) => {
+    if (!entry.doubt) return entry;
+    const missed = score([entry]).wrong[0];
+    return missed ? { ...entry, expected: missed.predicted } : entry;
+  });
+  return { withoutDoubtful: score(entries.filter((entry) => !entry.doubt), weights), doubtfulAsScanner: score(asScanner, weights), doubtful: doubtful.length };
+}
+
 export function readSet(text: string): SetEntry[] {
   return text.split("\n").filter((line) => line.trim()).map((line, index) => {
     const entry = JSON.parse(line) as SetEntry;
@@ -192,25 +266,31 @@ export function readSet(text: string): SetEntry[] {
 const percent = (value: number | null) => (value === null ? "-" : `${Math.round(value * 100)}%`);
 const withRange = (share: Share) => (share.value === null ? "-" : `${percent(share.value)} (${percent(share.low)} to ${percent(share.high)})`);
 
-export function describe(result: Score): string {
+export function describe(result: Score, check?: ReturnType<typeof sensitivity>): string {
   const lines: string[] = [];
   const how = result.weighted ? "weighted to how common each label and source is in the tracker" : "every tool counted once";
   lines.push(`Tools: ${result.size}. Shares are ${how}; 95% intervals in brackets.`);
   lines.push("");
-  lines.push(`Scanner agrees with the hand label:        ${withRange(result.agreement)}`);
+  lines.push(`Scanner agrees with the expected label:    ${withRange(result.agreement)}`);
   lines.push(`Scanner gives a label (not "unclear"):     ${withRange(result.labelled)}`);
   lines.push(`Agrees, where it gives a label:            ${withRange(result.agreementWhenLabelled)}`);
   if (result.weighted) lines.push(`In this set, every tool counted once:      ${result.right} of ${result.size} agree, ${withRange(result.inThisSet)}`);
-  const header = "Label         Precision          Recall             Counts in this set: right / scanner says / hand says";
+  const header = "Label         Precision          Recall             Counts in this set: right / scanner says / expected";
   const row = (score: LabelScore) => `${score.label.padEnd(13)} ${withRange(score.precision).padEnd(18)} ${withRange(score.recall).padEnd(18)} ${score.truePositives} / ${score.truePositives + score.falsePositives} / ${score.truePositives + score.falseNegatives}`;
   lines.push("", header);
   for (const score of result.byLabel.filter((item) => !risky.includes(item.label))) lines.push(row(score));
   lines.push("", "Risky labels");
   for (const score of result.byLabel.filter((item) => risky.includes(item.label))) lines.push(row(score));
-  if (result.weighted) lines.push("", "Recall for a rare label rests on the few tools of that kind found among the common ones, so its interval is wide.");
+  if (result.weighted) lines.push("", "Recall for a rare label rests on the few tools of that kind found among the common ones, so its interval", "is simulated cell by cell, allowing for such tools in cells where none turned up. It is wide.");
+  if (check) {
+    const brief = (score: Score) => [`overall ${percent(score.agreement.value)}`, ...score.byLabel.filter((item) => risky.includes(item.label)).map((item) => `${item.label} precision ${percent(item.precision.value)}, recall ${percent(item.recall.value)}`)].join("; ");
+    lines.push("", `Arguable labels (${check.doubtful} marked with a doubt)`);
+    lines.push(`  Left out:                ${brief(check.withoutDoubtful)}`);
+    lines.push(`  All given the scanner's: ${brief(check.doubtfulAsScanner)}`);
+  }
   lines.push("", "By what the label rests on (this set, every tool counted once)");
   for (const group of result.bySource) lines.push(`  ${group.source.padEnd(26)} ${String(group.right).padStart(3)} of ${String(group.size).padStart(3)} agree (${percent(group.right / group.size)})`);
-  const list = (rows: Row[], why = false) => rows.map((item) => `  ${item.entry.id} ${item.entry.tool.name}: scanner ${item.predicted.join("+")}, hand ${item.expected.join("+")}${why ? ` (${item.entry.reason})` : ""}`);
+  const list = (rows: Row[], why = false) => rows.map((item) => `  ${item.entry.id} ${item.entry.tool.name}: scanner ${item.predicted.join("+")}, expected ${item.expected.join("+")}${why ? ` (${item.entry.reason})` : ""}`);
   lines.push("", `Tools that change something, labelled read: ${result.actingShownAsRead.length}`, ...list(result.actingShownAsRead));
   lines.push("", `Risky labels missed: ${result.riskyMissed.length}`, ...list(result.riskyMissed));
   lines.push("", `All disagreements: ${result.wrong.length}`, ...list(result.wrong, true));
@@ -218,9 +298,9 @@ export function describe(result: Score): string {
 }
 
 if (import.meta.main) {
-  const path = process.argv[2] ?? new URL("labels-2026-11.jsonl", import.meta.url).pathname;
+  const path = process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? new URL("labels-2026-11.jsonl", import.meta.url).pathname;
   const entries = readSet(readFileSync(path, "utf8"));
-  let weights: Weights | undefined;
-  try { weights = JSON.parse(readFileSync(path.replace(/\.jsonl$/, ".meta.json"), "utf8")) as Weights; } catch { weights = undefined; }
-  console.log(describe(score(entries, weights)));
+  // Without its weights the set describes only itself, so that is asked for, never fallen back to.
+  const weights = process.argv.includes("--unweighted") ? undefined : JSON.parse(readFileSync(path.replace(/\.jsonl$/, ".meta.json"), "utf8")) as Weights;
+  console.log(describe(score(entries, weights), sensitivity(entries, weights)));
 }

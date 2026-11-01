@@ -17,7 +17,7 @@
  * set takes up to `--per-cell` tools at random from each cell, at most one per server in a cell
  * and three per site overall, so no single server decides a result.
  *
- * Hand labels are left empty, to be written without looking at the scanner's label.
+ * Expected labels are left empty, to be written without looking at the scanner's label.
  */
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -134,7 +134,9 @@ const perSite = new Map<string, number>();
 const chosen: Found[] = [];
 for (const cell of cells) {
   const usedServers = new Set<string>();
-  for (const found of shuffle(bags.get(cell) ?? [])) {
+  // Replies arrive in network order; sorting first makes the draw depend on the seed alone.
+  const bag = [...(bags.get(cell) ?? [])].sort((x, y) => `${x.url} ${x.tool.name}`.localeCompare(`${y.url} ${y.tool.name}`));
+  for (const found of shuffle(bag)) {
     if (chosen.filter((item) => item.cell === cell).length >= perCell) break;
     if (usedServers.has(found.url) || (perSite.get(found.site) ?? 0) >= 3) continue;
     usedServers.add(found.url);
