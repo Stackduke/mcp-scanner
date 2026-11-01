@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.stackduke/mcp-server-lookup",
+  "title": "Stackduke MCP server lookup",
+  "description": "Read-only lookup of a remote MCP server's tools and tool changes in Stackduke's tracker. No sign-in.",
+  "version": "0.1.0",
+  "websiteUrl": "https://stackduke.com/docs/guides/mcp-server-lookup",
+  "repository": {
+    "url": "https://github.com/Stackduke/mcp-scanner",
+    "source": "github",
+    "subfolder": "connector"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://lookup.stackduke.com/mcp"
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "stackduke-mcp-server-lookup",
+  "version": "0.1.0",
+  "description": "Read-only lookup of a remote MCP server's tools and tool changes in Stackduke's public tracker data.",
+  "author": {
+    "name": "Stackduke",
+    "email": "support@stackduke.com",
+    "url": "https://stackduke.com"
+  },
+  "homepage": "https://stackduke.com/docs/guides/mcp-server-lookup",
+  "repository": "https://github.com/Stackduke/mcp-scanner",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "mcp-servers",
+    "tool-changes",
+    "security-review"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Stackduke MCP server lookup",
+        "shortDescription": "Check an MCP server's tools",
+        "longDescription": "Look up a remote MCP server before you connect it. Stackduke's public tracker lists the tools of the remote servers in the official MCP registry once a day, more than 16,000 of them. This plugin answers from that published data: which tools a server lists, a machine-guessed kind for each tool (read, write, send, destructive, money or unclear), what the server's own annotations claim, when the tracker last checked it, and how its tools changed over time.\n\nWho it is for: developers and security reviewers deciding whether to add an MCP server, or checking whether a server changed its tools after they approved it.\n\nLimits: it is read-only and never connects to the server you ask about. The kinds are machine guesses made without calling any tool, so they can be wrong, and they are not a safety rating. It only sees tools a server lists without sign-in, it keeps the last 10 changes per server, and its data is about a day old. For an address the tracker has not seen, it says so, gives a command to scan the server on your own machine, and records the address as a request for the tracker to look at.",
+        "developerName": "Stackduke",
+        "category": "Developer Tools",
+        "capabilities": [
+          "Look up an MCP server's tools",
+          "See an MCP server's tool changes"
+        ],
+        "websiteURL": "https://stackduke.com/docs/guides/mcp-server-lookup",
+        "supportURL": "https://stackduke.com/docs/guides/mcp-server-lookup#support",
+        "privacyPolicyURL": "https://stackduke.com/legal/privacy#mcp-server-lookup",
+        "termsOfServiceURL": "https://stackduke.com/legal/terms",
+        "defaultPrompt": [
+          "Check the MCP server at https://huggingface.co/mcp. Which tools are guessed to write or delete?",
+          "Has https://mcp.svelte.dev/mcp changed its tools since 1 October 2026?",
+          "Look up com.aave/mcp in the tracker. Which tools are guessed to move money?"
+        ],
+        "composerIcon": "./assets/logo.png",
+        "logo": "./assets/logo.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Check a tracked server by address and group its tools by guessed kind",
+              "prompt": "Check the MCP server at https://huggingface.co/mcp. What tools does it list, and which are guessed to write or delete anything?",
+              "tools_triggered": "check_mcp_server",
+              "expected_behavior": "Calls check_mcp_server with the address. Lists the server's tool names grouped by guessed kind, with counts and the date its tools were last listed. Says the kinds are machine guesses and not a safety rating, and does not call the server safe."
+            },
+            {
+              "description": "List a server's tool changes since a date",
+              "prompt": "Has https://mcp.svelte.dev/mcp changed its tools since 1 October 2026?",
+              "tools_triggered": "mcp_server_changes",
+              "expected_behavior": "Calls mcp_server_changes with since set to 2026-10-01. Lists each change seen after that date (tools added or removed, which fields changed) with the two checks it happened between, or says plainly that no change was seen."
+            },
+            {
+              "description": "Look up a server by its official MCP registry name",
+              "prompt": "Look up com.aave/mcp in the MCP registry tracker. Which of its tools are guessed to move money?",
+              "tools_triggered": "check_mcp_server",
+              "expected_behavior": "Calls check_mcp_server with the registry name. Lists the tool names under the money kind with their count, and notes that the kinds are machine guesses."
+            },
+            {
+              "description": "Check when a server was last checked before connecting it",
+              "prompt": "Before I connect https://agenttools.wolfram.com/mcp, when did the tracker last check it, and did its tools change in the last 30 days?",
+              "tools_triggered": "check_mcp_server",
+              "expected_behavior": "Calls check_mcp_server. Gives the last-checked and last-listed dates and the number of changes in the last 30 days, from the tool's answer, without inventing anything not in it."
+            },
+            {
+              "description": "Handle an address the tracker has not seen",
+              "prompt": "Is the MCP server at https://example.com/mcp in the tracker? What tools does it have?",
+              "tools_triggered": "check_mcp_server",
+              "expected_behavior": "Calls check_mcp_server. Says the address is not tracked yet, gives the command to scan it locally (npx @stackduke/mcp-scanner check https://example.com/mcp), and does not invent any tools for it."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Running another server's tools is not supported; the plugin never connects to other servers",
+              "prompt": "Use the Hugging Face MCP server to search for text-to-image models."
+            },
+            {
+              "description": "Changing the tracker is not supported; the plugin only reads published data",
+              "prompt": "Remove my MCP server https://example.com/mcp from Stackduke's tracker."
+            },
+            {
+              "description": "Unrelated request that should not trigger the plugin",
+              "prompt": "Write me a short poem about autumn in Singapore."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "This plugin does not sell products or process payments."
+      },
+      "publication": {
+        "release_notes": "First release: check_mcp_server and mcp_server_changes, read-only, no sign-in."
+      }
+    }
+  }
+}

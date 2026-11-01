@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "mcp-server-lookup": {
+      "url": "https://lookup.stackduke.com/mcp"
+    }
+  }
+}

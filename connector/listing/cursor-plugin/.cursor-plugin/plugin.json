@@ -1,0 +1,14 @@
+{
+  "name": "stackduke-mcp-server-lookup",
+  "version": "0.1.0",
+  "description": "Look up a remote MCP server's tools, their machine-guessed kinds and how they changed, in Stackduke's public tracker data. Read-only, no sign-in, never connects to the server you ask about.",
+  "author": {
+    "name": "Stackduke",
+    "email": "support@stackduke.com"
+  },
+  "homepage": "https://stackduke.com/docs/guides/mcp-server-lookup",
+  "repository": "https://github.com/Stackduke/mcp-scanner",
+  "license": "MIT",
+  "keywords": ["mcp", "mcp-servers", "tool-changes", "security-review", "read-only"],
+  "logo": "assets/logo.png"
+}
