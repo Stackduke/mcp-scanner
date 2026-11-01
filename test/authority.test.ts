@@ -65,7 +65,30 @@ test("a server cannot mark a tool read-only against its own name", () => {
 
   assert.deepEqual(groups([{ name: "delete_repository", annotations: { readOnlyHint: false, destructiveHint: false } }]), [["destructive", ["delete_repository"]]]);
   assert.deepEqual(groups([{ name: "housekeeping", annotations: { readOnlyHint: true, destructiveHint: true } }]), [["destructive", ["housekeeping"]]]);
-  assert.deepEqual(groups([{ name: "create_checkout_link", ...readOnly }]), [["money", ["create_checkout_link"]]]);
+  assert.deepEqual(groups([{ name: "send_digest", ...readOnly }]), [["send", ["send_digest"]]]);
+  // A name that only suggests writing or moving money does not outweigh the server's plain read-only: measured on
+  // a labelled set, such names were nearly always a lookup or a quote. The disagreement is still shown, as a note.
+  assert.deepEqual(groups([{ name: "create_order", ...readOnly }]), [["read", ["create_order"]]]);
+  assert.match(text([{ name: "create_order", ...readOnly }]), /- create_order: The server marks this read-only, though its name suggests it can change things and move money\. This report goes with the server\./);
+  // Nor does a word that sends but is usually a thing ("email" in `email_security`).
+  assert.deepEqual(groups([{ name: "email_security", ...readOnly }]), [["read", ["email_security"]]]);
+  // A word that itself moves money, deletes or sends still outweighs read-only, as does "email" used as a verb.
+  for (const name of ["transfer_funds", "pay_invoice", "create_checkout_link", "send_payment"]) assert.deepEqual(groups([{ name, ...readOnly }]), [["money", [name]]], name);
+  for (const name of ["email_contacts", "mail_user"]) assert.deepEqual(groups([{ name, ...readOnly }]), [["send", [name]]], name);
+  // So does a description that says the tool sends or deletes. One that only suggests writing or moving money
+  // is set aside, and shown: on the labelled sets every such description was a ledger, a price list or a quote.
+  assert.deepEqual(groups([{ name: "check_report", description: "When the job finishes it emails the report to the whole team.", ...readOnly }]), [["send", ["check_report"]]]);
+  const pays = [{ name: "get_invoice", description: "If the invoice is due this tool pays it automatically.", ...readOnly }];
+  assert.deepEqual(groups(pays), [["read", ["get_invoice"]]]);
+  assert.match(text(pays), /- get_invoice: The server marks this read-only, though its description suggests it can change things and move money\. This report goes with the server\./);
+  // A description that opens by moving money still counts.
+  for (const description of ["Transfers USDC to the given address.", "Charges the card."]) assert.deepEqual(groups([{ name: "wallet_tool", description, ...readOnly }]), [["money", ["wallet_tool"]]], description);
+});
+
+test("a destructiveHint set aside for what the tool says it does is still shown", () => {
+  const tools = [{ name: "rotate_key", description: "Rotates the signing key.", annotations: { readOnlyHint: false, destructiveHint: true } }];
+  assert.deepEqual(groups(tools), [["write", ["rotate_key"]]]);
+  assert.match(text(tools), /- rotate_key: The server marks this destructive, which the spec makes the default for any tool not marked read-only; its name and description say it does something else, and this report goes with them\./);
 });
 
 test("a description that says a tool acts is counted, whatever the label or the name says", () => {
@@ -141,7 +164,7 @@ test("a change is called reversible only on a plain statement from a server that
   const unstated = (tools: ToolDefinition[]) => all(tools).filter((tool) => tool.undoUnstated).map((tool) => tool.name);
   assert.deepEqual(unstated([{ name: "push_files", annotations: { readOnlyHint: false } }, { name: "merge_branch" }, { name: "edit_note", ...reversible }]), ["merge_branch", "push_files"]);
   // "Not destructive" beside a read-only mark is not a statement about undoing, and money or a sent message cannot be taken back.
-  assert.deepEqual(unstated([{ name: "update_record", annotations: { readOnlyHint: true, destructiveHint: false } }, { name: "pay_invoice", ...reversible }, { name: "send_email", ...reversible }]), ["pay_invoice", "send_email", "update_record"]);
+  assert.deepEqual(unstated([{ name: "notify_team", annotations: { readOnlyHint: true, destructiveHint: false } }, { name: "pay_invoice", ...reversible }, { name: "send_email", ...reversible }]), ["pay_invoice", "notify_team", "send_email"]);
   assert.match(text([{ name: "push_files", annotations: { readOnlyHint: false } }, { name: "merge_branch" }]), /2 tools that change things do not say whether the change can be undone\. Assume it might not be\./);
   assert.doesNotMatch(text([{ name: "edit_note", ...reversible }]), /do not say whether|does not say whether/);
 });
@@ -166,8 +189,8 @@ test("a tool that writes and also sends or moves money still counts as changing 
 });
 
 test("a destructive label is worded as something that cannot be undone, not only as deleting", () => {
-  // Servers mark sending a contract as destructive too.
-  const written = text([{ name: "send_envelope", annotations: { readOnlyHint: false, destructiveHint: true } }]);
+  // A tool that sends and also destroys, where its own words say both.
+  const written = text([{ name: "send_envelope", description: "Sends the envelope for signature and removes the draft.", annotations: { readOnlyHint: false, destructiveHint: true } }]);
   assert.match(written, /Make changes that cannot be undone, such as deleting \(1 tool\)\n {2}- send_envelope \(also sends\)/);
 });
 
@@ -258,7 +281,7 @@ test("several servers open with what an agent connected to all of them can do", 
 });
 
 test("lists a reader relies on are not cut short, and the tools most in need of a look come first", () => {
-  const padding = Array.from({ length: 70 }, (_, index): ToolDefinition => ({ name: `aa_update_item_${String(index).padStart(2, "0")}`, ...readOnly }));
+  const padding = Array.from({ length: 70 }, (_, index): ToolDefinition => ({ name: `aa_send_item_${String(index).padStart(2, "0")}`, ...readOnly }));
   const readers = Array.from({ length: 70 }, (_, index): ToolDefinition => ({ name: `get_item_${String(index).padStart(2, "0")}`, ...readOnly }));
   const written = text([...padding, ...readers, { name: "zz_paybill", ...readOnly }, { name: "zzz_delete_account", ...readOnly }]);
   // Every overruled label has its own line, however many there are.
@@ -280,7 +303,7 @@ test("where no undo warning is given, the report says whose word that rests on",
 });
 
 test("variants of one tool are each kept, so a serious one cannot hide behind a mild one", () => {
-  const result = authorityOf(takeSnapshot("demo@v1", [{ name: "get_state", ...readOnly }, { name: "get_state", variant: "force", annotations: { readOnlyHint: false, destructiveHint: true } }], undefined, at));
+  const result = authorityOf(takeSnapshot("demo@v1", [{ name: "get_state", ...readOnly }, { name: "get_state", variant: "force", description: "Deletes the saved state.", annotations: { readOnlyHint: false, destructiveHint: true } }], undefined, at));
   assert.deepEqual(result.groups.map((group) => [group.kind, group.tools.map((tool) => tool.name)]), [["destructive", ["get_state#force"]], ["read", ["get_state"]]]);
   assert.match(describeAuthority([result]), /^What an agent can do through demo\[at\]v1\n2 definitions of 1 tool listed on 13 October 2026\./);
 });
@@ -324,7 +347,9 @@ test("a getter the server marks read-only is not counted as acting on the streng
   assert.ok(!all(tools).some((tool) => tool.disputed));
   // The more serious reading still wins where the words say the tool acts.
   assert.deepEqual(groups([{ name: "get_orb", description: "Fetch an orb and publish a new version of it.", ...readOnly }]), [["send", ["get_orb"]]]);
-  assert.deepEqual(groups([{ name: "deploy_component", ...readOnly }]), [["write", ["deploy_component"]]]);
+  // A name that only suggests writing does not outweigh the server's read-only; one that deletes does.
+  assert.deepEqual(groups([{ name: "deploy_component", ...readOnly }]), [["read", ["deploy_component"]]]);
+  assert.deepEqual(groups([{ name: "delete_component", ...readOnly }]), [["destructive", ["delete_component"]]]);
   assert.deepEqual(groups([{ name: "getpublishkeys", ...readOnly }]), [["unclear", ["getpublishkeys"]]]);
   // A tool marked read-only whose description says it destroys is still read the serious way, and disputed.
   for (const description of ["A tool that deletes files from the workspace.", "Given an ID, permanently deletes the record."]) {

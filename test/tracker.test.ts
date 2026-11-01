@@ -105,11 +105,11 @@ test("a change is recorded between the two scans that listed tools, and a failed
 });
 
 test("a tool that keeps its name but is now counted as doing more is called out", () => {
-  const before = printOf(takeSnapshot("s", [{ name: "manage_account", ...readOnly }], undefined, hoursBefore(24)));
-  const after = printOf(takeSnapshot("s", [{ name: "manage_account", annotations: { readOnlyHint: false, destructiveHint: true } }], undefined, now));
+  const before = printOf(takeSnapshot("s", [{ name: "account_admin", ...readOnly }], undefined, hoursBefore(24)));
+  const after = printOf(takeSnapshot("s", [{ name: "account_admin", annotations: { readOnlyHint: false, destructiveHint: true } }], undefined, now));
   const change = changeBetween(before, after, hoursBefore(24));
-  assert.deepEqual(change.moreSerious, [{ name: "manage_account", kind: "destructive" }]);
-  assert.match(change.summary, /The server's own labels changed on manage_account\. Counted as able to do more: manage_account \(make changes that cannot be undone\)\./);
+  assert.deepEqual(change.moreSerious, [{ name: "account_admin", kind: "destructive" }]);
+  assert.match(change.summary, /The server's own labels changed on account_admin\. Counted as able to do more: account_admin \(make changes that cannot be undone\)\./);
 });
 
 test("a server's own words reach the summary only as tool-name identifiers", () => {
