@@ -1,0 +1,1 @@
+{"source": "https://notes-two.example.org/mcp/", "takenAt": "2026-11-01T10:00:00.000Z", "server": {"name": "x", "version": "1"}, "tools": [{"name": "list_notes", "kind": "read", "fields": {"description": "0123456789abcdef"}}]}

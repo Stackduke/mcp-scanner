@@ -1,0 +1,147 @@
+[
+ {
+  "id": "51a36f2ac873",
+  "url": "https://mcp.aave.com/",
+  "names": [
+   "com.aave/mcp"
+  ],
+  "firstSeen": "2026-10-16T18:06:47.641Z",
+  "tools": 4,
+  "kinds": {
+   "money": 1,
+   "write": 1,
+   "read": 2
+  },
+  "lastChecked": "2026-11-01T10:00:00.000Z",
+  "lastListed": "2026-11-01T10:00:00.000Z",
+  "outcome": "listed",
+  "changesIn30Days": 3,
+  "watchIn30Days": {
+   "checks": 16,
+   "listed": 16
+  },
+  "lastChange": "2026-10-28T17:08:30.098Z"
+ },
+ {
+  "id": "d208cb265453",
+  "url": "https://weather.example.com/mcp",
+  "names": [
+   "io.github.example/weather"
+  ],
+  "firstSeen": "2026-10-16T18:06:47.641Z",
+  "tools": 5,
+  "kinds": {
+   "destructive": 1,
+   "send": 1,
+   "read": 2
+  },
+  "lastChecked": "2026-11-01T10:00:00.000Z",
+  "lastListed": "2026-11-01T10:00:00.000Z",
+  "outcome": "listed",
+  "changesIn30Days": 0,
+  "watchIn30Days": {
+   "checks": 16,
+   "listed": 16
+  }
+ },
+ {
+  "id": "7b9604454af0",
+  "url": "https://notes-one.example.net/mcp",
+  "names": [
+   "io.github.alice/notes"
+  ],
+  "firstSeen": "2026-10-16T18:06:47.641Z",
+  "tools": 1,
+  "kinds": {
+   "write": 1
+  },
+  "lastChecked": "2026-11-01T10:00:00.000Z",
+  "lastListed": "2026-11-01T10:00:00.000Z",
+  "outcome": "listed",
+  "changesIn30Days": 0,
+  "watchIn30Days": {
+   "checks": 16,
+   "listed": 16
+  }
+ },
+ {
+  "id": "7ec229b0cde5",
+  "url": "https://notes-two.example.org/mcp/",
+  "names": [
+   "io.github.bob/notes"
+  ],
+  "firstSeen": "2026-10-16T18:06:47.641Z",
+  "tools": 1,
+  "kinds": {
+   "read": 1
+  },
+  "lastChecked": "2026-11-01T10:00:00.000Z",
+  "lastListed": "2026-11-01T10:00:00.000Z",
+  "outcome": "listed",
+  "changesIn30Days": 0,
+  "watchIn30Days": {
+   "checks": 16,
+   "listed": 16
+  }
+ },
+ {
+  "id": "0e3060bb1d9c",
+  "url": "https://flaky.example.com/mcp",
+  "names": [
+   "com.example/flaky"
+  ],
+  "firstSeen": "2026-10-16T18:06:47.641Z",
+  "tools": 2,
+  "kinds": {
+   "unclear": 2
+  },
+  "lastChecked": "2026-11-01T10:00:00.000Z",
+  "lastListed": "2026-10-30T10:00:00.000Z",
+  "outcome": "unreachable",
+  "changesIn30Days": 0,
+  "watchIn30Days": {
+   "checks": 16,
+   "listed": 14
+  }
+ },
+ {
+  "id": "956f74053c03",
+  "url": "https://mcp.sentry.dev/mcp",
+  "names": [
+   "io.sentry/mcp"
+  ],
+  "firstSeen": "2026-10-16T18:06:47.641Z",
+  "tools": 1,
+  "kinds": {
+   "read": 1
+  },
+  "lastChecked": "2026-11-01T10:00:00.000Z",
+  "lastListed": "2026-11-01T10:00:00.000Z",
+  "outcome": "listed",
+  "changesIn30Days": 0,
+  "watchIn30Days": {
+   "checks": 16,
+   "listed": 16
+  }
+ },
+ {
+  "id": "e784b1948800",
+  "url": "https://sentry-proxy.example.com/mcp",
+  "names": [
+   "io.sentry/proxy"
+  ],
+  "firstSeen": "2026-10-16T18:06:47.641Z",
+  "tools": 1,
+  "kinds": {
+   "read": 1
+  },
+  "lastChecked": "2026-11-01T10:00:00.000Z",
+  "lastListed": "2026-11-01T10:00:00.000Z",
+  "outcome": "listed",
+  "changesIn30Days": 0,
+  "watchIn30Days": {
+   "checks": 16,
+   "listed": 16
+  }
+ }
+]

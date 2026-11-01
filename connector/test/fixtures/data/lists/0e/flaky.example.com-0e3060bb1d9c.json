@@ -1,0 +1,1 @@
+{"source": "https://flaky.example.com/mcp", "takenAt": "2026-11-01T10:00:00.000Z", "server": {"name": "x", "version": "1"}, "tools": [{"name": "frobnicate", "kind": "unclear", "fields": {"description": "0123456789abcdef"}}, {"name": "[object-object]", "kind": "unclear", "fields": {"description": "0123456789abcdef"}}]}

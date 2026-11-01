@@ -1,0 +1,23 @@
+{
+  "name": "@stackduke/mcp-server-lookup",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A read-only MCP server (Cloudflare Worker) that answers \"check this server\" from the tracker's published data.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build:data": "node scripts/build-data.ts --git-ref origin/data",
+    "dev": "wrangler dev --local --port 8799",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "typescript": "^6.0.3",
+    "wrangler": "4.151.0"
+  },
+  "license": "MIT"
+}
