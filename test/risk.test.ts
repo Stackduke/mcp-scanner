@@ -223,6 +223,29 @@ test("send and money are read off what a description says the tool does, not off
   for (const [description, label] of Object.entries(expected)) assert.equal(said(description), label, description);
 });
 
+test("a description's list of changes, or a compound, is not what the tool does", () => {
+  // Shapes seen on the tracker's servers on 2 November 2026, reworded.
+  const said = (description: string) => labelTool({ name: "x", description }).classes.join("+");
+  const expected: Record<string, string> = {
+    "Compute a diff between two JSON values, showing added, removed and replaced fields": "",
+    "What changed between two versions: each clause added, removed or renumbered": "",
+    "Generate a ready-to-run code snippet for an HTTP request": "",
+    // Elsewhere a destroying past form still counts, and so do verbs after a noun or "to".
+    "Messages fetched and then deleted from the queue": "destructive",
+    "Next message returned and removed from the queue": "destructive",
+    "Report viewer with option to delete the report": "destructive",
+    "Records the user deletes are gone for good": "destructive",
+    "Resolve user accounts by merging and deleting duplicates": "destructive",
+    // Still counted: the tool does it, or the thing is said to be destroyed.
+    "If confirm is true the repository is deleted.": "destructive",
+    "Unpublish an entry to remove it": "destructive",
+    "Allows users to delete files": "destructive",
+    "This tool sends a message to the channel": "send",
+    "Resolve an incident and close it": "write",
+  };
+  for (const [description, label] of Object.entries(expected)) assert.equal(said(description), label, description);
+});
+
 test("a name's money word that names the record does not move money beside a verb that only edits it", () => {
   const expected: Record<string, string> = {
     update_transaction: "write", hide_transaction: "write", set_order_notes: "write",

@@ -1,5 +1,5 @@
 import { findInTool } from "./findings.ts";
-import { actionKind, descriptionOpensMovingMoney, descriptionSuggests, labelTool, mailAsThing, movesMoney, nameSuggests, words } from "./risk.ts";
+import { actionKind, descriptionOpensMovingMoney, descriptionSaysItself, descriptionSuggests, labelTool, mailAsThing, movesMoney, nameSuggests, words } from "./risk.ts";
 import type { CapabilityClass, Snapshot, SnapshotTool } from "./types.ts";
 
 /**
@@ -11,7 +11,7 @@ import type { CapabilityClass, Snapshot, SnapshotTool } from "./types.ts";
  * - where the server's label, the tool's name and its description disagree, it goes with whichever says most,
  *   except that a server's plain "read-only" outweighs a name that only suggests writing, or a description that
  *   only suggests writing or moving money (measured: such words were wrong far more often than the server);
- *   a name that deletes, sends or moves money, and a description that deletes or sends, still count; and a
+ *   a name that deletes, sends or moves money, and a description that says the tool itself deletes or sends, still count; and a
  *   `destructiveHint: true`, the spec's default, gives way to a name or description that says otherwise (shown as a note);
  * - a description, which the server writes, counts as evidence that a tool acts and never that it is harmless;
  * - a tool nobody can label, or whose name cannot be read as words, is unknown, never read-only;
@@ -144,10 +144,13 @@ function reachOf(tool: SnapshotTool): Reach {
   // The server writes its descriptions, so one is evidence that a tool acts and never that it is harmless.
   // Where the server marks the tool read-only, that plain statement outweighs prose that only suggests
   // writing or moving money: on the labelled sets, every such description was a ledger, a price list or a
-  // quote. Deleting and sending still count, and so does a description that opens by moving money
-  // ("Transfers USDC to the given address"). What is set aside is still shown.
+  // quote. Deleting and sending still count where the description says the tool itself does it ("Deletes
+  // the account", "it emails the report"), not where it only names the act in passing ("(open, revoked)",
+  // "a provider publishes", "best time to publish"); so does a description that opens by moving money ("Transfers USDC to the given
+  // address"). What is set aside is still shown.
   const suggested = missing(descriptionSuggests(tool));
-  const described = suggested.filter((kind) => annotations.readOnlyHint !== true || kind === "destructive" || kind === "send" || (kind === "money" && descriptionOpensMovingMoney(tool)));
+  const itself = annotations.readOnlyHint === true ? descriptionSaysItself(tool) : [];
+  const described = suggested.filter((kind) => annotations.readOnlyHint !== true || ((kind === "destructive" || kind === "send") && itself.includes(kind)) || (kind === "money" && descriptionOpensMovingMoney(tool)));
   const proseSetAside = suggested.filter((kind) => !described.includes(kind));
   if (proseSetAside.length && !notes.some((note) => note.startsWith("The server marks this read-only, though"))) notes.push(`The server marks this read-only, though its description suggests it can ${said(proseSetAside)}. This report goes with the server.`);
   if (described.length && basis !== "description") {

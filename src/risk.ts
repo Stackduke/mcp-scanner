@@ -174,11 +174,13 @@ const auxiliaries = new Set(["is", "are", "be", "been", "was", "were", "will", "
  * destroys or sends ("No-confirm delete"). The other denials deny the next word past "is", "be" and the
  * like ("does not create", "nothing is charged"). "no" or "nothing" after a verb denies that verb too.
  */
-function openingWords(tool: ToolDefinition): string[] {
+function openingWords(tool: ToolDefinition, { asides = true }: { asides?: boolean } = {}): string[] {
   const tokens: string[] = [];
-  for (const part of ((tool.description ?? "").split(/[.\n]/)[0] ?? "").split(/[,;:]/)) {
+  const description = asides ? (tool.description ?? "") : (tool.description ?? "").replace(/\([^()]*\)/g, " ");
+  for (const part of (description.split(/[.\n]/)[0] ?? "").split(/[,;:]/)) {
     if (tokens.length) tokens.push(",");
-    const partWords = words(part.replace(/n't\b/gi, " not"));
+    // "ready-to-run", "pay-as-you-go": a hyphenated compound describes a thing, so it is read as one word.
+    const partWords = words(part.replace(/n't\b/gi, " not").replace(/\b([a-z]+)(?:-(?:to|as|you|go|in|on|of|and))+-([a-z]+)\b/gi, (whole) => whole.replace(/-/g, "")));
     const kept: string[] = [];
     for (let at = 0; at < partWords.length; at += 1) {
       const word = partWords[at] as string;
@@ -211,6 +213,38 @@ const adverb = (token: string) => token.endsWith("ly") && kindOf(token) === null
 const joined = (token: string | undefined) => token === "," || (token !== undefined && joiners.has(token));
 // Words after which a destructive verb is said of the tool, whatever opened the sentence: "to delete it", "that removes", "can drop".
 const clauseMarkers = new Set(["to", "that", "which", "who", "can", "will", "may", "might", "could", "would"]);
+// Words that stand for the tool itself: "This tool sends", "Endpoint to send SMS".
+const selfWords = new Set(["this", "tool", "tools", "it", "you", "we", "agent", "function", "endpoint", "server", "integration", "bot", "assistant", "app", "service", "helper", "plugin", "connector", "wrapper", "api", "command", "action", "utility"]);
+const articles = new Set(["a", "an", "the", "every", "each", "all", "any", "one", "your", "our", "my", "its", "their", "these", "those", "some"]);
+// A verb that only looks something up when what follows is one of these: "Resolve DNS records", "Open one private chat".
+const readsWith: Record<string, Set<string>> = {
+  resolve: new Set(["dns", "domain", "domains", "hostname", "hostnames", "host", "hosts", "address", "addresses", "url", "urls", "handle", "handles", "ens", "did", "alias", "aliases", "ip", "ips"]),
+  open: new Set(["chat", "chats", "file", "files", "page", "pages", "url", "urls", "link", "links", "document", "documents", "doc", "docs", "tab", "image", "pdf", "dashboard", "view", "conversation", "message", "messages", "article", "report"]),
+};
+/** "Resolve DNS records", "Open one private chat": the verb looks up or views. */
+function readsWhat(tokens: string[], at: number): boolean {
+  const verb = (tokens[at] as string).replace(/(s|ing)$/, "").replace(/^resolv$/, "resolve");
+  const things = readsWith[verb];
+  if (!things) return false;
+  let next = at + 1;
+  while (next < tokens.length && next <= at + 3 && (articles.has(tokens[next] as string) || kindOf(tokens[next] as string) === null) && !things.has(tokens[next] as string)) next += 1;
+  return things.has(tokens[next] as string);
+}
+// Past forms that, beside one that destroys, make a list of changes described: "added, removed and renamed fields".
+const changesListed = new Set(["added", "changed", "created", "updated", "modified", "renamed", "renumbered", "replaced", "moved", "inserted", "edited"]);
+/** "showing added, removed and replaced fields", "domains added to or removed from the root": a diff described, not done. */
+function inListOfChanges(tokens: string[], at: number): boolean {
+  const token = tokens[at] as string;
+  if (!(token.length > 4 && token.endsWith("ed"))) return false;
+  return [-3, -2, -1, 1, 2, 3].some((offset) => changesListed.has(tokens[at + offset] as string));
+}
+/** "Every JSON Schema a provider publishes", "when the counter resets": someone else does it. */
+function someoneElse(tokens: string[], at: number): boolean {
+  const previous = tokens[at - 1], earlier = tokens[at - 2];
+  return (tokens[at] as string).endsWith("s") && previous !== undefined && earlier !== undefined && articles.has(earlier) && kindOf(previous) === null && !selfWords.has(previous);
+}
+// Things a "to" phrase can be the purpose of without the tool doing it: "best time to publish", "which letter to send".
+const purposeOf = new Set(["time", "times", "moment", "moments", "hour", "hours", "day", "days", "slot", "slots", "letter", "letters"]);
 /** "published", "compiling": a past or ongoing form, which describes rather than says what is done. */
 const pastOrOngoing = (token: string) => (token.length > 4 && token.endsWith("ed")) || (token.length > 5 && token.endsWith("ing"));
 
@@ -247,6 +281,8 @@ const pastOrOngoing = (token: string) => (token.length > 4 && token.endsWith("ed
  */
 // "Call this only after", "Call `inspect_actions` first": a word on when to call the tool, not what it does.
 const callTimes = new Set(["this", "it", "only", "when", "after", "before", "first"]);
+// Words for calling a tool, which say nothing about what it does when followed by the tool's own name.
+const callingWords = new Set(["call", "calls", "run", "runs", "execute", "executes", "invoke", "invokes", "use", "uses", "trigger", "triggers"]);
 // Words that open a clause saying when or whether, not what: "before anybody signs", "after paying".
 const subordinators = new Set(["before", "after", "once", "until", "unless", "if", "when", "whenever", "whether"]);
 // Words that end the thing a verb acts on: "Submit a settlement for review", "Claim USDC on Arc".
@@ -255,15 +291,25 @@ const determiners = new Set(["a", "an", "the", "it", "them", "its", "their", "th
 const beforeDoing = new Set(["for", "by", "while"]);
 const compared = new Set(["vs", "versus"]);
 
-function statedWords(all: string[], name: string[] = []): { stated: string[]; money: string[]; openingMoney: string[] } {
+/**
+ * `strict` is for a tool its server marks read-only, where a description outweighs the server only where it
+ * says the tool itself acts: there, a verb whose subject is someone else ("a provider publishes") or that is
+ * the purpose of a time or a letter ("best time to publish") does not count.
+ */
+function statedWords(all: string[], name: string[] = [], strict = false): { stated: string[]; money: string[]; openingMoney: string[] } {
   let start = 0;
-  const callsItself = (at: number) => all[at] === "call" && (callTimes.has(all[at + 1] as string) || (name.length > 0 && name.every((word, offset) => all[at + 1 + offset] === word)));
+  // "Call this only after", "Run the fetch_posts pipeline": calling the tool by its own name says nothing about what it does.
+  const namedAt = (at: number) => name.length > 0 && name.every((word, offset) => all[at + offset] === word);
+  const callsItself = (at: number) => (all[at] === "call" && callTimes.has(all[at + 1] as string))
+    || (callingWords.has(all[at] as string) && (namedAt(at + 1) || (all[at + 1] === "the" && namedAt(at + 2))));
   while (start < all.length && (leadIn.has(all[start] as string) || adverb(all[start] as string) || callsItself(start))) start += 1;
   // A clause on when is dropped up to the comma that closes it. One that opens the sentence with no comma
   // after it, or with a verb of its own, runs into the main clause ("If stale this tool deletes them"), so
   // nothing is dropped there.
   // A word that destroys is never dropped this way: "Does not ask before deleting records" still deletes.
-  const rest = all.slice(start);
+  // "Resolve DNS records", "Open one private chat" read, unless the sentence also destroys, sends or pays.
+  const risky = all.some((word) => kindOf(word) === "destructive" || kindOf(word) === "send" || isIn(word, moneyWords));
+  const rest = all.slice(start).map((word, at, words) => (!risky && readsWhat(words, at) ? "read" : word));
   const tokens: string[] = [];
   let saysWhen = false;
   rest.forEach((token, at) => {
@@ -277,7 +323,7 @@ function statedWords(all: string[], name: string[] = []): { stated: string[]; mo
       const ownVerb = comma > at && rest.slice(at + 1, comma).some((word) => kindOf(word) !== null && !pastOrOngoing(word));
       saysWhen = !leading || (comma > at && !ownVerb);
     }
-    if (!saysWhen || kindOf(token) === "destructive") tokens.push(token);
+    if (!saysWhen || (kindOf(token) === "destructive" && !(strict && someoneElse(rest, at)))) tokens.push(token);
   });
   let index = 0;
   while (index < tokens.length && (tokens[index] === "," || adverb(tokens[index] as string))) index += 1;
@@ -322,8 +368,10 @@ function statedWords(all: string[], name: string[] = []): { stated: string[]; mo
       if (token === ",") return;
       const kind = kindOf(token);
       if (kind === null || kind === "read") { out.push(token); return; }
-      const next = tokens[at + 1];
-      if (compared.has(next as string) || compared.has(tokens[at - 1] as string)) return;
+      const next = tokens[at + 1], previous = tokens[at - 1], earlier = tokens[at - 2];
+      if (compared.has(next as string) || compared.has(previous as string)) return;
+      if (kind === "destructive" && inListOfChanges(tokens, at)) return;
+      if (strict && (someoneElse(tokens, at) || (previous === "to" && purposeOf.has(earlier as string)))) return;
       const counts = kind === "destructive" || (pastOrOngoing(token)
         ? token.endsWith("ing") && (at === firstAt || beforeDoing.has(tokens[at - 1] as string)) && next !== undefined && !objectEnds.has(next) && (kindOf(next) === null || isIn(next, nounLike))
         : !isIn(token, nounLike) || determiners.has(next as string) || clauseMarkers.has(tokens[at - 1] as string));
@@ -354,7 +402,8 @@ function statedWords(all: string[], name: string[] = []): { stated: string[]; mo
     const previous = tokens[before];
     const joinedOn = joined(previous) && !passedOver;
     const count = () => { stated.push("and", token); noteMoney(token); objectOf(index); };
-    if (kind === "destructive" && !readOpening) { count(); continue; }
+    // A destroying word in a list of changes describes a diff ("showing added, removed and replaced fields").
+    if (kind === "destructive" && !readOpening && !inListOfChanges(tokens, index) && !(strict && someoneElse(tokens, index))) { count(); continue; }
     // "Lists files, deleting those older", "by sending a sample event": an "-ing" form that
     // destroys or sends, with its object after it, is what the tool does too.
     if (pastOrOngoing(token)) {
@@ -379,6 +428,17 @@ function statedWords(all: string[], name: string[] = []): { stated: string[]; mo
 function fromDescription(tool: ToolDefinition): { classes: CapabilityClass[]; basis: string[] } {
   const { stated, money } = statedWords(openingWords(tool), words(tool.name));
   return fromWords(stated, { inName: false, moneyFrom: money });
+}
+
+/**
+ * What the description says the tool itself does, for weighing against a server's read-only mark. Acts named
+ * only in passing are left out: an aside in brackets ("(client widgets removed)", "(open, used, expired,
+ * revoked)"), what someone else does ("every schema a provider publishes", "when the counter resets"), and
+ * the purpose of a time or a letter ("best time to publish").
+ */
+export function descriptionSaysItself(tool: ToolDefinition): CapabilityClass[] {
+  const { stated, money } = statedWords(openingWords(tool, { asides: false }), words(tool.name), true);
+  return fromWords(stated, { inName: false, moneyFrom: money }).classes;
 }
 
 /**
