@@ -1,0 +1,1 @@
+{"source":"https://node-mcp-3a40efc5.alpic.live/","takenAt":"2026-11-02T12:54:50.236Z","server":{"name":"mcp-server-template","version":"0.0.1"},"tools":[{"name":"greet","kind":"unclear","fields":{"description":"7adb58168c3b496c","inputSchema":"43dbc204b6384cad"}},{"name":"send_email","kind":"send","fields":{"description":"7c93a7fd3b923e3e","inputSchema":"d30369e9722e7594"}}]}

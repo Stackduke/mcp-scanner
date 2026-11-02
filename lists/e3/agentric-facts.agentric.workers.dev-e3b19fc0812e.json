@@ -1,0 +1,1 @@
+{"source":"https://agentric-facts.agentric.workers.dev/mcp","takenAt":"2026-11-02T12:50:58.939Z","server":{"name":"local-business-facts","version":"0.2.0"},"tools":[{"name":"lookup_business","kind":"read","fields":{"description":"976b69155daf5c98","inputSchema":"a66c0e905b315f7e"}}]}

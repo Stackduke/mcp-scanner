@@ -1,0 +1,1 @@
+{"source":"https://nova.civai.co/mcp/agents/mcp-bgpt-cacnigeria","takenAt":"2026-11-02T12:56:45.763Z","server":{"name":"CAC Search MCP by Nova (CIVAI)","version":"1.0.0"},"tools":[{"name":"public_search","kind":"unclear","fields":{"description":"23b757a681df1344","inputSchema":"df3dd048e7f088a7"}}]}

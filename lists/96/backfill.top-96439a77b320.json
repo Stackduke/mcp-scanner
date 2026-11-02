@@ -1,0 +1,1 @@
+{"source":"https://backfill.top/mcp","takenAt":"2026-11-02T12:51:03.557Z","server":{"name":"backfill-fetch","version":"1.0.0"},"tools":[{"name":"extract_data","kind":"read","fields":{"description":"900327529313d0c0","inputSchema":"c8255c43b60c8ead"}},{"name":"fetch_page","kind":"read","fields":{"description":"f14b49fd4079491c","inputSchema":"310b3729e2d2a2d4"}}]}
