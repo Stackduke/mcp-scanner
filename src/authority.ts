@@ -1,5 +1,5 @@
 import { findInTool } from "./findings.ts";
-import { actionKind, descriptionSuggests, labelTool, nameSuggests, words } from "./risk.ts";
+import { actionKind, descriptionOpensMovingMoney, descriptionSuggests, labelTool, mailAsThing, movesMoney, nameSuggests, words } from "./risk.ts";
 import type { CapabilityClass, Snapshot, SnapshotTool } from "./types.ts";
 
 /**
@@ -8,7 +8,11 @@ import type { CapabilityClass, Snapshot, SnapshotTool } from "./types.ts";
  * The report must never reassure wrongly. Two rules follow.
  *
  * It reads every tool the more serious way:
- * - where the server's label, the tool's name and its description disagree, it goes with whichever says most;
+ * - where the server's label, the tool's name and its description disagree, it goes with whichever says most,
+ *   except that a server's plain "read-only" outweighs a name that only suggests writing, or a description that
+ *   only suggests writing or moving money (measured: such words were wrong far more often than the server);
+ *   a name that deletes, sends or moves money, and a description that deletes or sends, still count; and a
+ *   `destructiveHint: true`, the spec's default, gives way to a name or description that says otherwise (shown as a note);
  * - a description, which the server writes, counts as evidence that a tool acts and never that it is harmless;
  * - a tool nobody can label, or whose name cannot be read as words, is unknown, never read-only;
  * - a change nobody has called reversible is not assumed to be.
@@ -116,22 +120,46 @@ function reachOf(tool: SnapshotTool): Reach {
 
   if (label.source === "mcp_annotation") {
     const more = missing(named);
-    if (more.length) {
-      for (const kind of more) does.add(kind);
-      urgent.push(`The server ${marked}, but its name says it can ${said(more)}. This report counts it as able to.`);
+    // A tool the server marks read-only keeps that label against a name that only suggests writing, or
+    // money through a word for a thing: on the measured set such names were nearly always a lookup or a quote
+    // (`company_register_search`, `create_order`). A word that deletes, sends or itself moves money
+    // (`transfer_funds`, `pay_invoice`, `send_payment`) still counts, unless it is "email" or "mail" naming a thing
+    // (`email_security`). What is set aside is still shown.
+    const nameWords = words(tool.name);
+    const plainly = (kind: Acting): boolean => kind === "money"
+      ? nameWords.some((word) => movesMoney(word) && actionKind(word) !== null) || (nameWords.some(movesMoney) && plainly("send"))
+      : nameWords.some((word, at) => !mailAsThing(word, nameWords[at + 1]) && actionKind(word) === kind);
+    const raised = annotations.readOnlyHint === true ? more.filter((kind) => kind !== "write" && plainly(kind)) : more;
+    if (raised.length) {
+      for (const kind of raised) does.add(kind);
+      urgent.push(`The server ${marked}, but its name says it can ${said(raised)}. This report counts it as able to.`);
     }
+    const setAside = more.filter((kind) => !raised.includes(kind));
+    if (setAside.length) notes.push(`The server marks this read-only, though its name suggests it can ${said(setAside)}. This report goes with the server.`);
     if (annotations.readOnlyHint === true && annotations.destructiveHint === true) {
       does.add("destructive");
       urgent.push("The server marks this both read-only and destructive. This report counts it as destructive.");
     }
   }
   // The server writes its descriptions, so one is evidence that a tool acts and never that it is harmless.
-  const described = missing(descriptionSuggests(tool));
+  // Where the server marks the tool read-only, that plain statement outweighs prose that only suggests
+  // writing or moving money: on the labelled sets, every such description was a ledger, a price list or a
+  // quote. Deleting and sending still count, and so does a description that opens by moving money
+  // ("Transfers USDC to the given address"). What is set aside is still shown.
+  const suggested = missing(descriptionSuggests(tool));
+  const described = suggested.filter((kind) => annotations.readOnlyHint !== true || kind === "destructive" || kind === "send" || (kind === "money" && descriptionOpensMovingMoney(tool)));
+  const proseSetAside = suggested.filter((kind) => !described.includes(kind));
+  if (proseSetAside.length && !notes.some((note) => note.startsWith("The server marks this read-only, though"))) notes.push(`The server marks this read-only, though its description suggests it can ${said(proseSetAside)}. This report goes with the server.`);
   if (described.length && basis !== "description") {
     for (const kind of described) does.add(kind);
     urgent.push(`Its description says it can ${said(described)}, which its ${basis === "server" ? "label" : "name"} does not. This report counts it as able to.`);
   }
   if (basis === "description" && !acting.some((kind) => does.has(kind))) { does.clear(); basis = "none"; }
+  // destructiveHint: true is the spec's default, so the label sets it aside where the name or description
+  // says the tool does something else. That is still shown.
+  if (!does.has("destructive") && label.basis.some((item) => item.startsWith("destructiveHint: true, outweighed"))) {
+    notes.push("The server marks this destructive, which the spec makes the default for any tool not marked read-only; its name and description say it does something else, and this report goes with them.");
+  }
 
   // A name that cannot be read as words tells this report nothing, whatever the server says about the tool.
   const readable = ordinaryName.test(tool.name);
