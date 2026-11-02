@@ -111,8 +111,9 @@ test("what a tool could do at its most counts, even when the latest scan no long
   assert.equal(added.subject, lookSubject);
   assert.match(added.text, /- get_tag: Seen during the period and gone by the latest scan: Tells the model to disregard its other instructions\./);
 
-  // Made destructive by its label for two days, then set back with a small change to its inputs.
-  const flipped = digest(daily(base, { "09": [getFile, { ...editNote, annotations: { readOnlyHint: false, destructiveHint: true } }], "11": [getFile, { ...editNote, inputSchema: { type: "object" } }] }));
+  // Made destructive for two days, then set back with a small change to its inputs. (A label that says destructive
+  // counts against a name that says otherwise only where the tool's own words also destroy.)
+  const flipped = digest(daily(base, { "09": [getFile, { ...editNote, inputSchema: { type: "object", properties: { delete: { type: "boolean" } } }, annotations: { readOnlyHint: false, destructiveHint: true } }], "11": [getFile, { ...editNote, inputSchema: { type: "object" } }] }));
   assert.match(flipped.text, /- edit_note: could make changes that cannot be undone at some point in the period, though not at the latest scan\./);
 
   // Poisoned, then removed.
@@ -133,9 +134,9 @@ test("becoming unknown counts as more, and less is said only as what labels and 
   const unknown = digest(daily([{ name: "frobnicate", ...readOnly }], { "10": [{ name: "frobnicate" }] }));
   assert.equal(unknown.subject, lookSubject);
   assert.match(unknown.text, /- frobnicate: was listed as "said to only read", and it is now not clear what it does\./);
-  const less = digest(daily([{ name: "sync_all", annotations: { readOnlyHint: false, destructiveHint: true } }], { "10": [{ name: "sync_all", ...reversible }] }));
+  const less = digest(daily([{ name: "housekeeping", annotations: { readOnlyHint: false, destructiveHint: true } }], { "10": [{ name: "housekeeping", ...reversible }] }));
   assert.equal(less.subject, "Stackduke weekly digest: 1 of 1 server changed (7 to 13 October 2026)");
-  assert.match(less.text, /1 tool is counted as doing less than at the start:\n {4}- sync_all: is no longer counted as able to make changes that cannot be undone, going by its label, name and description\./);
+  assert.match(less.text, /1 tool is counted as doing less than at the start:\n {4}- housekeeping: is no longer counted as able to make changes that cannot be undone, going by its label, name and description\./);
   // A tool that stops sending and starts changing things has not simply done less.
   const moved = digest(daily([{ name: "zorp", description: "Sends a note." }], { "10": [{ name: "zorp", description: "Updates a note." }] }));
   assert.match(moved.text, /1 tool could do more than at the start:\n {4}- zorp: can now create or change things; is no longer counted as able to send messages or publish to other people; its wording was rewritten\./);
@@ -186,19 +187,19 @@ test("a second planted text of the same kind is new, and an old concern is named
 
 test("nothing is said to have stayed the same unless it did at every scan", () => {
   // Destructive, then marked not destructive for two days, then destructive again with new wording.
-  const dip = digest(daily([{ name: "sync_all", description: "Syncs.", annotations: { readOnlyHint: false, destructiveHint: true } }], {
-    "09": [{ name: "sync_all", description: "Syncs.", annotations: { readOnlyHint: false, destructiveHint: false } }],
-    "11": [{ name: "sync_all", description: "Syncs everything.", annotations: { readOnlyHint: false, destructiveHint: true } }],
+  const dip = digest(daily([{ name: "housekeeping", description: "Tidies up.", annotations: { readOnlyHint: false, destructiveHint: true } }], {
+    "09": [{ name: "housekeeping", description: "Tidies up.", annotations: { readOnlyHint: false, destructiveHint: false } }],
+    "11": [{ name: "housekeeping", description: "Tidies up everything.", annotations: { readOnlyHint: false, destructiveHint: true } }],
   }));
-  assert.match(dip.text, /- sync_all: was counted as doing less at some point in the period, and is back to what it was; its wording was rewritten\./);
+  assert.match(dip.text, /- housekeeping: was counted as doing less at some point in the period, and is back to what it was; its wording was rewritten\./);
   assert.doesNotMatch(dip.text, /counted as doing the same thing at each/);
   // Missing for two days and back with new wording.
   const away = digest(daily(base, { "09": [editNote], "11": [{ ...getFile, description: "Returns one file, quickly." }, editNote] }));
   assert.match(away.text, /- get_file: was missing from 2 scans; its wording was rewritten\./);
   assert.equal(away.subject, lookSubject);
   // A server that drops "destructive" never said the change could be undone, and is not reported as withdrawing that.
-  const dropped = digest(daily([{ name: "sync_all", annotations: { readOnlyHint: false, destructiveHint: true } }], { "10": [{ name: "sync_all", annotations: { readOnlyHint: false } }] }));
-  assert.match(dropped.text, /- sync_all: is no longer counted as able to make changes that cannot be undone, going by its label, name and description\./);
+  const dropped = digest(daily([{ name: "housekeeping", annotations: { readOnlyHint: false, destructiveHint: true } }], { "10": [{ name: "housekeeping", annotations: { readOnlyHint: false } }] }));
+  assert.match(dropped.text, /- housekeeping: is no longer counted as able to make changes that cannot be undone, going by its label, name and description\./);
   assert.doesNotMatch(dropped.text, /no longer said by its server/);
 });
 

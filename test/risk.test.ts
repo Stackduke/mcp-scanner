@@ -31,7 +31,14 @@ test("a server's annotations decide between reading and writing, and the label s
   assert.deepEqual(labelTool({ name: "delete_everything", annotations: { readOnlyHint: true } }).classes, ["read"]);
   assert.equal(labelTool({ name: "delete_everything", annotations: { readOnlyHint: true } }).source, "mcp_annotation");
   assert.deepEqual(labelTool({ name: "sync", annotations: { readOnlyHint: false } }).classes, ["write"]);
-  assert.deepEqual(labelTool({ name: "sync", annotations: { readOnlyHint: false, destructiveHint: true } }).classes, ["destructive"]);
+  // The MCP spec makes destructiveHint true by default, so on its own it is weak: it counts beside a word that
+  // destroys, or where nothing else says what the tool does, and a name that says otherwise outweighs it.
+  assert.deepEqual(labelTool({ name: "purge_cache", annotations: { readOnlyHint: false, destructiveHint: true } }).classes, ["destructive"]);
+  assert.deepEqual(labelTool({ name: "housekeeping", annotations: { readOnlyHint: false, destructiveHint: true } }).classes, ["destructive"]);
+  assert.deepEqual(labelTool({ name: "sync", annotations: { readOnlyHint: false, destructiveHint: true } }).classes, ["write"]);
+  assert.deepEqual(labelTool({ name: "sync", annotations: { readOnlyHint: false, destructiveHint: true } }).basis, ["readOnlyHint: false", "destructiveHint: true, outweighed by what the tool says it does", '"sync"']);
+  assert.deepEqual(labelTool({ name: "sync", description: "Syncs, then deletes stale rows", annotations: { destructiveHint: true } }).classes, ["destructive"]);
+  assert.deepEqual(labelTool({ name: "commit", inputSchema: { type: "object", properties: { delete: { type: "array" } } }, annotations: { destructiveHint: true } }).classes, ["destructive"]);
   // Annotations cannot say "sends" or "moves money", so the name adds those.
   assert.deepEqual(labelTool({ name: "create_refund", annotations: { readOnlyHint: false } }).classes, ["write", "money"]);
   assert.deepEqual(labelTool({ name: "send_email", annotations: { readOnlyHint: false } }).classes, ["send"]);
@@ -149,6 +156,86 @@ test("a name's acting word used as a thing does not make a reader act", () => {
     get_user_update_profile: "write", find_user_send_message: "send", read_file_then_execute: "write",
     list_messages_mark_read: "write", fetch_email_send: "send", describe_stack_update: "write",
     vercel_deploy_project: "write", netlify_deploy_site: "write",
+  };
+  for (const [name, label] of Object.entries(expected)) assert.equal(classes(name), label, name);
+});
+
+test("send and money are read off what a description says the tool does, not off words passing through", () => {
+  // Shapes from the labelled set in eval/ (SD-114), where each of these was counted as sending or moving money.
+  const said = (description: string, name = "x") => labelTool({ name, description }).classes.join("+");
+  const expected: Record<string, string> = {
+    // A clause on when says nothing about what.
+    "Work out where a payment must go, before anybody signs or sends anything": "",
+    "Join a waiting arena match after paying the per-game entry fee": "write",
+    "Calls off an escrow before payment": "write",
+    // Past the opening verb, a word that is usually a thing, or one not joined on, is not what the tool does.
+    "Assign a user to a task by name or email": "write",
+    "Request a dedicated IP for email sending": "write",
+    "Saves an API key or token a scene's tables send": "write",
+    // A verb joined to one passed over goes with it: "and buy" is part of what the USDC is for.
+    "Request free credits to fund escrow and buy data queries": "write",
+    // A sentence that does not open with a verb: nouns, "-ing" forms and "-ed" forms describe.
+    "Sending and engagement stats for one campaign": "",
+    "Delivery rates by day, destination carrier, or sending number": "",
+    "Published security scan for a skill": "",
+    "Email address verification for lead pipelines": "",
+    "Global trend snapshot with flow edges and share": "",
+    "Installed price for a number of zones": "",
+    // A word set against another is a thing compared.
+    "Buy vs rent: monthly totals": "",
+    // Money counts where it is moved, or what is moved.
+    "Buy a phone number for your account": "write+money",
+    "Submit a settlement for multi-party consensus": "write+money",
+    "Claim real USDC on Arc for an address": "write+money",
+    "Creates a branch, which can incur usage charges": "write+money",
+    "List payments and refund the duplicates": "write+money",
+    "Public ledger of self-funded test transactions, which unlocks nothing": "",
+    // Sending still counts where the sentence says the tool does it.
+    "Tool for sending messages to a channel": "send",
+    "Sending a message to the channel": "send",
+    "Email a link to a review to the person who ran it": "send",
+    "Fetches the record and deletes it": "destructive",
+    "Syncs the folder, then deletes stale files": "destructive",
+    // Found in review (SD-114): shapes the rules once read as harmless.
+    "Notify users when a build fails": "send",
+    "Share files with other people": "send",
+    "Invite people to the workspace": "send",
+    "Sending emails to customers": "send",
+    "Broadcasts signed transactions": "send+money",
+    "If stale this tool deletes them": "destructive",
+    "If confirm is true the repository is deleted.": "destructive",
+    "Does not ask for confirmation before deleting records": "destructive",
+    "No-confirm delete of a branch": "destructive",
+    "There is no undo when this deletes the repository": "destructive",
+    "Stops the job without deleting it": "write",
+    // A denial drops only what it denies.
+    "Lists users without paging and updates their status": "write",
+    "Gets the invoice with no fees and pays it": "write+money",
+    "Deletes no more than 100 records per call": "destructive",
+    "Removes no-longer-needed files": "destructive",
+    "Reads only, nothing is launched and no money moves": "read",
+    // A clause opening the sentence with a verb of its own is not dropped up to its comma.
+    "If the user exists sends them an email, otherwise returns null": "send",
+    "Unless told otherwise updates every record, then lists them": "write",
+    "If stale, deletes the cache": "destructive",
+    "Does not create a new file, but overwrites and deletes the old one": "destructive",
+  };
+  for (const [description, label] of Object.entries(expected)) assert.equal(said(description), label, description);
+});
+
+test("a name's money word that names the record does not move money beside a verb that only edits it", () => {
+  const expected: Record<string, string> = {
+    update_transaction: "write", hide_transaction: "write", set_order_notes: "write",
+    void_transaction: "write+money", create_transaction: "write+money", cancel_order: "write+money",
+    update_payment_and_refund: "write+money",
+    // Testnet tokens are not money.
+    request_testnet_usdc: "write", claim_usdc: "write+money",
+    // A tool named for one who reads ("calculator", "validator") reads.
+    tip_calculator: "read", order_validator: "read", tip_jar: "write+money",
+    // Only a thing-first word before a reading word names what is read: `run_query`, `post_review` act.
+    run_query: "write", save_search: "write", post_review: "write",
+    // A describing first word leaves the last word to say what is done: `signed_transaction_broadcast` moves money.
+    signed_transaction_broadcast: "send+money",
   };
   for (const [name, label] of Object.entries(expected)) assert.equal(classes(name), label, name);
 });
