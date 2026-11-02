@@ -358,3 +358,46 @@ test("a getter the server marks read-only is not counted as acting on the streng
     assert.equal(tool?.disputed, true, description);
   }
 });
+
+test("a read-only tool keeps its label against a description that only names an act in passing", () => {
+  // Shapes seen on the tracker's servers on 2 November 2026, reworded. Each was raised against the
+  // server's read-only mark by a first draft of the SD-114 rules.
+  const passing: Array<[string, string]> = [
+    // A past form describing what is returned.
+    ["get_post", "One post by id: the body in Markdown (embedded scripts removed), title and author."],
+    // Status words.
+    ["list_keys", "The account's keys, each with its state (active, used, expired, revoked)."],
+    // A third party does it.
+    ["get_feed_schema", "Every schema a publisher publishes, in one list."],
+    // A purpose phrase.
+    ["get_peak_hours", "Which hours the audience watches most, the \"best time to publish\"."],
+    // Something else resets.
+    ["get_quota", "How many requests were used this month, and when the counter resets."],
+  ];
+  for (const [name, description] of passing) assert.deepEqual(groups([{ name, description, ...readOnly }]), [["read", [name]]], description);
+  // Where the description says the tool itself does it, it still counts.
+  const acting: Array<[string, string, string]> = [
+    ["files_tool", "Deletes every file in the workspace.", "destructive"],
+    ["report_tool", "When the job finishes it emails the report to the whole team.", "send"],
+    ["files_tool", "A tool that deletes files from the workspace.", "destructive"],
+    ["record_tool", "Given an ID, permanently deletes the record.", "destructive"],
+    ["sql_tool", "Runner that drops tables.", "destructive"],
+    ["digest_tool", "Weekly summary that emails the whole team.", "send"],
+    ["files_tool", "A simple utility to delete files in the workspace.", "destructive"],
+    ["mail_tool", "Mechanism to send emails to customers.", "send"],
+    ["session_tool", "Expired sessions purged and logs truncated.", "destructive"],
+    ["queue_tool", "Next message returned and removed from the queue.", "destructive"],
+  ];
+  for (const [name, description, kind] of acting) assert.deepEqual(groups([{ name, description, ...readOnly }]), [[kind, [name]]], description);
+});
+
+test("a description that only calls the tool by its own name does not make a reading name act", () => {
+  // A server that describes every tool as "Run the <name> pipeline": calling the tool is not what it does.
+  for (const name of ["fetch_forum_posts", "list_forum_posts", "get_user_profile"]) {
+    assert.deepEqual(groups([{ name, description: `Run the ${name} pipeline.` }]), [["read", [name]]], name);
+  }
+  assert.deepEqual(groups([{ name: "sync_posts", description: "Run the sync_posts pipeline." }]), [["write", ["sync_posts"]]]);
+  // A look-up verb with what it looks up.
+  assert.deepEqual(groups([{ name: "dns_lookup", description: "Resolve DNS records (A, AAAA, MX) for a domain over DoH." }]), [["read", ["dns_lookup"]]]);
+  assert.deepEqual(groups([{ name: "get_chat", description: "Open one private chat and read its messages." }]), [["read", ["get_chat"]]]);
+});
