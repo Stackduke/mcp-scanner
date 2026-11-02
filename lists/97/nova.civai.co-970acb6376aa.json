@@ -1,0 +1,1 @@
+{"source":"https://nova.civai.co/mcp/agents/mcp-brevo","takenAt":"2026-11-02T13:18:32.322Z","server":{"name":"Brevo by Nova (CIVAI)","version":"1.0.0"},"tools":[{"name":"brevo","kind":"unclear","fields":{"description":"2f923fcd518765b1","inputSchema":"efddc7bd8bbcef73"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://nova.civai.co/mcp/agents/mcp-llm-scraper","takenAt":"2026-11-02T13:18:41.420Z","server":{"name":"LLM Scraper by Nova (CIVAI)","version":"1.0.0"},"tools":[{"name":"scrape-webpage","kind":"write","fields":{"description":"98c8dc33a40d15d7","inputSchema":"8bac0c6e1a7f29e6"}}]}

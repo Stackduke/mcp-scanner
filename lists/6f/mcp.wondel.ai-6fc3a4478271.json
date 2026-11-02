@@ -1,0 +1,1 @@
+{"source":"https://mcp.wondel.ai/mcp","takenAt":"2026-11-02T13:18:39.405Z","server":{"name":"wondel-directory","version":"1.0.0"},"tools":[{"name":"list_servers","kind":"read","fields":{"title":"485d17967a3576d9","description":"72601a712749ffed","inputSchema":"022231126af240c2","annotations":"9bedd1194137a0bb"}}]}

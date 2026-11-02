@@ -1,0 +1,1 @@
+{"source":"https://mcp.wondel.ai/skyscanner/mcp","takenAt":"2026-11-02T13:18:45.406Z","server":{"name":"Skyscanner","version":"1.0.0"},"tools":[{"name":"skyscanner_search_flights","kind":"unclear","fields":{"title":"ff3ebeb6829d58a6","description":"e67ece67c1e5249d","inputSchema":"011dce9214b68743","outputSchema":"55ddb01dffebc141"}}]}

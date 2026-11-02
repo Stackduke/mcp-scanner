@@ -1,0 +1,1 @@
+{"source":"https://nova.civai.co/mcp/agents/mcp-bgpt-giglogistics","takenAt":"2026-11-02T13:18:24.081Z","server":{"name":"Gig Logistics MCP by Nova (CIVAI)","version":"1.0.0"},"tools":[{"name":"track_shipment","kind":"write","fields":{"description":"fece1b73e7ca6dc4","inputSchema":"859f79715766857c"}}]}

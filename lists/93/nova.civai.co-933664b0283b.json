@@ -1,0 +1,1 @@
+{"source":"https://nova.civai.co/mcp/agents/mcp-bgpt-tweet-downloader","takenAt":"2026-11-02T13:18:30.269Z","server":{"name":"Tweet Downloader MCP by Nova (CIVAI)","version":"1.0.0"},"tools":[{"name":"get_tweet","kind":"send","fields":{"description":"b55ef91ab59fd1ba","inputSchema":"f79acb8c7fe73915"}}]}

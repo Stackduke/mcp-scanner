@@ -1,0 +1,1 @@
+{"source":"https://mcp.wondel.ai/kayak/mcp","takenAt":"2026-11-02T13:18:38.405Z","server":{"name":"Kayak","version":"1.0.0"},"tools":[{"name":"kayak_search_flights","kind":"write","fields":{"title":"5bf1c01338a30941","description":"3f044c516fb86151","inputSchema":"14d776c7505db835","outputSchema":"5ca726080676dbfd"}}]}

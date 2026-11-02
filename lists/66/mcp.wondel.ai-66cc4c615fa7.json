@@ -1,0 +1,1 @@
+{"source":"https://mcp.wondel.ai/booking/mcp","takenAt":"2026-11-02T13:18:26.404Z","server":{"name":"Booking","version":"1.0.0"},"tools":[{"name":"booking_search_hotels","kind":"write","fields":{"title":"bc46a513880f9b4d","description":"30124421639b1903","inputSchema":"7f5069d8c2acdeec","outputSchema":"3e8aff8b160abc61"}}]}
