@@ -1,0 +1,1 @@
+{"source":"https://tanod.dev/mcp/gpu-prices","takenAt":"2026-11-03T12:20:09.590Z","server":{"name":"tanod-gpu-prices","version":"0.1.0"},"tools":[{"name":"get_gpu_prices","kind":"read","fields":{"title":"d2bb4bf034d23c94","description":"8b94b9c949d803a3","inputSchema":"7aeb21242765b64f","outputSchema":"fa5c60cd83bb164e","annotations":"9ab70de1413a9e3e"}}]}
