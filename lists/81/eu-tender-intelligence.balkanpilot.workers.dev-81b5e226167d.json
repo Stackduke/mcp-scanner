@@ -1,0 +1,1 @@
+{"source":"https://eu-tender-intelligence.balkanpilot.workers.dev/mcp","takenAt":"2026-11-04T12:36:53.468Z","server":{"name":"eu-tender-intelligence","version":"0.2.0"},"tools":[{"name":"search_tenders","kind":"read","fields":{"title":"afbe344c8e608a9b","description":"45966965338b9f38","inputSchema":"93d46ccb7629a1c1","annotations":"139076388a98d13d"}}]}

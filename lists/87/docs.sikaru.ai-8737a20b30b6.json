@@ -1,0 +1,1 @@
+{"source":"https://docs.sikaru.ai/_mcp/server","takenAt":"2026-11-04T12:36:52.952Z","server":{"name":"fern-docs-mcp-server","version":"1.0.0"},"tools":[{"name":"searchDocs","kind":"read","fields":{"description":"6772998301d89647","inputSchema":"b536d861e64684d6","annotations":"3c1e96d77bdcd2c6"}}]}

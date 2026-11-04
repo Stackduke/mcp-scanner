@@ -1,0 +1,1 @@
+{"source":"https://api.pagespool.com/mcp/epubcheck/","takenAt":"2026-11-04T12:42:07.209Z","server":{"name":"pagespool-epubcheck","version":"1"},"tools":[{"name":"check_epub","kind":"read","fields":{"title":"4d99e5adf59316a1","description":"3431f1b7031f62d1","inputSchema":"c400749201ffaa7c","outputSchema":"82ef96cebaf5fbe1","annotations":"337a2910e643f55f"}}]}
