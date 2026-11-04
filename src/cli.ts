@@ -17,7 +17,11 @@ import { checkSignIns, renewSignIns, signInIssues } from "./renew.ts";
 import type { CheckReport, RenewReport } from "./renew.ts";
 import { files, ghIssues, handOver, isAccess, isReports, maskCommand, readStep, saveSecret, writePrivate } from "./sign-in-io.ts";
 import { createInterface } from "node:readline/promises";
-import { readSnapshot, save, writeWhole } from "./files.ts";
+import { latestSnapshot, readSnapshot, save, writeWhole } from "./files.ts";
+import { addressOf, readAgentConfig, usableAddress } from "./agent-config.ts";
+import type { AgentConfig } from "./agent-config.ts";
+import { describeReach, reachJson, reachOf } from "./reach.ts";
+import type { AgentLook, ServerLook } from "./reach.ts";
 import { describeCheck, describeUnreachable, repeatedNames, runCheck, updateLockfile } from "./check.ts";
 import { lockfileName, readLockfile } from "./lockfile.ts";
 import type { Lockfile } from "./lockfile.ts";
@@ -53,6 +57,13 @@ const usage = `Usage:
                                                     --server=<host or url> (repeatable) --summary=<file> --timeout=<seconds>
                                                     --max-age=<hours, default 48> --tracker-data=<https address or folder>
   npm run scan -- authority <snapshot.json>...      What an agent can do through these servers, in plain words.
+  npm run scan -- reach <agent-config.json | https-url>... [options]
+                                                    One page per agent config (Claude, Cursor or VS Code mcp.json): every
+                                                    server, every tool and its kind, how the kind was reached, text-check
+                                                    flags, what changed since the last saved look, and up to three suggested
+                                                    rules. Addresses given directly count as one agent.
+                                                    --json (the report the collector would send) --save --snapshots=data/snapshots
+                                                    --run-local (start the config's local programs) --timeout=<seconds> --summary=<file>
   npm run scan -- digest <snapshot-folder>...       The week's changes on the servers saved there, as an email's text.
                                                     --days=7 and --until=YYYY-MM-DD set the period, in UTC.
   npm run scan -- diff <before.json> <after.json>   Compare two saved snapshots.
@@ -300,9 +311,98 @@ async function watch(rest: string[]): Promise<number> {
   return finish(describeWatch(outcomes, summary), exitCode(outcomes));
 }
 
+async function reach(rest: string[]): Promise<number> {
+  const options = new Map<string, string>();
+  const inputs: string[] = [];
+  for (const item of rest) {
+    if (!item.startsWith("--")) { inputs.push(item); continue; }
+    const match = /^--(snapshots|timeout|summary)=(.+)$|^--(json|save|run-local)$/s.exec(item);
+    const name = match?.[1] ?? match?.[3];
+    if (!name || options.has(name)) { console.error(`reach does not take ${item.split("=")[0]}, or took it twice.`); return 2; }
+    options.set(name, match?.[2] ?? "");
+  }
+  if (!inputs.length) { console.error("reach takes one or more agent config files (mcp.json and the like) or https:// server addresses."); return 2; }
+  const timeoutText = options.get("timeout");
+  if (timeoutText !== undefined && !(/^\d{1,3}$/.test(timeoutText) && Number(timeoutText) >= 1 && Number(timeoutText) <= 600)) { console.error("--timeout takes a whole number of seconds from 1 to 600."); return 2; }
+  const timeoutMs = timeoutText === undefined ? undefined : Number(timeoutText) * 1000;
+  const snapshots = options.get("snapshots");
+
+  // Each config file is one agent. Addresses given directly are one more.
+  const configs: AgentConfig[] = [];
+  const direct: AgentConfig = { label: "servers given on the command line", servers: [] };
+  for (const input of inputs) {
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(input)) {
+      const usable = usableAddress(input);
+      if (!usable.ok) {
+        // Shown without its login, query or key-like path parts, which is often why it was refused.
+        let shown = "the address";
+        try { shown = addressOf(new URL(input)); } catch { /* not a web address at all */ }
+        console.error(`${printable(shown, 80)} is refused: ${usable.reason}.`);
+        return 2;
+      }
+      direct.servers.push({ name: confined(usable.url.hostname, /[^A-Za-z0-9_.-]+/g, 40) || "server", kind: "remote", url: usable.url.href });
+      continue;
+    }
+    let text: string;
+    try {
+      if ((await stat(input)).size > 4_000_000) { console.error(`${printable(input)} is larger than an agent config should be.`); return 2; }
+      text = await readFile(input, "utf8");
+    } catch { console.error(`${printable(input)} could not be opened.`); return 2; }
+    // Only the file's own name is shown: the folders above it may name a person.
+    const label = confined(path.basename(input), /[^A-Za-z0-9_.-]+/g, 60) || "agent config";
+    const read = readAgentConfig(text, configs.some((config) => config.label === label) ? `${label} (${configs.length + 1})` : label);
+    if (!read.ok) { console.error(`${printable(input)} could not be read as an agent config: ${read.reason}.`); return 2; }
+    configs.push(read.config);
+  }
+  if (direct.servers.length) configs.push(direct);
+
+  // The last saved look for each address is read once, before anything in this run is saved, so a
+  // server listed twice (in two configs, or under two names) is compared with the run before both times.
+  const previousLooks = new Map<string, Promise<Snapshot | null>>();
+  const agents: AgentLook[] = [];
+  for (const config of configs) {
+    const servers: ServerLook[] = [];
+    for (const server of config.servers) {
+      if (server.kind === "skipped") {
+        servers.push({ name: server.name, address: "", outcome: server.why === "switched-off" ? { status: "switched-off" } : { status: "bad-entry", detail: server.detail } });
+        continue;
+      }
+      const address = server.kind === "remote" ? addressOf(new URL(server.url)) : `local: ${server.name}`;
+      if (server.kind === "local" && !options.has("run-local")) { servers.push({ name: server.name, address, outcome: { status: "not-run" } }); continue; }
+      const result = server.kind === "remote"
+        ? await listTools(server.url, timeoutMs ? { timeoutMs } : {})
+        : await listToolsStdio(server.command, { env: { ...programEnvironment(process.env), ...server.env }, ...(timeoutMs ? { timeoutMs } : {}) });
+      if (result.outcome === "sign-in-required") { servers.push({ name: server.name, address, outcome: { status: "sign-in-required", httpStatus: result.status } }); continue; }
+      if (result.outcome !== "listed") { servers.push({ name: server.name, address, outcome: { status: result.outcome, detail: result.detail } }); continue; }
+      let snapshot: Snapshot;
+      try { snapshot = takeSnapshot(address, result.tools, result.server); } catch { servers.push({ name: server.name, address, outcome: { status: "not-usable", detail: "a tool definition is nested too deeply to read" } }); continue; }
+      if (!previousLooks.has(address)) previousLooks.set(address, latestSnapshot(address, snapshots));
+      const previous = await previousLooks.get(address)!;
+      if (options.has("save")) await save(snapshot, snapshots);
+      servers.push({ name: server.name, address, outcome: { status: "listed", snapshot, previous, saved: options.has("save") } });
+    }
+    agents.push({ label: config.label, servers });
+  }
+
+  const reaches = agents.map(reachOf);
+  const text = describeReach(reaches);
+  if (options.has("json")) {
+    const version = (JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { version?: string }).version ?? "unknown";
+    console.log(JSON.stringify(reachJson(reaches, { collectorVersion: version, scannedAt: new Date().toISOString() }), null, 2));
+  } else {
+    console.log(text);
+  }
+  const summaryPath = options.get("summary");
+  if (summaryPath) await writeWhole(summaryPath, `## Agent reach\n\n\`\`\`text\n${text}\n\`\`\`\n`);
+  // A report was made unless nothing at all could be looked at.
+  const anyListed = agents.some((agent) => agent.servers.some((server) => server.outcome.status === "listed"));
+  return anyListed ? 0 : 4;
+}
+
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
   if (command === "check") return check(rest);
+  if (command === "reach") return reach(rest);
   if (command === "watch") return watch(rest);
   const flags = new Set(rest.filter((value) => value.startsWith("--")));
   const args = rest.filter((value) => !value.startsWith("--"));

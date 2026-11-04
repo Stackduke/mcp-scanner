@@ -1,5 +1,5 @@
 name: Stackduke MCP tool check
-description: Compares the tools an MCP server offers with the approved list in stackduke.lock.json, and fails when they differ without approval.
+description: Compares the tools an MCP server offers with the approved list in stackduke.lock.json, and fails when they differ without approval. Can also write an agent reach report to the job summary.
 author: Stackduke
 branding:
   icon: shield
@@ -41,6 +41,20 @@ inputs:
     description: Token used only to post the comment. The default token is enough.
     required: false
     default: ${{ github.token }}
+  reach-config:
+    description: >-
+      Path of an agent's MCP config (mcp.json, .mcp.json, claude_desktop_config.json and the like),
+      from the working directory. When given, the agent reach report is written to the job summary.
+      It never fails the job unless the config cannot be read. With only this input, the lockfile
+      check is skipped.
+    required: false
+    default: ""
+  reach-run-local:
+    description: >-
+      "true" to start the config's local programs to list their tools. They run with this step's
+      environment, so give it only a config whose programs you would run anyway.
+    required: false
+    default: "false"
 
 outputs:
   result:
@@ -71,6 +85,7 @@ runs:
     # can reach; it is not a sandbox. See "GitHub Actions" in the README.
     - name: Check the MCP server's tools against the lockfile
       id: check
+      if: inputs.url != '' || inputs.command != '' || inputs.reach-config == ''
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
@@ -121,8 +136,32 @@ runs:
           echo "Posted the check's summary on the pull request."
         fi
 
+    # Informational: the report goes to the job summary, and only a config that cannot be read fails the step.
+    - name: Write the agent reach report
+      if: inputs.reach-config != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        STACKDUKE_REACH_CONFIG: ${{ inputs.reach-config }}
+        STACKDUKE_REACH_RUN_LOCAL: ${{ inputs.reach-run-local }}
+        STACKDUKE_TIMEOUT: ${{ inputs.timeout }}
+        STACKDUKE_REACH_SUMMARY: ${{ runner.temp }}/stackduke-reach.md
+      run: |
+        rm -f "$STACKDUKE_REACH_SUMMARY"
+        args=(reach "--summary=$STACKDUKE_REACH_SUMMARY")
+        if [ "$STACKDUKE_REACH_RUN_LOCAL" = "true" ]; then args+=("--run-local"); fi
+        if [ -n "$STACKDUKE_TIMEOUT" ]; then args+=("--timeout=$STACKDUKE_TIMEOUT"); fi
+        args+=("$STACKDUKE_REACH_CONFIG")
+        set +e
+        node "$GITHUB_ACTION_PATH/src/cli.ts" "${args[@]}"
+        code=$?
+        set -e
+        if [ -f "$STACKDUKE_REACH_SUMMARY" ]; then cat "$STACKDUKE_REACH_SUMMARY" >> "$GITHUB_STEP_SUMMARY"; fi
+        if [ "$code" = "2" ]; then echo "::error title=Agent reach::The agent config could not be read. See the log."; exit 1; fi
+        exit 0
+
     - name: Fail the job when the check did not pass
-      if: steps.check.outputs.code != '0'
+      if: steps.check.outcome == 'success' && steps.check.outputs.code != '0'
       shell: bash
       env:
         CODE: ${{ steps.check.outputs.code }}

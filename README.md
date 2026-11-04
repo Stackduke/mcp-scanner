@@ -18,6 +18,7 @@ A connected MCP server can change what an agent can do without anyone on the age
 - **Compares two looks**: tools added, removed and changed; for each changed field, whether it appeared, disappeared or was rewritten; and tools now counted as able to do more.
 - **Says what a server lets an agent do, in plain words**, for a reader who is not an engineer, and writes a weekly digest of changes. See [docs/reports.md](docs/reports.md).
 - **Checks a server before it ships**: in a repository's own CI, its tools are compared with an approved list kept beside its code, `stackduke.lock.json`, and the pull request fails until a person approves a change. See [Pre-deploy check](#pre-deploy-check).
+- **Shows an agent's reach**: from an agent's MCP config (Claude, Cursor, VS Code), one page with every server, every tool and its kind, what each label rests on, text-check flags, what changed since the last saved look, and up to three suggested rules. See [Agent reach](#agent-reach).
 - **Watches the servers an agent uses**: in the agent's repository, each server's tools are compared each day with an approved list, `stackduke.watch.json`, read from each server itself, with your own token where it needs a sign-in. A change fails the job and can open an issue. It is an alert, not a block. See [Watching the servers your agents use](#watching-the-servers-your-agents-use).
 
 ## What it does not do
@@ -39,6 +40,7 @@ npm run scan -- scan https://huggingface.co/mcp --save
 STACKDUKE_SCAN_GITHUB_TOKEN=$(gh auth token) npm run scan -- signed-in github --save
 npm run scan -- diff data/snapshots/<a>.json data/snapshots/<b>.json
 npm run scan -- authority data/snapshots/<a>.json [more.json ...]
+npm run scan -- reach examples/reach/mcp.json --run-local --save
 npm run scan -- digest data/snapshots/<server-folder> [more folders ...] --days=7
 npm run scan -- history github/github-mcp-server v1.14.0 v2.0.0
 npm run track -- --data=tracker-data --max-checks=200
@@ -131,7 +133,7 @@ jobs:
           comment: "true"
 ```
 
-Inputs: `url` or `command` (one of them), `lockfile` (default `stackduke.lock.json`), `working-directory`, `timeout`, `comment` (default `"false"`) and `github-token` (default: the job's own token). The output `result` is `passed`, `failed` or `error`.
+Inputs: `url` or `command` (one of them), `lockfile` (default `stackduke.lock.json`), `working-directory`, `timeout`, `comment` (default `"false"`) and `github-token` (default: the job's own token). The output `result` is `passed`, `failed` or `error`. `reach-config` (a path to an agent's MCP config) also writes the [agent reach](#agent-reach) report to the job summary, and `reach-run-local: "true"` lets it start the config's local programs. Given alone, without `url` or `command`, only the reach report runs and `result` is empty.
 
 - `@v0` follows the latest 0.x release; `@v0.4.0` stays fixed.
 - The action runs the scanner from its own copy with Node 22.18 or later, and sets up Node 22 only when the runner has nothing recent enough.
@@ -222,6 +224,38 @@ Inputs: `watchfile` (default `stackduke.watch.json`), `working-directory`, `time
 - A tracker copy is as good as the tracker's account: a tool only your account is shown is invisible to it.
 - The text checks are pattern checks, and a label guessed from a name can be wrong. A pass means nothing changed and nothing matched, not that a server is safe.
 
+## Agent reach
+
+Added on 2026-10-31. `reach` answers "what can this agent touch, and did that change?" for an agent's MCP config, on the machine it runs on. Nothing is sent anywhere.
+
+```sh
+stackduke-mcp-scanner reach ~/.cursor/mcp.json                       # servers at a web address only
+stackduke-mcp-scanner reach .mcp.json --run-local --save             # also start the local programs; keep this look
+stackduke-mcp-scanner reach https://radar.stackduke.com/mcp          # one or more addresses, as one agent
+stackduke-mcp-scanner reach .mcp.json --json                         # the report the collector would send
+```
+
+It reads `mcpServers` (Claude Desktop, Claude Code's `.mcp.json`, Cursor, Windsurf, Cline) or `servers` (VS Code's `mcp.json`), and gives one page per config:
+
+- **Every server and every tool**, with the tool's kind: money, destructive, send, write, unclear or read. Kinds come from [`authority`](docs/reports.md), so they are read the more serious way: where the server's label, the name and the description disagree, the one that says most wins, and a tool nothing labels is unclear, never read.
+- **What each label rests on**: the server's label, the name, the description, or nothing. A star marks a tool counted more seriously than its label; `authority` on a saved snapshot says why.
+- **Text check**: flagged or not, from the [text checks](#what-it-does). Never the text itself.
+- **What changed since the last saved look**: new, removed and changed tools, matched by fingerprint, and a changed tool's earlier kind when it differs. `--save` keeps this look under `data/snapshots/` (or `--snapshots=<folder>`) for next time.
+- **Up to three suggested rules**, most serious first, such as "Require a person's approval before any money tool runs" or "Hold destructive tools until a person approves each call". They are suggestions; nothing enforces them. Fewer are given when fewer apply.
+- **What was not looked at**, and why: a server that wants a sign-in, one that did not answer, a local program not started, or an entry switched off.
+
+**No credential is added.** Headers in the config are ignored, so a server that needs a sign-in is listed as not looked at. An address that carries a key in its path or query is still sent to its own server as written, because that is the address; reports show and store it with the query dropped and key-like path parts replaced by "…". A local program is started only with `--run-local`, with this environment plus the `env` the config gives it, because starting it runs its code: use it for programs you would run anyway, ideally in a container or CI job rather than on a laptop holding production keys.
+
+**The JSON** (`--json`) holds only what the future collector may send: the agent's config file name, each server's address (a web address without its query, and with any path part that looks like a key replaced by `…`; or `local: <name>`) and status, and for each tool its name, kind, label source, fingerprint and a yes/no `hiddenInstructions` flag, with the scan time and the scanner's version. No description, schema, token or environment variable is in it. Changes and suggested rules are left out, because they are worked out from two reports.
+
+**Exit codes.** 0: a report was made. 4: no server could be looked at. 2: the options or a config could not be read.
+
+### Limits of reach
+
+- Labels are guesses from what servers say about themselves, and the page says so. It is not a safety rating, and a missing label proves nothing.
+- It sees only the servers in the config, as an anonymous visitor. A signed-in account may be shown other tools, and an agent may reach servers its config does not list.
+- A server that still speaks only the older SSE transport is reported as not usable.
+
 ## The tracker
 
 `track` is one run of the public tracker over a data folder. [`.github/workflows/track.yml`](.github/workflows/track.yml) runs it every day at 04:17 UTC and commits the folder to the `data` branch.
@@ -308,6 +342,7 @@ To add a vendor: it must sign in with automatic registration (`oauth-dcr`). Give
 - `src/snapshot.ts`, `src/diff.ts`, `src/files.ts`: fingerprints, snapshots, comparisons, and reading and writing them.
 - `src/risk.ts`: capability labels. `src/findings.ts`: the text checks. `src/text.ts`: making untrusted text safe to print.
 - `src/authority.ts`, `src/digest.ts`, `src/report.ts`: the plain-language report, the weekly digest and the technical report.
+- `src/agent-config.ts`, `src/reach.ts`: reading an agent's MCP config, and the agent reach report and its suggested rules. `examples/reach/`: a config to try it on.
 - `src/registry.ts`, `src/tracker.ts`, `src/crawl.ts`, `src/track.ts`: the tracker: reading the registry, planning and recording checks, running them politely, and one run end to end.
 - `catalog/servers.json`, `src/catalog.ts`: the servers supported officially, and checking the file.
 - `src/oauth.ts`, `src/try-sign-in.ts`: signing in the standard way, and a test sign-in.
