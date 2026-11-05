@@ -1,0 +1,1 @@
+{"source":"https://api.osmanth.com/mcp","takenAt":"2026-11-05T12:38:29.821Z","server":{"name":"agent-shop-search","version":"0.2.1"},"tools":[{"name":"search_products","kind":"read","fields":{"title":"642f4c133f0b05c8","description":"8997b06f208388dd","inputSchema":"d4afece31234aa45","annotations":"dc58e55a8287733e"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://teleprompt.net/api/mcp","takenAt":"2026-11-05T12:38:48.509Z","server":{"name":"teleprompter","version":"1.0.0"},"tools":[{"name":"open_in_teleprompter","kind":"read","fields":{"title":"dde93da437c13d54","description":"c8930eb47bf6aa30","inputSchema":"770064ba0eaed2f5","annotations":"784ae6b97bd4c36a"}}]}

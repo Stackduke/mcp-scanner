@@ -1,0 +1,1 @@
+{"source":"https://modelsalt.com/mcp","takenAt":"2026-11-05T12:38:44.026Z","server":{"name":"model-salt-openai-hosted","version":"1.0.0"},"tools":[{"name":"model_salt","kind":"read","fields":{"title":"c583c331ce2c50f2","description":"f7e8138fc4e3d6b0","inputSchema":"d2a0be41c070c460","annotations":"2e7fcf324b2df269"}}]}

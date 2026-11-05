@@ -1,1 +1,1 @@
-{"source":"https://ukdata.reliness.co.uk/mcp/uk-tenders","takenAt":"2026-11-04T12:42:50.517Z","server":{"name":"uk-tenders","version":"1.0.0"},"tools":[{"name":"tenders_search","kind":"unclear","fields":{"description":"3c891dfec42c5034","inputSchema":"2193c811da2462f2"}}]}
+{"source":"https://ukdata.reliness.co.uk/mcp/uk-tenders","takenAt":"2026-11-05T12:40:05.831Z","server":{"name":"uk-tenders","version":"1.0.0"},"tools":[{"name":"tenders_search","kind":"read","fields":{"description":"3c891dfec42c5034","inputSchema":"2193c811da2462f2","annotations":"30172ca0ff96303b"}}]}

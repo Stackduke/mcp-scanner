@@ -1,0 +1,1 @@
+{"source":"https://api.batteryfigures.com/mcp","takenAt":"2026-11-05T12:38:27.955Z","server":{"name":"batteryfigures","version":"1"},"tools":[{"name":"preview_vin","kind":"read","fields":{"description":"e14f375667e40916","inputSchema":"efe08b69b7063e61","annotations":"7e8ddf62db0cb5f9"}}]}

@@ -1,1 +1,1 @@
-{"source":"https://ukdata.reliness.co.uk/mcp/web-reader","takenAt":"2026-11-04T12:42:54.516Z","server":{"name":"web-reader","version":"1.0.0"},"tools":[{"name":"read_url","kind":"read","fields":{"description":"628a9c79ce8a9324","inputSchema":"1bffc7ffd8cf80c0"}}]}
+{"source":"https://ukdata.reliness.co.uk/mcp/web-reader","takenAt":"2026-11-05T12:40:09.856Z","server":{"name":"web-reader","version":"1.0.0"},"tools":[{"name":"read_url","kind":"read","fields":{"description":"628a9c79ce8a9324","inputSchema":"1bffc7ffd8cf80c0","annotations":"c5c704045e6acb85"}}]}
