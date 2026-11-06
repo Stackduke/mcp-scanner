@@ -1,0 +1,1 @@
+{"source":"https://nexus.ulupstudio.com/mcp","takenAt":"2026-11-06T12:27:52.829Z","server":{"name":"ulup-nexus","version":"0.1.0"},"tools":[{"name":"list_categories","kind":"read","fields":{"description":"5964df1ea6c0f221","inputSchema":"efddc7bd8bbcef73"}},{"name":"search_projects","kind":"read","fields":{"description":"a97ca7dcfd9fc47d","inputSchema":"87a3e09c2fb351fe"}}]}

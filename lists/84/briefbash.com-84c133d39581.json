@@ -1,0 +1,1 @@
+{"source":"https://briefbash.com/mcp","takenAt":"2026-11-06T12:27:40.965Z","server":{"name":"briefbash","version":"1.0.0"},"tools":[{"name":"get_brief","kind":"read","fields":{"description":"f294e6d402609af1","inputSchema":"a91e30f41cec702c"}},{"name":"submit_analysis","kind":"write","fields":{"description":"2b09f48f077792cd","inputSchema":"6d4afc8c12b4a100"}}]}

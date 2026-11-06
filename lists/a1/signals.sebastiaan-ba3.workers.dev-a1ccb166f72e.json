@@ -1,1 +1,1 @@
-{"source":"https://signals.sebastiaan-ba3.workers.dev/mcp","takenAt":"2026-11-03T12:09:20.387Z","server":{"name":"signals","version":"1.0.0"},"tools":[{"name":"get_market_preview","kind":"write","fields":{"description":"9a2c4ed5c530920f","inputSchema":"efddc7bd8bbcef73"}}]}
+{"source":"https://signals.sebastiaan-ba3.workers.dev/mcp","takenAt":"2026-11-06T12:21:11.655Z","server":{"name":"signals","version":"1.0.0"},"tools":[{"name":"get_market_preview","kind":"read","fields":{"description":"9a2c4ed5c530920f","inputSchema":"efddc7bd8bbcef73","annotations":"1281b50a8ab38602"}}]}
