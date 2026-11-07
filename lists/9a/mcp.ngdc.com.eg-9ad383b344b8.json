@@ -1,0 +1,1 @@
+{"source":"https://mcp.ngdc.com.eg/mcp","takenAt":"2026-11-07T11:21:30.324Z","server":{"name":"ngdc-sales","version":"0.1.0"},"tools":[{"name":"estimate_content_fee","kind":"read","fields":{"description":"fc9aa60b2948a29c","inputSchema":"02feacd88fcdbc2b"}},{"name":"list_services","kind":"read","fields":{"description":"e3aef44c921fb0e7","inputSchema":"7a014b717a77aac9"}}]}

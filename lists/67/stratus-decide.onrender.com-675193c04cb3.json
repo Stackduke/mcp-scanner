@@ -1,0 +1,1 @@
+{"source":"https://stratus-decide.onrender.com/mcp","takenAt":"2026-11-07T11:21:37.064Z","server":{"name":"decide","version":"0.3.0"},"tools":[{"name":"validate_migration_discovery","kind":"read","fields":{"title":"186bc742230f17da","description":"fe26989562f8ac49","inputSchema":"76d062d8a8414d4c","outputSchema":"ceb305d4aeedb87a"}}]}

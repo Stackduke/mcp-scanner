@@ -1,0 +1,1 @@
+{"source":"https://gdtf-lights.com/mcp/dmx-to-gdtf","takenAt":"2026-11-07T11:21:22.792Z","server":{"name":"gdtf-lights-dmx-to-gdtf","version":"1.5.0"},"tools":[{"name":"match_dmx_channels","kind":"read","fields":{"title":"86faf527e205b70b","description":"63ff5a0efedb10ff","inputSchema":"c22558200db311e1","outputSchema":"38540514911113b5","annotations":"1cb506eac3f6f29b"}}]}

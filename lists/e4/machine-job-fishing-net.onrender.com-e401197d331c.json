@@ -1,0 +1,1 @@
+{"source":"https://machine-job-fishing-net.onrender.com/historical-edge/mcp/","takenAt":"2026-11-07T11:23:50.653Z","server":{"name":"historical-edge","version":"0.1.0"},"tools":[{"name":"get_historical_edge","kind":"read","fields":{"description":"72e548955a97718f","inputSchema":"f9a44507c13aed14","outputSchema":"a37001ef9c0d12c8"}}]}
