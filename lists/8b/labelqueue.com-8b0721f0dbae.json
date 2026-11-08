@@ -1,0 +1,1 @@
+{"source":"https://labelqueue.com/api/mcp","takenAt":"2026-11-08T11:35:54.370Z","server":{"name":"com.labelqueue/mcp","version":"1.0.0"},"tools":[{"name":"lookup_avery_label_specs","kind":"read","fields":{"description":"73d2ba556263374f","inputSchema":"56710ad5ea36a800"}}]}

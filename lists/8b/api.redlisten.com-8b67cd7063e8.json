@@ -1,0 +1,1 @@
+{"source":"https://api.redlisten.com/mcp","takenAt":"2026-11-08T11:35:45.404Z","server":{"name":"redlisten","version":"1.1.0"},"tools":[{"name":"reddit_preview","kind":"unclear","fields":{"description":"529f2a0686e09178","inputSchema":"4d60b56e343d857d"}},{"name":"subreddit_preview","kind":"write","fields":{"description":"30251af00977335f","inputSchema":"0b2970dd0d303fa9"}}]}

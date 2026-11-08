@@ -1,0 +1,1 @@
+{"source":"https://api.aflink.us/mcp","takenAt":"2026-11-08T11:35:44.009Z","server":{"name":"us.aflink/search","version":"1.0.0"},"tools":[{"name":"search_links","kind":"read","fields":{"title":"4729c5d6aafcb8b9","description":"ce27fe9184711740","inputSchema":"cfd935a2b7760171","outputSchema":"3c7dd46422aeadd7","annotations":"0f4c05d4c8ea07ea"}}]}

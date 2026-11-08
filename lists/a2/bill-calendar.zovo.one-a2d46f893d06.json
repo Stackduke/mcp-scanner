@@ -1,0 +1,1 @@
+{"source":"https://bill-calendar.zovo.one/mcp","takenAt":"2026-11-08T11:35:47.897Z","server":{"name":"bill-calendar","version":"1.0.0"},"tools":[{"name":"generate_bill_calendar","kind":"read","fields":{"title":"1067ca56d8efd914","description":"25931463733d72f9","inputSchema":"7a08e5a70255696f","outputSchema":"0347a1fd0e22c27c","annotations":"230f5df5ec22a393"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://avg-balance.zovo.one/mcp","takenAt":"2026-11-08T11:35:46.921Z","server":{"name":"avg-balance","version":"1.0.0"},"tools":[{"name":"calculate_average_balance","kind":"read","fields":{"title":"ed568558e759b499","description":"f0e6782ee1fc6f0c","inputSchema":"7bee8150ec290a61","outputSchema":"44244852c50604d5","annotations":"fd74171cd42582a4"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://api.newcollab.co/api/v1/integrations/claude/mcp","takenAt":"2026-11-08T11:35:44.853Z","server":{"name":"newcollab-creators","version":"1.0.0"},"tools":[{"name":"search_ugc_creators","kind":"read","fields":{"title":"5d3f2954d0b044af","description":"cd42406201a06478","inputSchema":"49a9351310db4fa6","annotations":"64f3c42bffb50525"}}]}

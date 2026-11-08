@@ -1,0 +1,1 @@
+{"source":"https://massageinchina.com/api/mcp","takenAt":"2026-11-08T11:35:55.456Z","server":{"name":"com.massageinchina/mcp","version":"1.0.0"},"tools":[{"name":"lookup_tcm_acupoints_and_tuina","kind":"read","fields":{"description":"555a68075675f2ac","inputSchema":"81d17127d637930d"}}]}

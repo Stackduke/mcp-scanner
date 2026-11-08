@@ -1,0 +1,1 @@
+{"source":"https://gst-invoice.zovo.one/mcp","takenAt":"2026-11-08T11:35:52.646Z","server":{"name":"gst-invoice","version":"1.0.0"},"tools":[{"name":"generate_gst_invoice","kind":"read","fields":{"title":"243ec0248f66b8e7","description":"494b221e2a608cb0","inputSchema":"74868f8e5cfa2d23","outputSchema":"e2065a8826be71cb","annotations":"19ceeb0ef0fa540b"}}]}

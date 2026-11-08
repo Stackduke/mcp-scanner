@@ -1,0 +1,1 @@
+{"source":"https://certificate-maker.zovo.one/mcp","takenAt":"2026-11-08T11:35:48.647Z","server":{"name":"certificate-maker","version":"1.0.0"},"tools":[{"name":"generate_certificates","kind":"read","fields":{"title":"1d2ed61c96bf51ce","description":"96b6e8eaf84ff234","inputSchema":"b1f5630733cc9e63","outputSchema":"89c5510a634bd88b","annotations":"5b34b1394ccb8818"}}]}

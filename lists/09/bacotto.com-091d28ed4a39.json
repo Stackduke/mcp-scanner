@@ -1,0 +1,1 @@
+{"source":"https://bacotto.com/api/mcp","takenAt":"2026-11-08T11:36:23.254Z","server":{"name":"bacotto","version":"1.0.0"},"tools":[{"name":"generate_sales_list","kind":"read","fields":{"description":"71c3e3c26e57e7f5","inputSchema":"2cc14f83234c894b"}},{"name":"get_account","kind":"read","fields":{"description":"e1cff3bd9a6da0a0","inputSchema":"efddc7bd8bbcef73"}}]}
