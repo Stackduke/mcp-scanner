@@ -1,0 +1,1 @@
+{"source":"https://knappekeuze.nl/mcp","takenAt":"2026-11-09T13:17:28.482Z","server":{"name":"knappekeuze","version":"1.0.0"},"tools":[{"name":"compare_products","kind":"read","fields":{"description":"4ade0dc1547bf7ce","inputSchema":"5d0aa73c33789d59"}},{"name":"search_products","kind":"read","fields":{"description":"ef239306e891687a","inputSchema":"e9fc437a8e963afd"}}]}
