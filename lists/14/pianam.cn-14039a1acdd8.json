@@ -1,0 +1,1 @@
+{"source":"https://pianam.cn/weather-mcp/mcp","takenAt":"2026-11-10T13:03:59.244Z","server":{"name":"weather-mcp","version":"4.1.3"},"tools":[{"name":"query_weather","kind":"read","fields":{"title":"a68f3480411e6af6","description":"a82b01765fd84adc","inputSchema":"cbe48f2bbf1588d5","outputSchema":"82ef96cebaf5fbe1"}}]}

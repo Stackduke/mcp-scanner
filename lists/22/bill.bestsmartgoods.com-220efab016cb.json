@@ -1,0 +1,1 @@
+{"source":"https://bill.bestsmartgoods.com/mcp","takenAt":"2026-11-10T13:01:18.324Z","server":{"name":"billparse","version":"0.1.0"},"tools":[{"name":"parse_invoice","kind":"read","fields":{"title":"67b485565904fd03","description":"37e1942810f9b87c","inputSchema":"82195d6af3cde20a","outputSchema":"a25b091217d573dc","annotations":"47cfe292ffd2aa4c"}}]}
