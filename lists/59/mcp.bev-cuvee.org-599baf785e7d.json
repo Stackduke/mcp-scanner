@@ -1,0 +1,1 @@
+{"source":"https://mcp.bev-cuvee.org/mcp","takenAt":"2026-11-11T12:11:45.101Z","server":{"name":"ai.agent-bev/library","version":"0.1.0"},"tools":[{"name":"get_rulebook","kind":"money","fields":{"description":"3b3ff017176fe5cd","inputSchema":"af2dac9ad82f9aa5"}},{"name":"list_countries","kind":"read","fields":{"description":"cbee52347414bda1","inputSchema":"efddc7bd8bbcef73"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://gasoliguapis.es/api/mcp","takenAt":"2026-11-11T12:11:40.626Z","server":{"name":"gasoliguapis-public","version":"1.0.0"},"tools":[{"name":"search_gas_stations","kind":"read","fields":{"title":"ebb6b002c05cfda0","description":"b6dfc76d0c5ac894","inputSchema":"a740f5e1118788e4","annotations":"26003942a29d2289"}}]}

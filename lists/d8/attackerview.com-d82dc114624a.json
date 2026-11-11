@@ -1,0 +1,1 @@
+{"source":"https://attackerview.com/api/public/mcp","takenAt":"2026-11-11T12:11:34.625Z","server":{"name":"attackerview","version":"1.0.0"},"tools":[{"name":"check_website_security","kind":"read","fields":{"title":"5fc5ad702a836bd0","description":"117f42da27e07bbb","inputSchema":"1f3a0c09ee64c157","outputSchema":"ed9481db9018160e","annotations":"162fb3cf62c48e1d"}}]}

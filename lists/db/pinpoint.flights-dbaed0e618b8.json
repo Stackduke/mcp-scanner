@@ -1,0 +1,1 @@
+{"source":"https://pinpoint.flights/mcp","takenAt":"2026-11-11T12:11:51.828Z","server":{"name":"pinpoint-flights","version":"1.1.1"},"tools":[{"name":"search_flights","kind":"read","fields":{"title":"a2f56a8513ba3ebb","description":"4e07bd30981680d7","inputSchema":"390dc4bf07264b5f","annotations":"139076388a98d13d"}}]}

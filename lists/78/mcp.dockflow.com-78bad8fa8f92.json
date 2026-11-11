@@ -1,0 +1,1 @@
+{"source":"https://mcp.dockflow.com/public/mcp","takenAt":"2026-11-11T12:11:46.167Z","server":{"name":"Dockflow Container Tracking","version":""},"tools":[{"name":"track_container","kind":"read","fields":{"title":"04c60240fa0d2e3a","description":"f6406b70a4d25807","inputSchema":"d5cfb1849842b464","outputSchema":"cc5c3c24fb348c3f","annotations":"970915d27850dca7"}}]}

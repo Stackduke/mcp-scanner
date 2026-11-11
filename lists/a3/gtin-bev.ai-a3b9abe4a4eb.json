@@ -1,0 +1,1 @@
+{"source":"https://gtin-bev.ai/mcp","takenAt":"2026-11-11T12:11:41.623Z","server":{"name":"bevGTIN","version":"0.2.0"},"tools":[{"name":"confirm_gtin","kind":"read","fields":{"title":"b166d6283a3a4540","description":"b0e9342fb34c1696","inputSchema":"68aa2fb82210a687","annotations":"ae78503371695cf7"}}]}
