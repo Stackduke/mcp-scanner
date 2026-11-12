@@ -1,0 +1,1 @@
+{"source":"https://llmmargin.com/mcp","takenAt":"2026-11-12T13:09:07.162Z","server":{"name":"llmmargin","version":"1.0.0"},"tools":[{"name":"estimate_ai_service","kind":"read","fields":{"description":"2bebc808d75ac498","inputSchema":"69150d1d0030b4da","annotations":"ae78503371695cf7"}}]}

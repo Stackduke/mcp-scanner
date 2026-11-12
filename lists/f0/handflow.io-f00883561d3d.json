@@ -1,0 +1,1 @@
+{"source":"https://handflow.io/mcp","takenAt":"2026-11-12T13:09:05.381Z","server":{"name":"handflow","version":"1.0.0"},"tools":[{"name":"request_early_access","kind":"write","fields":{"description":"ceeedc537470c47b","inputSchema":"fba2f72380c5e281"}},{"name":"sign_up_to_earn","kind":"write","fields":{"description":"22d4d3fcce6b7ead","inputSchema":"4e7f3666dce3959c"}}]}

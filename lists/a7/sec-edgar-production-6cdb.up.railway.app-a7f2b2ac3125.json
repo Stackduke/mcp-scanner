@@ -1,0 +1,1 @@
+{"source":"https://sec-edgar-production-6cdb.up.railway.app/mcp","takenAt":"2026-11-12T13:12:27.282Z","server":{"name":"sec-edgar","version":"0.2.0"},"tools":[{"name":"sec_company_filings","kind":"unclear","fields":{"description":"0ffa1969263c01be","inputSchema":"50f5d5b7e8016d52"}}]}

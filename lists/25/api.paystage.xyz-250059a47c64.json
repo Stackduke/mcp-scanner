@@ -1,0 +1,1 @@
+{"source":"https://api.paystage.xyz/mcp","takenAt":"2026-11-12T13:08:55.308Z","server":{"name":"paystage","version":"2026.11.12"},"tools":[{"name":"evaluate_mcp_payment","kind":"unclear","fields":{"description":"0288f25755ae9f96","inputSchema":"5e283e28b56a1ad2"}}]}
