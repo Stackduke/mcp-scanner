@@ -1,0 +1,1 @@
+{"source":"https://transformer.gg/mcp/public","takenAt":"2026-11-13T12:35:11.166Z","server":{"name":"transformer-public","version":"be37e3a"},"tools":[{"name":"get_influencer_value","kind":"read","fields":{"title":"f1536e755d946d59","description":"d908d8bdfd05d95b","inputSchema":"0657390edeea394a","annotations":"de8d576470a435bb"}}]}

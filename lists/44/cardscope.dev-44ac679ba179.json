@@ -1,0 +1,1 @@
+{"source":"https://cardscope.dev/mcp","takenAt":"2026-11-13T12:34:51.624Z","server":{"name":"cardscope","version":"1.0.0"},"tools":[{"name":"check_link_preview","kind":"read","fields":{"description":"eaf7a819e911d56b","inputSchema":"d93b24076401018a"}},{"name":"list_platforms","kind":"read","fields":{"description":"b739974a9c745aa8","inputSchema":"7a014b717a77aac9"}}]}

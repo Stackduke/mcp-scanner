@@ -1,0 +1,1 @@
+{"source":"https://api.topxai.xyz/mcp/images","takenAt":"2026-11-13T12:34:47.040Z","server":{"name":"TopxAI Images","version":"v1.0.0"},"tools":[{"name":"generate_image","kind":"unclear","fields":{"title":"0b4f1202aa022ac1","description":"3ce293ed760f6761","inputSchema":"3bbff76f65eedeb3","outputSchema":"1f5fc3b8f44eff40"}}]}
