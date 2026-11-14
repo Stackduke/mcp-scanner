@@ -1,0 +1,1 @@
+{"source":"https://lucidflow.ai/api/mcp","takenAt":"2026-11-14T11:49:59.048Z","server":{"name":"lucidflow-bpmn-validator","version":"1.0.0"},"tools":[{"name":"validate_bpmn","kind":"read","fields":{"title":"d603bd49611f7763","description":"344748922492cacc","inputSchema":"5b7996965d92565c","annotations":"ae78503371695cf7"}}]}

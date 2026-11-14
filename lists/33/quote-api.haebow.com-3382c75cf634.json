@@ -1,0 +1,1 @@
+{"source":"https://quote-api.haebow.com/tools/mcp","takenAt":"2026-11-14T11:50:04.970Z","server":{"name":"Korean Quotation PDF Demo","version":"0.1.0"},"tools":[{"name":"extract_fictional_korean_quotation","kind":"read","fields":{"description":"e341f33067eef2e9","inputSchema":"d8621660d947da13","outputSchema":"052c6b55cb197fff","annotations":"9bedd1194137a0bb"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://recalls.bot2botlabs.com/mcp","takenAt":"2026-11-14T11:50:05.400Z","server":{"name":"recall-check","version":"0.1.0"},"tools":[{"name":"check_recall","kind":"read","fields":{"description":"ab194a0606c52b42","inputSchema":"3162a0cc3af204cc"}},{"name":"get_receipt","kind":"read","fields":{"description":"cda3f6b2c0d07fd6","inputSchema":"2be7e9e7cb7540e4"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://mcp.pianam.cn/exchange-mcp/mcp","takenAt":"2026-11-14T11:54:15.348Z","server":{"name":"exchange-mcp","version":"4.1.3"},"tools":[{"name":"query_exchange_rate","kind":"read","fields":{"title":"adcd329941369f61","description":"d2d61f41010da056","inputSchema":"7c58d09adfe7be88","outputSchema":"82ef96cebaf5fbe1"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://mcp.pianam.cn/fuel-mcp/mcp","takenAt":"2026-11-14T11:54:18.016Z","server":{"name":"fuel-mcp","version":"4.1.3"},"tools":[{"name":"query_oil_price","kind":"read","fields":{"title":"1aefb64f7da4fa88","description":"4fca545405764c9a","inputSchema":"154f3207bfd47a1b","outputSchema":"82ef96cebaf5fbe1"}}]}
