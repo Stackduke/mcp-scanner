@@ -1,1 +1,1 @@
-{"source":"https://orbtown.com/mcp","takenAt":"2026-11-14T11:50:03.360Z","server":{"name":"orbtown","version":"1.22.0"},"tools":[{"name":"search_businesses","kind":"read","fields":{"description":"790c407a07b09e63","inputSchema":"cf5398955e19ef2d"}}]}
+{"source":"https://orbtown.com/mcp","takenAt":"2026-11-15T12:14:22.814Z","server":{"name":"orbtown","version":"1.34.0"},"tools":[{"name":"search_businesses","kind":"read","fields":{"description":"60f14307c4498056","inputSchema":"582f68d3280189cb"}}]}

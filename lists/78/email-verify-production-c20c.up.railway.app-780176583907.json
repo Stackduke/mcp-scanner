@@ -1,0 +1,1 @@
+{"source":"https://email-verify-production-c20c.up.railway.app/mcp","takenAt":"2026-11-15T12:14:58.305Z","server":{"name":"email-verify","version":"0.2.0"},"tools":[{"name":"email_verify","kind":"read","fields":{"description":"18cf52681cffc01e","inputSchema":"31fc2aa9c8b55451"}}]}
