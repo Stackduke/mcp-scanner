@@ -1,0 +1,1 @@
+{"source":"https://api.nexsusa.com/mcp","takenAt":"2026-11-16T13:07:56.556Z","server":{"name":"nexus-m2m","version":"3.1.0"},"tools":[{"name":"list_services","kind":"read","fields":{"description":"fdd9fee31e29628c","inputSchema":"efddc7bd8bbcef73"}},{"name":"service_info","kind":"unclear","fields":{"description":"85706137b25b6a1b","inputSchema":"cf606caa284461c7"}}]}

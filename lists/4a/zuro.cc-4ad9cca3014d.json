@@ -1,0 +1,1 @@
+{"source":"https://zuro.cc/mcp","takenAt":"2026-11-16T13:08:17.755Z","server":{"name":"zuro","version":"1.0.0"},"tools":[{"name":"check_score","kind":"read","fields":{"description":"82d9bcc49f17c708","inputSchema":"5351d3a4e13f5e7a"}},{"name":"remove_watermark","kind":"destructive","fields":{"description":"33b7c966843c1184","inputSchema":"6483699c5cc9f463"}}]}
