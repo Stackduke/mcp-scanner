@@ -1,0 +1,1 @@
+{"source":"https://api.tadasignals.com/mcp","takenAt":"2026-11-17T13:51:53.254Z","server":{"name":"signals","version":"0.1.0"},"tools":[{"name":"get_funding_events","kind":"read","fields":{"description":"a542cb343f0248db","inputSchema":"5e6504ce175d730d"}}]}
