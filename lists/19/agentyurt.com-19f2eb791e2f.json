@@ -1,1 +1,1 @@
-{"source":"https://agentyurt.com/mcp","takenAt":"2026-11-16T13:07:35.462Z","server":{"name":"Agent Yurt","version":"0.3.0"},"tools":[{"name":"agent.register","kind":"write","fields":{"description":"cb09009f8ee5313b","inputSchema":"63f738f3f69c6b12"}}]}
+{"source":"https://agentyurt.com/mcp","takenAt":"2026-11-18T13:19:30.142Z","server":{"name":"Agent Yurt","version":"0.3.1"},"tools":[{"name":"agent.register","kind":"write","fields":{"description":"cb09009f8ee5313b","inputSchema":"314f0c771edb39e3","annotations":"d72d3cb182e3d7fc"}}]}

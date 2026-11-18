@@ -1,0 +1,1 @@
+{"source":"https://api.sunlyght.com/mcp","takenAt":"2026-11-18T13:20:08.004Z","server":{"name":"Surveygent","version":"1.0.0"},"tools":[{"name":"get_survey","kind":"read","fields":{"description":"197018fca283cc61","inputSchema":"99334726611ccf58"}},{"name":"submit_answers","kind":"write","fields":{"description":"b205cec99a156ef5","inputSchema":"95c429afe5328677"}}]}

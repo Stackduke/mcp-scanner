@@ -1,1 +1,1 @@
-{"source":"https://harvis.dev/api/mcp","takenAt":"2026-10-16T18:15:57.763Z","server":{"name":"harvis.dev","version":"1.0.0"},"tools":[{"name":"deploy_site","kind":"send","fields":{"description":"1b2fdc04a1572810","inputSchema":"4ea6b7d64c5e95b7"}}]}
+{"source":"https://harvis.dev/api/mcp","takenAt":"2026-11-18T13:12:57.323Z","server":{"name":"harvis.dev","version":"1.0.0"},"tools":[{"name":"deploy_site","kind":"send","fields":{"title":"0d6859710b115e45","description":"d67a8dcbccfa8605","inputSchema":"34cefaf3c569d397","annotations":"bbca3f90a8f37a2e"}}]}
