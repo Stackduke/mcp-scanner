@@ -1,0 +1,1 @@
+{"source":"https://email-security-deliverability-grader.b2bintel-edge.workers.dev/mcp","takenAt":"2026-11-19T13:38:24.002Z","server":{"name":"email-deliverability-grader-mcp","version":"1.0.0"},"tools":[{"name":"grade_domain_email_security","kind":"unclear","fields":{"description":"5f2e03e3a5b0dc78","inputSchema":"aa84c456aee95fd9"}}]}

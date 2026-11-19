@@ -1,0 +1,1 @@
+{"source":"https://www.aurioapp.com/api/mcp/extracto","takenAt":"2026-11-19T13:41:42.455Z","server":{"name":"aurio-extracto","version":"1.0.0"},"tools":[{"name":"analizar_extracto","kind":"read","fields":{"title":"5936fb49dba41a11","description":"8b154422471051b8","inputSchema":"ff62cf09d4445e27","outputSchema":"11063fd832064dd1","annotations":"1bd92391396ea267"}}]}

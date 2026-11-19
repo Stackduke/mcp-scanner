@@ -1,0 +1,1 @@
+{"source":"https://api.shortspec.com/mcp","takenAt":"2026-11-19T13:38:16.620Z","server":{"name":"barcode-facts","version":"0.3"},"tools":[{"name":"barcode_facts","kind":"read","fields":{"title":"83d4f0e97f643722","description":"eb4bd78c6d5d147c","inputSchema":"32474ed2e2d177f8","outputSchema":"47715e4a4b58895a","annotations":"ae78503371695cf7"}}]}
