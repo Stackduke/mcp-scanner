@@ -1,0 +1,1 @@
+{"source":"https://weather-windows-x402.exmachina-systems.workers.dev/mcp","takenAt":"2026-11-20T13:19:08.021Z","server":{"name":"weather-windows","version":"0.2.0"},"tools":[{"name":"preview_weather","kind":"read","fields":{"title":"cba7e48aaccb76ca","description":"6f97408c20ae07ba","inputSchema":"efddc7bd8bbcef73","annotations":"dc58e55a8287733e"}}]}

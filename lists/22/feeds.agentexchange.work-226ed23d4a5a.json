@@ -1,0 +1,1 @@
+{"source":"https://feeds.agentexchange.work/mcp?tools=pool_candles","takenAt":"2026-11-20T13:20:36.877Z","server":{"name":"agentexchange-feeds","version":"1.0.0"},"tools":[{"name":"pool_candles","kind":"read","fields":{"title":"ddcc189e3f01d30e","description":"daa01b77f3e9ba3a","inputSchema":"922b21e6df7c6f41","annotations":"930740d4c66cd11d"}}]}

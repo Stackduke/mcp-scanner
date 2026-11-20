@@ -1,0 +1,1 @@
+{"source":"https://feeds.agentexchange.work/mcp?tools=uniswap_pool_stats","takenAt":"2026-11-20T13:20:39.534Z","server":{"name":"agentexchange-feeds","version":"1.0.0"},"tools":[{"name":"uniswap_pool_stats","kind":"read","fields":{"title":"fbd9cffa706333d2","description":"dc4f71bc52f807cb","inputSchema":"6b350abb9e23b910","annotations":"40312925f305fb19"}}]}

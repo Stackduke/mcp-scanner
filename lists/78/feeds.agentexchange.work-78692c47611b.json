@@ -1,0 +1,1 @@
+{"source":"https://feeds.agentexchange.work/mcp?tools=wikipedia_top_articles","takenAt":"2026-11-20T13:20:46.340Z","server":{"name":"agentexchange-feeds","version":"1.0.0"},"tools":[{"name":"wikipedia_top_articles","kind":"destructive","fields":{"title":"098029dd14eb86b5","description":"dc2289662164db6d","inputSchema":"6b9d367f91e62d1e","annotations":"27680f56169cc915"}}]}

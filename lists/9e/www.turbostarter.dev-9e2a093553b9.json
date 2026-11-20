@@ -1,0 +1,1 @@
+{"source":"https://www.turbostarter.dev/mcp","takenAt":"2026-11-20T13:19:09.992Z","server":{"name":"turbostarter-docs","version":"1.0.0"},"tools":[{"name":"read_doc","kind":"read","fields":{"description":"9706397ce1763cc5","inputSchema":"8f29a6548606934a"}},{"name":"search_docs","kind":"read","fields":{"description":"f7c77d72935bdd42","inputSchema":"f4651c5998c614b7"}}]}

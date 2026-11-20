@@ -1,0 +1,1 @@
+{"source":"https://dadaovalue.com/api/mcp","takenAt":"2026-11-20T13:18:50.905Z","server":{"name":"dadao-value","version":"1.0.0"},"tools":[{"name":"ask_framework","kind":"read","fields":{"description":"68b69d1c37160938","inputSchema":"1bb2ec2b962d0eb1"}},{"name":"evaluate_company","kind":"write","fields":{"description":"b9b35a12e36e5037","inputSchema":"e705eb14845fbed7"}}]}

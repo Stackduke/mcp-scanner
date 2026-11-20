@@ -1,0 +1,1 @@
+{"source":"https://feeds.agentexchange.work/mcp?tools=uniswap_recent_swaps","takenAt":"2026-11-20T13:20:43.204Z","server":{"name":"agentexchange-feeds","version":"1.0.0"},"tools":[{"name":"uniswap_recent_swaps","kind":"read","fields":{"title":"3c32369d9fe05da2","description":"2905d8a3e0dded8d","inputSchema":"8bd201374d0c5434","annotations":"2b01b001a6585698"}}]}

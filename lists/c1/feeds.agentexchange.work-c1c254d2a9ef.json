@@ -1,0 +1,1 @@
+{"source":"https://feeds.agentexchange.work/mcp?tools=us_tide_predictions","takenAt":"2026-11-20T13:20:44.280Z","server":{"name":"agentexchange-feeds","version":"1.0.0"},"tools":[{"name":"us_tide_predictions","kind":"read","fields":{"title":"97e74e59aa3c0fba","description":"8f53d747b5a9e794","inputSchema":"9e365f4adcd23bbf","annotations":"96651b1e4cffa4e6"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://feeds.agentexchange.work/mcp?tools=sanctions_check","takenAt":"2026-11-20T13:20:38.474Z","server":{"name":"agentexchange-feeds","version":"1.0.0"},"tools":[{"name":"sanctions_check","kind":"read","fields":{"title":"023b2524f3a23f5f","description":"bc1581599b841278","inputSchema":"b7e1adf3f9e1714b","annotations":"e448ad09d5fbce29"}}]}

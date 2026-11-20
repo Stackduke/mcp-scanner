@@ -1,0 +1,1 @@
+{"source":"https://action2mcp.ak10082247.workers.dev/mcp","takenAt":"2026-11-20T13:18:44.706Z","server":{"name":"action2mcp","version":"1.0.0"},"tools":[{"name":"convert_openapi_to_mcp","kind":"write","fields":{"description":"a8d18a0123cd0cd4","inputSchema":"2b6b45caf4617e85"}}]}
