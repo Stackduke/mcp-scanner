@@ -1,0 +1,1 @@
+{"source":"https://store.agentexchange.work/chain/mcp?tools=get_chain_allowance","takenAt":"2026-11-21T13:05:03.976Z","server":{"name":"chain-reads","version":"1.0.0"},"tools":[{"name":"get_chain_allowance","kind":"read","fields":{"description":"619d4f51dd9dd276","inputSchema":"406a75c01e101ce6","annotations":"ac2c497580f5ea9c"}}]}

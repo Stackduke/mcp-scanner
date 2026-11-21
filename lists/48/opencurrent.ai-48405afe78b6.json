@@ -1,0 +1,1 @@
+{"source":"https://opencurrent.ai/mcp/cron","takenAt":"2026-11-21T13:04:46.932Z","server":{"name":"cron-check","version":"0.1.0"},"tools":[{"name":"cron_next_runs","kind":"read","fields":{"title":"024fdb27064d424f","description":"6a873baf3ad6cd9b","inputSchema":"492558f6ec2a54b7","outputSchema":"720c6501dee0a811","annotations":"461c740b05709ab0"}}]}

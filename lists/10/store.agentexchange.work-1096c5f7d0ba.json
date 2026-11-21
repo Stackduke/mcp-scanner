@@ -1,0 +1,1 @@
+{"source":"https://store.agentexchange.work/chain/mcp?tools=get_chain_block_number","takenAt":"2026-11-21T13:05:04.996Z","server":{"name":"chain-reads","version":"1.0.0"},"tools":[{"name":"get_chain_block_number","kind":"read","fields":{"description":"d71d483688d8ff4e","inputSchema":"406a75c01e101ce6","annotations":"ac2c497580f5ea9c"}}]}

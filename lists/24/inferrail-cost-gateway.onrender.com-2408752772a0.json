@@ -1,0 +1,1 @@
+{"source":"https://inferrail-cost-gateway.onrender.com/read/mcp/","takenAt":"2026-11-21T13:01:25.413Z","server":{"name":"inferrail-web-read","version":"1.0.0"},"tools":[{"name":"read_page","kind":"read","fields":{"description":"fb1af6427f734460","inputSchema":"390379cadb828339"}}]}

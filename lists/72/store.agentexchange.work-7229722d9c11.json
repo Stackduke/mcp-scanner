@@ -1,0 +1,1 @@
+{"source":"https://store.agentexchange.work/pretrade/mcp?tools=token_security_check","takenAt":"2026-11-21T13:05:20.134Z","server":{"name":"pretrade-token-safety","version":"1.0.0"},"tools":[{"name":"token_security_check","kind":"read","fields":{"description":"09fdc1584a62be00","inputSchema":"cc43443e9b796b80","annotations":"ac2c497580f5ea9c"}}]}

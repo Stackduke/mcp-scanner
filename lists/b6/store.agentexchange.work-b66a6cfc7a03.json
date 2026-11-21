@@ -1,0 +1,1 @@
+{"source":"https://store.agentexchange.work/chain/mcp?tools=chain_transaction_explain","takenAt":"2026-11-21T13:05:01.913Z","server":{"name":"chain-reads","version":"1.0.0"},"tools":[{"name":"chain_transaction_explain","kind":"read","fields":{"description":"d58409029a02faf1","inputSchema":"2a5382d33fc14e84","annotations":"ac2c497580f5ea9c"}}]}

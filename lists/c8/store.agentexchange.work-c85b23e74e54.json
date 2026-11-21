@@ -1,0 +1,1 @@
+{"source":"https://store.agentexchange.work/chain/mcp?tools=chain_native_balance","takenAt":"2026-11-21T13:05:00.863Z","server":{"name":"chain-reads","version":"1.0.0"},"tools":[{"name":"chain_native_balance","kind":"read","fields":{"description":"fcd2fd4ebb4c10ed","inputSchema":"418d2afc957535c2","annotations":"ac2c497580f5ea9c"}}]}

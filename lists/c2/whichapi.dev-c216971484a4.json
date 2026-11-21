@@ -1,1 +1,1 @@
-{"source":"https://whichapi.dev/mcp","takenAt":"2026-11-19T13:38:42.826Z","server":{"name":"whichapi","version":"0.1.0"},"tools":[{"name":"find_services","kind":"read","fields":{"description":"e3861767a2d47148","inputSchema":"8549815b75ade27a"}}]}
+{"source":"https://whichapi.dev/mcp","takenAt":"2026-11-21T13:00:52.098Z","server":{"name":"whichapi","version":"0.1.0"},"tools":[{"name":"find_services","kind":"read","fields":{"title":"a34e5e43590d403f","description":"e3861767a2d47148","inputSchema":"8549815b75ade27a","annotations":"dc58e55a8287733e"}}]}

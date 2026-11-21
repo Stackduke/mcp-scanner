@@ -1,0 +1,1 @@
+{"source":"https://changesignal-beta.handy-drake-3041.chatgpt.site/agent-mcp","takenAt":"2026-11-21T13:01:22.232Z","server":{"name":"changesignal","version":"0.2.0"},"tools":[{"name":"get_release_impact","kind":"read","fields":{"description":"e38af885441c6eca","inputSchema":"5e12954feb4b369b","annotations":"ae78503371695cf7"}}]}

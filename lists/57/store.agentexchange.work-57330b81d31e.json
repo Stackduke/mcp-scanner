@@ -1,0 +1,1 @@
+{"source":"https://store.agentexchange.work/chain/mcp?tools=get_chain_erc20_balance","takenAt":"2026-11-21T13:05:05.996Z","server":{"name":"chain-reads","version":"1.0.0"},"tools":[{"name":"get_chain_erc20_balance","kind":"read","fields":{"description":"dc9378870c20b551","inputSchema":"406a75c01e101ce6","annotations":"ac2c497580f5ea9c"}}]}

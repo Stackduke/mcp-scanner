@@ -1,0 +1,1 @@
+{"source":"https://store.agentexchange.work/pretrade/mcp?tools=get_crypto_address_risk","takenAt":"2026-11-21T13:05:16.133Z","server":{"name":"pretrade-token-safety","version":"1.0.0"},"tools":[{"name":"get_crypto_address_risk","kind":"read","fields":{"description":"559071b4811c6b64","inputSchema":"406a75c01e101ce6","annotations":"ac2c497580f5ea9c"}}]}
