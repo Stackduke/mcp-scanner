@@ -1,0 +1,1 @@
+{"source":"https://mcp.go2trip.com/mcp","takenAt":"2026-11-22T12:56:44.969Z","server":{"name":"go2trip","version":"1.0.0"},"tools":[{"name":"search_flights","kind":"read","fields":{"title":"b2c4c8ba42298dac","description":"d066f6ec7c3e5b70","inputSchema":"22f6e42faf828a57","outputSchema":"dc67c0b4091ee8fa","annotations":"14e946d9d827dec3"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://standardissuedata.com/playground/mcp","takenAt":"2026-11-22T12:56:56.017Z","server":{"name":"standard-issue-data","version":"0.1.0"},"tools":[{"name":"lookup_vin","kind":"read","fields":{"title":"a6a014bc5c76836a","description":"dc8a984ba8c577c9","inputSchema":"8ffb832d3bfcc02b","outputSchema":"75fc2c4a971e237a","annotations":"139076388a98d13d"}}]}
