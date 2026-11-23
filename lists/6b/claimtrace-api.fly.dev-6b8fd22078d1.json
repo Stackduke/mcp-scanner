@@ -1,0 +1,1 @@
+{"source":"https://claimtrace-api.fly.dev/mcp","takenAt":"2026-11-23T15:03:30.632Z","server":{"name":"claimtrace","version":"0.1.0"},"tools":[{"name":"check_numbers","kind":"read","fields":{"description":"9328e009d3da3c44","inputSchema":"fedbc2484c029eda"}}]}

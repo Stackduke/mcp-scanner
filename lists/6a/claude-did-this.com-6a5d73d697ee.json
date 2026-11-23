@@ -1,0 +1,1 @@
+{"source":"https://claude-did-this.com/mcp","takenAt":"2026-11-23T15:03:30.759Z","server":{"name":"access-gateway","version":"1.0.0"},"tools":[{"name":"request_access","kind":"write","fields":{"description":"a61433a58dea16f3","inputSchema":"d4ac9b81a8a7e998"}}]}

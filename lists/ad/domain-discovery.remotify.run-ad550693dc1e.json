@@ -1,0 +1,1 @@
+{"source":"https://domain-discovery.remotify.run/mcp","takenAt":"2026-11-23T15:03:32.143Z","server":{"name":"domain-discovery","version":""},"tools":[{"name":"check_domains","kind":"read","fields":{"title":"cd18b3d058aa39e3","description":"d9cd4a97c2318d38","inputSchema":"f43faf34106cbfb9","outputSchema":"bed900ccf6bfcf5c","annotations":"bbdec2f7ee3c6e29"}}]}

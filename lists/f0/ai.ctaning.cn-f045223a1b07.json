@@ -1,0 +1,1 @@
+{"source":"https://ai.ctaning.cn/mcp","takenAt":"2026-11-23T15:03:24.098Z","server":{"name":"deai-rewrite","version":"1.2.0"},"tools":[{"name":"quota","kind":"unclear","fields":{"description":"70acb5856aefcc3c","inputSchema":"efddc7bd8bbcef73"}},{"name":"rewrite","kind":"unclear","fields":{"description":"cbf287d2e498084e","inputSchema":"4bec4cf85aed8b7a"}}]}

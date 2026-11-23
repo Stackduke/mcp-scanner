@@ -1,0 +1,1 @@
+{"source":"https://aipay.sixu-ai.net.cn/mcp","takenAt":"2026-11-23T15:03:24.409Z","server":{"name":"moyan-audit","version":"0.1.0"},"tools":[{"name":"moyan_checkup","kind":"unclear","fields":{"description":"bbac0005675764ac","inputSchema":"3a11a772f74e208a"}},{"name":"moyan_precheck","kind":"unclear","fields":{"description":"1cb5046426b94645","inputSchema":"3aacc8661bf43e1c"}}]}
