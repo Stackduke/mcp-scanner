@@ -1,1 +1,1 @@
-{"source":"https://claimtrace-api.fly.dev/mcp","takenAt":"2026-11-23T15:03:30.632Z","server":{"name":"claimtrace","version":"0.1.0"},"tools":[{"name":"check_numbers","kind":"read","fields":{"description":"9328e009d3da3c44","inputSchema":"fedbc2484c029eda"}}]}
+{"source":"https://claimtrace-api.fly.dev/mcp","takenAt":"2026-11-24T15:14:58.352Z","server":{"name":"claimtrace","version":"0.1.2"},"tools":[{"name":"check_numbers","kind":"write","fields":{"description":"9328e009d3da3c44","inputSchema":"6df054c1f7284878","annotations":"a88eb3d5552105f6"}}]}

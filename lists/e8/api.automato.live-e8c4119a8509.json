@@ -1,0 +1,1 @@
+{"source":"https://api.automato.live/mcp","takenAt":"2026-11-24T15:15:43.090Z","server":{"name":"automato","version":"1.0.0"},"tools":[{"name":"ask_free","kind":"read","fields":{"description":"0cce12df293df96a","inputSchema":"6c8af6865fa99c4d"}},{"name":"ask_paid","kind":"send","fields":{"description":"02469de2f6c83dea","inputSchema":"23cd49f196011825"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://api.antevo.ch/mcp/research/mcp","takenAt":"2026-11-24T15:18:35.557Z","server":{"name":"antevo-research","version":"1.12.4"},"tools":[{"name":"ask_desk","kind":"read","fields":{"title":"73d16df7d46fa554","description":"0c758b0216c0dd77","inputSchema":"c3c011c61e02b207","outputSchema":"07927bb2c8767968","annotations":"dc6d80f0195a1d92"}}]}
