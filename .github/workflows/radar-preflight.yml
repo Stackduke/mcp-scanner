@@ -1,0 +1,71 @@
+# Once, by hand, before the first upload to radar: checks that R2 keeps the uploader's headers and honours its
+# conditional writes (docs/decisions/0001-radar-storage-r2.md, "Before the first upload"). It runs against the
+# scratch bucket radar-preflight, with that bucket's own token from the environment r2-preflight, so none of its
+# test objects can reach radar. Run it once without a lock rule on the scratch bucket and once with one, then
+# delete the bucket, its token and the environment.
+name: Radar pre-flight
+
+on:
+  workflow_dispatch:
+    inputs:
+      lock:
+        description: "The scratch bucket has a lock rule on scans/"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    # The environment's deployment branches are limited to main too.
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: r2-preflight
+    permissions:
+      # To check out the scanner and the data branch.
+      contents: read
+    steps:
+      - name: Check out the scanner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The latest signed scan, to upload as the daily job would.
+      - name: Check out the data branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: data
+          path: tracker-data
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
+
+      # Content-Type, Cache-Control and x-amz-meta-source-sha256 kept; If-None-Match: * refused on a key already there
+      # (412, or 409 under the lock); latest.json replaced with If-Match only while its ETag is current.
+      - name: Check R2's answers
+        run: node src/radar-cli.ts preflight --bucket=radar-preflight ${LOCK:+--expect-lock}
+        env:
+          LOCK: ${{ inputs.lock && 'yes' || '' }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_PREFLIGHT_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_PREFLIGHT_SECRET_ACCESS_KEY }}
+
+      # The uploader end to end, as the daily job runs it: the second upload must find every object already there.
+      - name: Upload the latest scan twice
+        shell: bash
+        run: |
+          node src/radar-cli.ts publish --data=tracker-data --require-signature --bucket=radar-preflight
+          node src/radar-cli.ts publish --data=tracker-data --require-signature --bucket=radar-preflight | tee "$RUNNER_TEMP/second.txt"
+          grep -q ": 0 objects written" "$RUNNER_TEMP/second.txt"
+        env:
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_PREFLIGHT_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_PREFLIGHT_SECRET_ACCESS_KEY }}

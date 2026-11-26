@@ -68,7 +68,7 @@ async function dataBranch(): Promise<string> {
     [privateNamedList]: `${JSON.stringify({ source: "https://mcp.stripe.com", tools: [{ name: "create_refund", kind: "money" }] })}\n`,
     [orphanList]: orphanText,
     "watched/stripe.json": "{\"tools\":[]}\n",
-    "feed.json": `${JSON.stringify({ version: 1, watched: [{ id: "signed-in-stripe", vendor: "stripe" }, { id: idA, vendor: "example" }], changes: [] })}\n`,
+    "feed.json": `${JSON.stringify({ version: 1, watched: [{ id: "signed-in-stripe", vendor: "stripe" }, { id: idA, vendor: "example", url: urlA }], changes: [] })}\n`,
     "servers.json": `${JSON.stringify([serverRow(idA, urlA), serverRow("signed-in-stripe", "https://mcp.stripe.com", { signedIn: "stripe" }), serverRow(sentryId, sentryUrl)])}\n`,
     "lookup.json": lookupText([serverRow(idA, urlA), serverRow("signed-in-stripe", "https://mcp.stripe.com", { signedIn: "stripe" }), serverRow(sentryId, sentryUrl)]),
     "registry.json": "{}\n",
@@ -85,7 +85,7 @@ async function dataBranch(): Promise<string> {
     "hosts.json": `${JSON.stringify({ version: 1, hosts: { "a.example.com": { overBudgetRuns: 0 } } })}\n`,
     "endpoints.jsonl": `${JSON.stringify(endpointA)}\n`,
     [listA]: listV2,
-    "feed.json": `${JSON.stringify({ version: 1, watched: [{ id: idA, vendor: "example" }], changes: [] })}\n`,
+    "feed.json": `${JSON.stringify({ version: 1, watched: [{ id: idA, vendor: "example", url: urlA }], changes: [] })}\n`,
     "lookup.json": lookupText([serverRow(idA, urlA)]),
   });
   git(["add", "-A"]);

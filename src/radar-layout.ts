@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { sha256 } from "./manifest.ts";
 import { keptOffSites } from "./track.ts";
-import { listFileUrl, listOnSites, lookupOf, onSites } from "./tracker.ts";
+import { listFileUrl, lookupOf, siteOf } from "./tracker.ts";
 import type { FeedServer } from "./tracker.ts";
 
 /**
@@ -74,7 +74,7 @@ export const isLayoutKey = (key: string) => keyPattern.test(key);
 
 export const contentTypeOf = (key: string) => (key.endsWith(".gz") ? "application/gzip" : "application/json");
 
-function planned(key: string, content: Buffer): PlannedObject {
+export function planned(key: string, content: Buffer): PlannedObject {
   if (!isLayoutKey(key)) throw new Error(`Not a key of layout ${layoutVersion}: ${key}`);
   const body = key.endsWith(".gz") ? gzipSync(content, { level: 9 }) : content;
   return { key, body, contentType: contentTypeOf(key), cacheControl: key === pointerKey ? pointerCache : immutableCache, sourceSha256: sha256(content), sourceBytes: content.length };
@@ -102,11 +102,33 @@ export function isPrivateRecord(record: unknown): boolean {
 
 const keptOff = keptOffSites();
 /**
- * Whether an address is on the site of a vendor whose terms forbid publishing about it (`forbidden` in the
- * catalog, the tracker's keptOffSites). The tracker never checks or keeps such an address; this is the uploader's
- * own check, so a slip in the tracker still cannot publish one.
+ * What the uploader makes of an address: on a public site; on the site of a vendor whose terms forbid publishing
+ * about it (`forbidden` in the catalog, the tracker's keptOffSites); or unreadable (not a string, not a URL, or
+ * with no host), so it cannot be shown to be off those sites. The tracker never checks or keeps a kept-off
+ * address; this is the uploader's own check, so a slip in the tracker still cannot publish one. It fails closed:
+ * only "public" may be published.
  */
-export const isKeptOff = (url: unknown, sites: ReadonlySet<string> = keptOff): boolean => onSites(url, sites);
+export type SiteVerdict = "public" | "kept off" | "unreadable";
+export function siteVerdict(url: unknown, sites: ReadonlySet<string> = keptOff): SiteVerdict {
+  if (typeof url !== "string") return "unreadable";
+  let site: string;
+  try { site = siteOf(url); } catch { return "unreadable"; }
+  return !site ? "unreadable" : sites.has(site) ? "kept off" : "public";
+}
+/** Whether an address may not be published: on a kept-off site, or unreadable. */
+export const isKeptOff = (url: unknown, sites: ReadonlySet<string> = keptOff): boolean => siteVerdict(url, sites) !== "public";
+/**
+ * The same for a saved tool list. Its address is the one it says it was read from (`source`): that must be
+ * readable and public. The host in its file name (lists/ab/<host>-<id>.json) is checked too, since it may be all
+ * a slip leaves, but only when it can be read: the tracker cuts a long host short ("…") and replaces odd
+ * characters ("?"), so a name alone may not be an address.
+ */
+export function listVerdict(listPath: string, bytes: Buffer | string, sites: ReadonlySet<string> = keptOff): SiteVerdict {
+  let source: unknown;
+  try { source = (JSON.parse(bytes.toString()) as { source?: unknown } | null)?.source; } catch { source = undefined; }
+  if (siteVerdict(listFileUrl(listPath), sites) === "kept off") return "kept off";
+  return siteVerdict(source, sites);
+}
 export { listFileUrl };
 
 export type ScanSource =
@@ -176,6 +198,12 @@ function parseJson(name: string, bytes: Buffer): unknown {
 
 const refused = (where: string) => new PrivateDataError(`Refused: ${where} holds data about a server tracked privately. Nothing from such a server may reach the public bucket, so nothing was planned.`);
 const keptOffRefused = (where: string) => new PrivateDataError(`Refused: ${where} holds data about a site whose terms forbid publishing about it. Nothing about such a site may reach the public bucket, so nothing was planned.`);
+const unreadableRefused = (where: string) => new PrivateDataError(`Refused: ${where} holds an address that cannot be read, so it cannot be shown to be off the sites whose terms forbid publishing about them. Nothing was planned.`);
+/** Throws unless the verdict is "public". */
+function mustBePublic(verdict: SiteVerdict, where: string): void {
+  if (verdict === "kept off") throw keptOffRefused(where);
+  if (verdict === "unreadable") throw unreadableRefused(where);
+}
 
 /** Builds everything one scan becomes in the bucket, or throws before anything is written. */
 export function planScan(input: ScanInput): ScanPlan {
@@ -194,7 +222,7 @@ export function planScan(input: ScanInput): ScanPlan {
     const { id: endpointId, url, file } = (record ?? {}) as { id?: unknown; url?: unknown; file?: unknown };
     if (typeof endpointId !== "string") throw new Error(`endpoints.jsonl line ${index + 1} has no id.`);
     endpointIds.add(endpointId);
-    if (isKeptOff(url)) throw keptOffRefused(`endpoints.jsonl line ${index + 1}`);
+    mustBePublic(siteVerdict(url), `endpoints.jsonl line ${index + 1}`);
     if (typeof file === "string") listOwner.set(file, endpointId);
   });
 
@@ -213,7 +241,7 @@ export function planScan(input: ScanInput): ScanPlan {
   for (const field of ["watched", "changes"] as const) {
     const entries = feed?.[field];
     if (Array.isArray(entries) && entries.some((entry) => isPrivateRecord(entry))) throw refused(`feed.json (${field})`);
-    if (Array.isArray(entries) && entries.some((entry) => isKeptOff((entry as { url?: unknown })?.url))) throw keptOffRefused(`feed.json (${field})`);
+    if (Array.isArray(entries)) for (const entry of entries) mustBePublic(siteVerdict((entry as { url?: unknown })?.url), `feed.json (${field})`);
   }
   const servers = input.files.get("servers.json");
   const serverRows = servers ? parseJson("servers.json", servers) : [];
@@ -233,7 +261,10 @@ export function planScan(input: ScanInput): ScanPlan {
   if (parsedTop.has("hosts.json") && (!isObject(hosts) || Object.values(hosts).some((entry) => !isObject(entry) || Object.keys(entry).some((field) => field !== "overBudgetRuns" && field !== "lastOverBudget")))) {
     throw new Error(`hosts.json has fields layout ${layoutVersion} does not know, so nothing was planned.`);
   }
-  if (isObject(hosts) && Object.keys(hosts).some((host) => isKeptOff(`https://${host}/`))) throw keptOffRefused("hosts.json");
+  // Each key is a URL's hostname as the tracker took it. One that does not read back as itself (a "/" or "@" in
+  // it, say, which would make the address name another host) is unreadable.
+  const hostOf = (host: string) => { try { return new URL(`https://${host}/`).hostname; } catch { return null; } };
+  if (isObject(hosts)) for (const host of Object.keys(hosts)) mustBePublic(hostOf(host) === host ? siteVerdict(`https://${host}/`) : "unreadable", "hosts.json");
 
   // Every current list, in one file a reader can take whole, and each version first seen here on its own.
   const bundle: string[] = [];
@@ -242,7 +273,8 @@ export function planScan(input: ScanInput): ScanPlan {
   let orphanLists = 0, leftOutLists = 0;
   for (const [listPath, bytes] of [...input.lists].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
     // By the host in its name, and by the address it says it was read from.
-    if (listOnSites(listPath, bytes, keptOff)) throw keptOffRefused("a tool list");
+    const verdict = listVerdict(listPath, bytes);
+    if (verdict === "kept off") throw keptOffRefused("a tool list");
     if (listPath.includes("signed-in-") && !listOwner.has(listPath)) throw refused(listPath.slice(0, listPath.lastIndexOf("/") + 1));
     // A list no endpoint names (its endpoint left the registry, or was kept off) is still public: it is kept
     // under the id in its file name, which the tracker derives from the endpoint's address.
@@ -252,6 +284,8 @@ export function planScan(input: ScanInput): ScanPlan {
       leftOutLists += 1;
       continue;
     }
+    // Only a list that is published must show a readable, public address; one left out above is not published.
+    mustBePublic(verdict, "a tool list");
     if (!listOwner.has(listPath)) orphanLists += 1;
     if (!publicId.test(owner)) throw new Error(`An endpoint id that is not part of layout ${layoutVersion} owns ${listPath}.`);
     const text = bytes.toString("utf8").trim();

@@ -1,0 +1,74 @@
+# Once, by hand: publishes every scan in the data branch's history to the R2 bucket radar
+# (docs/decisions/0001-radar-storage-r2.md, "The backfill job"). Run it after the bucket lock is set, with the data
+# branch commit whose dry run was reviewed (`node src/radar-cli.ts backfill --repo=. --ref=<sha> --dry-run`).
+# Whatever it publishes stays for good, so it takes that exact commit, never a branch name.
+#
+# It holds the R2 key from the environment r2-upload, as the Track workflow's upload job does, and nothing else. It
+# shares the Track workflow's concurrency group, so it never runs alongside a scan. Running it again writes nothing new.
+name: Radar backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "The data branch commit whose dry run was reviewed: the full 40-character SHA"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: track
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    # The environment's deployment branches are limited to main too.
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: r2-upload
+    permissions:
+      # To check out the scanner and read the data branch.
+      contents: read
+    steps:
+      # First, so a branch name, a tag or a short SHA stops the run before anything else. The input reaches the
+      # script through the environment, never pasted into it.
+      - name: Take only a full commit SHA
+        run: |
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The input must be a full 40-character commit SHA in lowercase hex, not a branch, a tag or a short SHA."
+            exit 1
+          fi
+        env:
+          SHA: ${{ inputs.sha }}
+
+      # The whole history of every branch, the data branch included: the backfill reads it with git, never checks it out.
+      - name: Check out the scanner and the data branch's history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Take the commit only if it is on the data branch
+        run: git merge-base --is-ancestor "$SHA" origin/data
+        env:
+          SHA: ${{ inputs.sha }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      # Each scan with a signature is checked with cosign, as the daily upload checks one.
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
+
+      - name: Publish the data branch's history to R2
+        run: node src/radar-cli.ts backfill --repo=. --ref="$SHA" --bucket=radar
+        env:
+          SHA: ${{ inputs.sha }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

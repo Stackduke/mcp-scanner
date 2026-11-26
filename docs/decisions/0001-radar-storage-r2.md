@@ -1,6 +1,6 @@
 # 0001: Radar's history and evidence move from git to Cloudflare R2
 
-- Status: accepted. Phase 1 (this change: the layout, the uploader, the backfill) adds code only. Phase 2 wires it into the Track workflow.
+- Status: accepted. Phase 1 (the layout, the uploader, the backfill) is in. Phase 2A (dual-write: each signed scan is also uploaded, with the `restore` command, the backfill workflow and the scratch-bucket check) is applied but off until `RADAR_UPLOAD` is set. Phase 2B (the switch) is described below and not applied.
 - Date: 26 November 2026
 - Deadline: phase 2 live by about **5 December 2026**. The fallback below must be ready to apply by about 8 December, in case it slips.
 
@@ -78,6 +78,7 @@ The bucket is public, so nothing about a server tracked privately, or on the sit
   - **Which sites.** A vendor's sites are those of its server's address and its website, plus any other domain the catalog lists as the vendor's own (`sites`, such as `intercom.io` and `getsentry.com`). A host name ending in a dot (`mcp.sentry.dev.`) is the same host to DNS, so it counts as the same site, and the registry reader drops such addresses outright.
   - **The tracker** never checks an address on those sites. When a site becomes kept off, it deletes the endpoint's saved list and the site's `hosts.json` entries. Each run it also removes any other saved list about a kept-off site, using the same test as the uploader.
   - **The uploader** does not rely on the tracker. It refuses a whole scan with any endpoint record, feed entry, `hosts.json` host or tool list on such a site. A tool list is judged both by the host in its file name and by the address it was read from (`source`).
+  - **It fails closed.** An address the uploader cannot read (missing, not a URL, or with no host, or a `hosts.json` key that is not a host name) cannot be shown to be off those sites, so the scan is refused too. A published list must have a readable `source`. The host in its file name is checked when it can be read; the tracker cuts long hosts short ("…") in file names, so the name alone is not an address. The tracker's own test (`onSites`) is unchanged. On the data branch's history this refuses nothing: the backfill's dry run plans the same 53 scans, byte for byte, as before.
   - **Third-party servers** for those vendors (another company's gateway on its own domain) are not the vendor's site, and stay published (decision of 26 November 2026).
 - Beyond those fields, each file may hold only what the layout knows:
   - `feed.json`, `registry.json`, `lookup.json` and `hosts.json` may have only the top-level fields of the tracker's own types;
@@ -124,7 +125,8 @@ Reads by the public go through Cloudflare's cache, so most never reach R2. Even 
 ## Rollback
 
 - **Phase 1** changes nothing that runs: the new commands are not called by any workflow. Reverting this change removes them.
-- **Phase 2, the workflow.** Revert the workflow change and the tracker commits to the `data` branch again. The branch resumes from its frozen state; the scans made in between stay in R2 and can be restored into it with the `restore` command. The 100 MB limit then applies again, so the fallback below would be needed too.
+- **Phase 2A, dual-write.** Set `RADAR_UPLOAD` to anything but `on` (or delete it), and the upload job is skipped from the next run. The data branch is untouched by 2A throughout, so nothing else needs undoing; what was uploaded stays in the bucket.
+- **Phase 2B, the switch.** Revert the workflow change and the tracker commits to the `data` branch again. The branch resumes from its frozen state; the scans made in between stay in R2 and can be restored into it with the `restore` command. The 100 MB limit then applies again, so the fallback below would be needed too.
 - **Phase 2, the site.** Keep the site's archive reader behind a switch for the first week, so the site can go back to the `data` branch by changing one setting.
 - **A bad scan was published.** Its objects stay (the lock keeps them), but readers follow `latest.json`, which the lock does not cover. Withdraw the scan in `latest.json`, with an account admin's credentials:
   1. Download `latest.json`.
@@ -138,26 +140,73 @@ Reads by the public go through Cloudflare's cache, so most never reach R2. Even 
 
 Have this ready to apply by about 8 December, so it can ship before the push fails around 15 December. Shard `endpoints.jsonl` in the `data` branch by the first hex digit of the endpoint id (16 files of about 4 MB each), and teach the tracker and the site's build to read the shards. Sharding by month was considered, but `endpoints.jsonl` is today's state, rewritten whole each day, not a log: a month's file would still hold every endpoint. Shards keep the push working for many months, but do not stop the history from growing, so they are a stopgap only.
 
-## Phase 2: the workflow change (not applied)
+## Phase 2: the workflow change
+
+It goes in two steps, so the data branch stays the record until the bucket has been shown to work.
+
+### Phase 2A: dual-write (applied, off until `RADAR_UPLOAD` is `on`)
+
+The Track workflow starts from the data branch and commits to it exactly as before. After signing, a new `upload` job also publishes the scan to `radar`:
+
+- **`track`** commits the scan as before, then hands the committed folder on as the artifact `scan` (without `.git`, with `.gitattributes`). It holds no R2 key and no OIDC token. If the hand-off fails, the step is allowed to fail, the commit stands, and the upload job fails for want of the artifact.
+- **`sign`** and **`publish-signature`** are unchanged: the signature is checked against the data commit, then committed to the data branch.
+- **`upload`** needs `track` and `sign`, and runs only on `main`, only when signing succeeded, and only when the repository variable `RADAR_UPLOAD` is `on`. It checks out the scanner from the run's own commit, downloads `scan` and `manifest-signature` outside the checkout, copies the one signature file into the scan, and runs `publish --require-signature --bucket=radar`. That checks the signature, the folder's digest, every file's sha256 and the privacy rules before anything is sent.
+- **Failure.** Nothing waits on `upload`. A failed upload leaves the data branch's commit and signature as they are, and shows as a failed job in a red run. "Re-run failed jobs" runs it again from the same artifacts, which are kept 7 days (an upload refuses a scan more than 8 days old).
+
+Permissions, by job:
+
+| Job | Permissions | Secrets | Why |
+| --- | --- | --- | --- |
+| `track` | the workflow's `contents: write`, `issues: write` | vendor tokens, sign-in app key, notice token (as before) | commits to `data`, opens sign-in issues. No R2 key, no `id-token`. |
+| `sign` | `contents: read`, `id-token: write` | none | Sigstore keyless signing; cannot push. |
+| `publish-signature` | `contents: write` | none | commits the signature to `data`; no `id-token`. |
+| `upload` | `contents: read` | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (environment `r2-upload`, main only) | checks out the scanner; writes to `radar`. Nothing else. |
+| `backfill` (Radar backfill) | `contents: read` | the same two, same environment | reads the data branch's history; writes to `radar`. |
+| `preflight` (Radar pre-flight) | `contents: read` | `R2_PREFLIGHT_ACCESS_KEY_ID`, `R2_PREFLIGHT_SECRET_ACCESS_KEY` (environment `r2-preflight`) | writes test objects to the scratch bucket `radar-preflight` only. |
+
+`test/workflow.test.ts` pins each row: which jobs may name which keys and environments, that those jobs have only `contents: read` and run only on main, and that `track` holds no R2 key and no `id-token`.
+
+**Order of the steps.** Each step waits on the one before it.
+
+1. Merge 2A. The upload job is skipped: `RADAR_UPLOAD` is not set.
+2. Set up the scratch bucket and run **Radar pre-flight** twice, without and then with a lock rule ([below](#before-the-first-upload-check-r2-with-a-scratch-bucket)). Remove the scratch bucket, its token and the environment.
+3. Set the **bucket lock** on `radar` (setup step 7).
+4. Review the backfill's dry run at the data branch's tip, and run **Radar backfill** with that SHA.
+5. Set the repository variable `RADAR_UPLOAD` to `on` (Settings → Secrets and variables → Actions → Variables). From the next run, every scan is committed and uploaded. If a scan was committed between the backfill's SHA and this step, run the backfill again with a newer SHA before the next run: re-running writes only what is missing.
+6. Let dual-write run for a few days. Check each day's upload job, that `latest.json` names the day's scan, and that `restore` rebuilds a folder whose digest matches (it prints whether it does).
+7. Phase 2B.
+
+The backfill's SHA must be a commit from before the first daily upload. A scan the upload job published has a `scan.json` with `source.kind` `track`. Backfilling the same scan from the data branch makes a different `scan.json`, so the backfill stops there, before `latest.json` moves. That is safe but needs an earlier SHA.
 
 ### Restoring the data folder
 
 The `track` job needs the previous scan's folder to start from. A `restore` command rebuilds it from the bucket, with no key: it reads `latest.json`, then that scan's files.
 
 - `endpoints.jsonl`, `feed.json`, `servers.json`, `lookup.json`, `registry.json` and `hosts.json` come from `snapshots/<scan>/`.
-- Each line of `lists.jsonl.gz` becomes the file at its `path`, except a line about a kept-off site (by the same test the tracker and the uploader use), which is skipped (`listOnSites` in `tracker.ts`). Otherwise a vendor marked forbidden after it was published would come back each day. Until `restore` exists, the tracker's sweep is the guard in code: a list on a kept-off site that is put back is removed by the next run, before the upload.
+- Each line of `lists.jsonl.gz` becomes the file at its `path`, except a line about a kept-off site (by the same test the tracker and the uploader use), which is skipped (`listVerdict` in `radar-layout.ts`, which fails closed: a list whose address cannot be read is skipped too). Otherwise a vendor marked forbidden after it was published would come back each day. The tracker's sweep stays as a second guard: a list on a kept-off site that is put back is removed by the next run, before the upload.
 - The file is the raw text of its `list`, as it stands in the line, followed by a newline, checked against its `sha256`. `list` is always the line's last field, so its text is everything after `"list":` but the closing `}`. It is taken as it is, not parsed and written out again, which could change the bytes. Lists no endpoint names are in the bundle too, so every list comes back.
 - `manifest.json` and `manifest.sigstore.json` come from `scans/<scan>/`.
 - `.gitattributes` is written from the scanner's own constant (`dataAttributes` in `track.ts`). It is the same in every scan, so it needs no copy in the bucket.
+- Everything is downloaded and checked against `scan.json` (each file's sha256 and size), and every list against its own sha256, before anything is written. It writes only into a new or empty folder, and refuses a list path outside `lists/`.
+
+`node src/radar-cli.ts restore --from=https://data.stackduke.com --to=<folder>` (`src/radar-restore.ts`) does this, and is applied in 2A so it can be tried against the bucket during dual-write.
 
 The folder then digests to the previous manifest's `tree`, so the scanner's check of the previous scan passes, with two exceptions to plan for:
 
 - **The first restored run.** The data branch's `README.md` was part of the last git scan's `tree` and is not restored, so that run records an unclean start once. Every later manifest is made from a restored folder, so the runs after it are clean.
 - **Evidence.** The bucket keeps evidence by content hash, not by its path in the folder. Before the tracker writes evidence into the data folder, either keep it outside the folder that `tree` covers, or record each file's path in `scan.json` so `restore` can put it back.
 
-### The jobs
+### Phase 2B: the switch (not applied)
 
-The `track` job restores the folder instead of checking out the data branch, commits nothing to the data branch, and hands the folder on as an artifact. The `sign` job takes the folder from that artifact. Its `check-before-signing` step reads the scan's data commit today, so it needs a variant that checks the folder alone. The `upload` job replaces `publish-signature`. Action versions are pinned by commit, as in the rest of the workflow.
+A separate change, after dual-write has run for a few days. Its diff:
+
+- **`track`:** the "Check out the data branch" step becomes "Restore the latest scan" (`restore --from=https://data.stackduke.com --to=tracker-data`). The "Commit what changed" step goes, and with it the job's `contents: write` (it keeps `issues: write` for sign-in issues). The `data-commit` output is replaced by a "the scan finished" output for `sign`, and the hand-off to the upload job runs whenever the scan succeeded.
+- **`sign`:** takes the folder from the `scan` artifact instead of checking out the data commit. `check-before-signing` today compares the commit with the one before it (`git diff`). It gets a folder-only variant: the manifest is this run's, the folder matches it, and nothing in it is outside what a scan writes. There is no commit to compare, so the `git diff` part has no counterpart.
+- **`publish-signature`** goes. **`upload`** no longer depends on `RADAR_UPLOAD`; the variable is deleted.
+- **The data branch** gets its last commit by hand: a README pointing to `https://data.stackduke.com` and [../data-layout.md](../data-layout.md) (decision 6, setup step 9). The branch is then frozen: never rewritten, never deleted.
+- **Tests:** `workflow.test.ts` pins that no job pushes to `data`, and that `sign` checks the folder before it signs.
+
+The first restored run records an unclean start once (the data branch's `README.md` is not restored), as described above. In outline, with action versions pinned by commit as in the rest of the workflow:
 
 ```yaml
 concurrency:
@@ -235,51 +284,9 @@ It runs once, before the switch, from its own workflow file. It shares the Track
 - **Checked manifests.** A scan with a manifest is checked as `publish` checks a folder: its files against the manifest, and its signature with cosign when it has one. So `signed` in `scan.json` means the signature verified, here as for daily scans. A scan that does not verify stops the backfill.
 - **No future dates.** A scan dated in the future is refused, as `publish` refuses it.
 
-```yaml
-name: Radar backfill
-on:
-  workflow_dispatch:
-    inputs:
-      sha:
-        description: "The data branch commit whose dry run was reviewed (40 hex characters)"
-        required: true
-permissions:
-  contents: read
-concurrency:
-  group: track
-  cancel-in-progress: false
-jobs:
-  backfill:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    environment: r2-upload
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
-      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
-        with:
-          cosign-release: v3.1.4
-      - name: Take the reviewed commit, and only one on the data branch
-        run: |
-          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
-          git fetch -q origin data
-          git merge-base --is-ancestor "$SHA" origin/data
-        env:
-          SHA: ${{ inputs.sha }}
-      - run: node src/radar-cli.ts backfill --repo=. --ref="$SHA" --bucket=radar
-        env:
-          SHA: ${{ inputs.sha }}
-          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-```
+The workflow is `.github/workflows/radar-backfill.yml`. Its first step refuses any input that is not a full 40-character lowercase SHA, before anything is checked out, and the input reaches each script through the environment, never pasted into it. The next step checks that the commit is on the data branch (`git merge-base --is-ancestor`). It runs only from `main`, in the environment `r2-upload`.
 
-Planning takes about three minutes, and it writes about 73,500 objects. Running it again writes nothing new. Run it after the last scan committed to the data branch and before the first scan published to the bucket. Otherwise that last scan has to be backfilled again, from a newer reviewed SHA, which is safe.
+Planning takes about three minutes, and it writes about 73,500 objects. Running it again writes nothing new. Run it before the first daily upload, with the data branch's tip (step 4 of the order above). A scan committed after that SHA but before the first upload needs the backfill again, from a newer reviewed SHA, which is safe. A SHA that takes in scans the upload job already published stops the backfill (above).
 
 ### When a vendor becomes forbidden
 
@@ -307,7 +314,22 @@ The uploader relies on four things that Cloudflare's S3 compatibility page does 
 3. A `PUT` of `latest.json` with `If-Match` and a stale ETag answers 412. With the current ETag (as `GET` returns it, quotes included), it succeeds.
 4. With a lock rule on the scratch bucket, a create-only `PUT` to a locked key answers 409 `ObjectLockedByBucketPolicy`. The uploader treats that like a 412.
 
-`node src/radar-cli.ts publish --data=<a scan folder> --bucket=<scratch bucket> --unsigned`, run twice, covers 1 and 2 (the second run must report every object "already there"). Then remove the scratch bucket's lock rule (a bucket cannot be emptied while one is set), empty and delete the bucket, and delete its token.
+The workflow **Radar pre-flight** (`.github/workflows/radar-preflight.yml`) checks all four against the scratch bucket `radar-preflight`, with a token for that bucket only, from its own environment `r2-preflight`. `radar` is never named, and the `preflight` command refuses it. It runs two things:
+
+- `node src/radar-cli.ts preflight --bucket=radar-preflight [--expect-lock]` (`src/radar-preflight.ts`) drives the uploader's own store code and checks R2's answers: the three headers kept on `HEAD` (1); a create-only `PUT` to a key already there answering 412, or 409 under a lock, with the object left as it was (2, 4); `latest.json` answering 412 to `If-None-Match: *` once it exists and to a stale `If-Match`, and taking the current ETag as `GET` returned it (3).
+- `publish --require-signature --bucket=radar-preflight` on the data branch's latest signed scan, run twice: the uploader end to end, as the daily job runs it. The second run must write 0 objects.
+
+Steps for an account admin:
+
+1. **Scratch bucket:** R2 → Create bucket `radar-preflight`, location ENAM, Standard storage, public access off. No custom domain, no `r2.dev` URL.
+2. **Its token:** R2 → Manage API tokens → Create Account API token, permission **Object Read & Write**, applied to the bucket `radar-preflight` only. Note the Access Key ID and Secret Access Key.
+3. **GitHub Environment** `r2-preflight` on Stackduke/mcp-scanner (Settings → Environments → New environment). Deployment branches and tags: selected branches, `main` only. Environment secrets `R2_PREFLIGHT_ACCESS_KEY_ID` and `R2_PREFLIGHT_SECRET_ACCESS_KEY` (from step 2), and the environment variable `R2_ACCOUNT_ID` (the same account id as in `r2-upload`). No required reviewers.
+4. **First run:** Actions → Radar pre-flight → Run workflow, from `main`, with "lock" unticked. Every line must say `ok`, and the second upload must write 0 objects.
+5. **Lock the scratch bucket:** `npx wrangler r2 bucket lock add radar-preflight keep-scans scans/ --retention-indefinite` (or bucket → Settings → Bucket lock rules).
+6. **Second run:** Run workflow again with "lock" ticked. The create-only `PUT` must now answer 409.
+7. **Clean up:** remove the lock rule (`npx wrangler r2 bucket lock remove radar-preflight --id keep-scans`, or in the dashboard). A bucket cannot be emptied while one is set. Then empty and delete `radar-preflight`, delete its token, and delete the environment `r2-preflight`. The workflow file can stay: without the environment's secrets it fails at once.
+
+If any check fails, do not set `RADAR_UPLOAD`. The failing line says what R2 answered.
 
 ## Setup (done by a person, in Cloudflare and GitHub)
 
@@ -332,4 +354,5 @@ The uploader relies on four things that Cloudflare's S3 compatibility page does 
    ```
 
    What it blocks: overwriting or deleting any object under those prefixes, by the upload token, a leaked key, a lifecycle rule or an account admin, until the rule is removed (bucket → Settings → Bucket lock rules, or `wrangler r2 bucket lock remove`). That covers taking down a scan or file after it was published, too: remove the rule, delete, and put the rule back. It does not block new keys, and it does not cover `latest.json`, which every run rewrites.
-8. **The data branch,** at the switch: commit a README pointing to `https://data.stackduke.com` and [../data-layout.md](../data-layout.md) as the branch's last commit (decision 6).
+8. **`RADAR_UPLOAD`,** a repository variable (Settings → Secrets and variables → Actions → Variables), set to `on` once steps 5 to 7, the scratch-bucket check and the backfill are done. Until then the Track workflow's upload job is skipped.
+9. **The data branch,** at the switch: commit a README pointing to `https://data.stackduke.com` and [../data-layout.md](../data-layout.md) as the branch's last commit (decision 6).
