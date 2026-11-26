@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
 /** The daily workflow, read as text: the workflow's own header, and each job's block by name. */
@@ -103,20 +105,42 @@ test("the track job holds no R2 key and no identity token; the upload job runs o
   // Dual-write: nothing waits on the upload, so a failed upload leaves the data branch's commit and signature as they are.
   for (const [name, block] of workflow("track.yml").jobs) assert.doesNotMatch(block, /needs: .*upload/, name);
   assert.match(job("publish-signature"), /\n {4}needs: \[track, sign\]\n/);
-  // The scan is handed on only when it was committed, without git's folder, and a failure there fails the upload, not the scan.
+  // The scan is handed on only when it was committed, uploads are on and the folder holds no link, without git's
+  // folder; it cannot hang the job, and a failure there fails the upload, not the scan.
   const handOff = stepOf(job("track"), "Hand the scan to the upload job");
-  assert.match(handOff, /if: \$\{\{ !cancelled\(\) && steps\.commit\.outputs\.commit != '' \}\}\n {8}continue-on-error: true\n/);
+  assert.match(handOff, /if: \$\{\{ !cancelled\(\) && steps\.commit\.outputs\.commit != '' && vars\.RADAR_UPLOAD == 'on' && steps\.no-links\.outcome == 'success' \}\}\n {8}continue-on-error: true\n {8}timeout-minutes: 10\n/);
+  const noLinks = stepOf(job("track"), "Check the scan folder holds no links");
+  assert.match(noLinks, /id: no-links\n {8}if: \$\{\{ !cancelled\(\) && steps\.commit\.outputs\.commit != '' && vars\.RADAR_UPLOAD == 'on' \}\}\n {8}continue-on-error: true\n/);
+  // After the sign-in issues, so a slow artifact service can never cost them; before the sign-ins are forgotten.
+  const order = ["Tell a person about sign-ins", "Check the scan folder holds no links", "Hand the scan to the upload job", "Forget the sign-ins"].map((name) => job("track").indexOf(`- name: ${name}\n`));
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+  assert.ok(order[0] as number > 0);
+  // The link check itself, run as the workflow runs it: a link anywhere but under .git fails it.
+  const script = /run: (.+)\n/.exec(noLinks)?.[1] ?? assert.fail("no script");
+  const scratch = mkdtempSync(path.join(tmpdir(), "links-"));
+  try {
+    mkdirSync(path.join(scratch, "tracker-data", "lists", "ab"), { recursive: true });
+    mkdirSync(path.join(scratch, "tracker-data", ".git"));
+    writeFileSync(path.join(scratch, "tracker-data", "lists", "ab", "a.json"), "{}\n");
+    symlinkSync("/etc/hostname", path.join(scratch, "tracker-data", ".git", "ok"));
+    const run = () => spawnSync("bash", ["-e", "-c", script], { cwd: scratch, encoding: "utf8" }).status;
+    assert.equal(run(), 0);
+    symlinkSync("/etc/hostname", path.join(scratch, "tracker-data", "lists", "ab", "b.json"));
+    assert.notEqual(run(), 0);
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
   assert.match(handOff, /path: \|\n {12}tracker-data\/\n {12}!tracker-data\/\.git\/\*\*\n/);
   assert.match(handOff, /include-hidden-files: true/);
   // --unsigned is for a scratch bucket by hand; no workflow uses it.
   for (const [file, { code }] of workflows) assert.doesNotMatch(code, /--unsigned/, file);
 });
 
-test("the backfill takes only a full commit SHA on the data branch, and never runs alongside a scan", () => {
+test("the backfill takes only a full commit SHA on the data branch, and can never cancel a pending scan", () => {
   const { head, jobs: blocks } = workflow("radar-backfill.yml");
   assert.match(head, /\non:\n {2}workflow_dispatch:\n/);
   assert.doesNotMatch(head, /schedule:|push:|pull_request/);
-  assert.match(head, /\nconcurrency:\n {2}group: track\n {2}cancel-in-progress: false\n/);
+  // Its own group: a second dispatch can only displace a pending backfill, never a pending Track run (GitHub keeps
+  // one pending run per group). Overlapping a Track run is safe: keys are create-only, latest.json conditional.
+  assert.match(head, /\nconcurrency:\n {2}group: radar-backfill\n {2}cancel-in-progress: false\n/);
   const backfill = blocks.get("backfill") ?? assert.fail("no backfill job");
   // The format is checked first, before anything is checked out.
   const steps = [...backfill.matchAll(/\n {6}- (?:name: (.+)|uses: (\S+))/g)].map((match) => match[1] ?? match[2]);

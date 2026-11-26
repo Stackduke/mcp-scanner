@@ -40,6 +40,7 @@ const sentryList = `lists/${sentryId.slice(0, 2)}/mcp.sentry.dev-${sentryId}.jso
 const sentryEndpoint = { id: sentryId, url: sentryUrl, names: ["io.sentry/mcp"], firstSeen: "2026-10-16T18:06:47.641Z", inRegistry: true, checks: [], changes: [], file: sentryList };
 const serverRow = (id: string, url: string, extra: object = {}) => ({ id, url, names: [], firstSeen: "2026-10-20T10:00:00.000Z", tools: 1, kinds: { read: 1 }, lastChecked: "2026-10-20T10:00:00.000Z", lastListed: "2026-10-20T10:00:00.000Z", outcome: "listed", changesIn30Days: 0, watchIn30Days: 0, ...extra });
 const lookupText = (rows: object[]) => `${JSON.stringify({ version: 1, generatedAt: "2026-10-20T10:00:00.000Z", rows: lookupOf(rows as FeedServer[]) })}\n`;
+const unreadableList = "lists/dd/other.example.com-dddddddddddd.json";
 const privateEndpoint = { id: "signed-in-stripe", url: "https://mcp.stripe.com", names: [], signedIn: "stripe", firstSeen: "2026-10-20T10:00:00.000Z", inRegistry: false, checks: [], changes: [], file: privateNamedList };
 
 /** A data branch like the real one: a first commit with a README, a scan that still held a private server, and a later one without. */
@@ -64,6 +65,8 @@ async function dataBranch(): Promise<string> {
     [sentryList]: `${JSON.stringify({ source: sentryUrl, tools: [{ name: "find_issues", kind: "read" }] })}\n`,
     // A kept-off list no record names: left out by the host in its name.
     "lists/ee/eu.sentry.io-eeeeeeeeeeee.json": `${JSON.stringify({ source: "https://eu.sentry.io/mcp", tools: [] })}\n`,
+    // A list that says nothing of where it was read from: left out, since it cannot be shown to be off those sites.
+    [unreadableList]: `${JSON.stringify({ tools: [] })}\n`,
     [privateList]: `${JSON.stringify({ source: "https://mcp.stripe.com", tools: [{ name: "create_refund", kind: "money" }] })}\n`,
     [privateNamedList]: `${JSON.stringify({ source: "https://mcp.stripe.com", tools: [{ name: "create_refund", kind: "money" }] })}\n`,
     [orphanList]: orphanText,
@@ -80,6 +83,7 @@ async function dataBranch(): Promise<string> {
   await rm(path.join(repo, privateNamedList));
   await rm(path.join(repo, sentryList));
   await rm(path.join(repo, "lists/ee/eu.sentry.io-eeeeeeeeeeee.json"));
+  await rm(path.join(repo, unreadableList));
   await put({
     "servers.json": `${JSON.stringify([serverRow(idA, urlA)])}\n`,
     "hosts.json": `${JSON.stringify({ version: 1, hosts: { "a.example.com": { overBudgetRuns: 0 } } })}\n`,

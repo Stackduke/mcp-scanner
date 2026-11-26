@@ -3,8 +3,13 @@
 # branch commit whose dry run was reviewed (`node src/radar-cli.ts backfill --repo=. --ref=<sha> --dry-run`).
 # Whatever it publishes stays for good, so it takes that exact commit, never a branch name.
 #
-# It holds the R2 key from the environment r2-upload, as the Track workflow's upload job does, and nothing else. It
-# shares the Track workflow's concurrency group, so it never runs alongside a scan. Running it again writes nothing new.
+# It holds the R2 key from the environment r2-upload, as the Track workflow's upload job does, and nothing else.
+# Running it again writes nothing new.
+#
+# Its own concurrency group, not Track's: GitHub keeps one pending run per group and cancels the one already
+# pending, so sharing Track's would let a second dispatch cancel a pending daily scan. Running alongside a scan is
+# safe: every key but latest.json is create-only, and latest.json is replaced only if unchanged since read. Run it
+# before RADAR_UPLOAD is turned on, as the decision record's order says, and they never upload at the same time.
 name: Radar backfill
 
 on:
@@ -19,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: track
+  group: radar-backfill
   cancel-in-progress: false
 
 jobs:

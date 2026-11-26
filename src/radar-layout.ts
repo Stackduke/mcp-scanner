@@ -290,6 +290,9 @@ export function planScan(input: ScanInput): ScanPlan {
     if (!publicId.test(owner)) throw new Error(`An endpoint id that is not part of layout ${layoutVersion} owns ${listPath}.`);
     const text = bytes.toString("utf8").trim();
     if (text.includes("\n")) throw new Error(`${listPath} is not one line of JSON.`);
+    // The bundle keeps the text, and restore writes it back with one newline, checked against this file's sha256:
+    // any other shape (no newline, CRLF, a byte-order mark, space around it) restore could not rebuild.
+    if (!bytes.equals(Buffer.from(`${text}\n`, "utf8"))) throw new Error(`${listPath} is not one line of JSON and a newline, so restore could not rebuild it; nothing was planned.`);
     parseJson(listPath, Buffer.from(text));
     const hash = sha256(bytes);
     bundle.push(`{"id":${JSON.stringify(owner)},"path":${JSON.stringify(listPath)},"sha256":"${hash}","list":${text}}`);

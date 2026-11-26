@@ -327,17 +327,17 @@ test("--dry-run prints the plan and makes no network call, even with a bucket's 
 test("the CLI uploads to a bucket with the keys from the environment", async () => {
   const dir = await folder();
   await writeScan(dir);
-  const s3 = await fakeS3();
-  const code = await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: soon });
+  const s3 = await fakeS3({ bucket: "radar-preflight" });
+  const code = await radarMain(["publish", `--data=${dir}`, "--bucket=radar-preflight", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: soon });
   assert.equal(code, 0);
   assert.ok(s3.objects.has(`scans/${scanId}/scan.json`));
-  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned"], { env: {}, log: () => undefined }), 2);
+  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar-preflight", "--unsigned"], { env: {}, log: () => undefined }), 2);
   // The stand-in checks signatures for real: a wrong secret is turned away.
-  await assert.rejects(radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "wrong" }, log: () => undefined, now: soon }), /answered 403/);
+  await assert.rejects(radarMain(["publish", `--data=${dir}`, "--bucket=radar-preflight", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "wrong" }, log: () => undefined, now: soon }), /answered 403/);
   // A scan dated in the future (or long ago) is refused before anything is sent: the pointer never moves back, so it would stick.
   const before = s3.requests.length;
   for (const clock of ["2026-11-20T00:00:00Z", "2026-12-10T00:00:00Z"]) {
-    assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: () => new Date(clock) }), 1, clock);
+    assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar-preflight", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: () => new Date(clock) }), 1, clock);
   }
   assert.equal(s3.requests.length, before);
 });
@@ -394,6 +394,22 @@ test("nothing about a server tracked privately is ever planned", async () => {
   // Even a vendor the catalog marked publish: true is refused: the layout has no place for it yet.
   assert.equal(isPrivateRecord({ id: "signed-in-github", signedIn: "github" }), true);
   assert.equal(isPrivateRecord({ id: idA }), false);
+});
+
+test("a list is published only when restore can rebuild it byte for byte: one line of JSON and a newline", async () => {
+  const json = JSON.stringify({ source: urlA, takenAt: started, tools: [] });
+  for (const [what, listText] of [["no newline at the end", json], ["Windows line endings", `${json}\r\n`], ["space in front", ` ${json}\n`], ["two newlines", `${json}\n\n`]]) {
+    const dir = await folder();
+    await writeScan(dir, { listText });
+    await assert.rejects(async () => planScan(await scanInputFromFolder(dir)), /restore could not rebuild/, what);
+  }
+  // A byte-order mark is refused before that: the list does not parse, so its address cannot be read.
+  const marked = await folder();
+  await writeScan(marked, { listText: `\ufeff${json}\n` });
+  await assert.rejects(async () => planScan(await scanInputFromFolder(marked)), /cannot be read/);
+  const dir = await folder();
+  await writeScan(dir, { listText: `${json}\n` });
+  assert.ok(planScan(await scanInputFromFolder(dir)).objects.length > 0);
 });
 
 test("an address that cannot be read is refused, not taken as off the kept-off sites", async () => {
@@ -573,6 +589,10 @@ test("an upload to a bucket needs a verified signature, unless --unsigned says o
   // --unsigned only with a bucket, and never with --require-signature.
   assert.equal(await radarMain(["publish", `--data=${dir}`, "--dry-run", "--unsigned"], { log: () => undefined, now: soon }), 2);
   assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", "--require-signature", `--endpoint=${s3.endpoint}`], { env, log: () => undefined, now: soon }), 2);
+  // --unsigned is for the scratch bucket only: the public bucket radar never takes an unsigned scan.
+  lines.length = 0;
+  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env, log: (line) => lines.push(line), now: soon }), 2);
+  assert.match(lines.join("\n"), /never takes an unsigned scan/);
   assert.equal(s3.requests.length, 0);
   // Signed and verified (cosign stubbed), it goes up.
   await writeFile(path.join(dir, "manifest.sigstore.json"), "{\"bundle\":true}\n");
@@ -677,6 +697,26 @@ test("restore skips a list on a site kept off since the scan was published", asy
   assert.deepEqual([report.lists, report.skipped, report.matchesManifest], [1, 1, true]);
   await assert.rejects(readFile(path.join(to, sentryPath)), /ENOENT/);
   await readFile(path.join(to, listA));
+  // A list whose address cannot be read is skipped the same way: it cannot be shown to be off those sites.
+  const { bucket: other } = await publishedScan();
+  const nowhere = JSON.stringify({ source: "nowhere", tools: [] });
+  const nowherePath = "lists/ab/other.example.com-abcdefabcdef.json";
+  await rewriteBundle(other, (text) => `${text}{"id":"abcdefabcdef","path":"${nowherePath}","sha256":"${sha(`${nowhere}\n`)}","list":${nowhere}}\n`);
+  const again = path.join(await folder(), "tracker-data");
+  assert.deepEqual((await restore("https://data.example.com", again, { fetchImpl: servedFrom(other) })).skipped, 1);
+  await assert.rejects(readFile(path.join(again, nowherePath)), /ENOENT/);
+});
+
+test("restore refuses a scan with evidence, which it cannot put back yet", async () => {
+  const { bucket } = await publishedScan();
+  const recordFile = path.join(bucket, "scans", scanId, "scan.json");
+  const record = JSON.parse(await readFile(recordFile, "utf8"));
+  record.evidence = [evidenceKey(idA, "0".repeat(64))];
+  await rm(recordFile);
+  await writeFile(recordFile, JSON.stringify(record));
+  const to = path.join(await folder(), "tracker-data");
+  await assert.rejects(restore("https://data.example.com", to, { fetchImpl: servedFrom(bucket) }), /has evidence/);
+  await assert.rejects(readdir(to), /ENOENT/);
 });
 
 test("restore writes nothing unless every file matches its sha256", async () => {

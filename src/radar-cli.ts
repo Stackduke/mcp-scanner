@@ -17,7 +17,7 @@ const usage = `Usage:
   node src/radar-cli.ts publish --data=<scan folder> [--require-signature] <target>
       Publish one scan: the Track job's data folder, checked against its manifest.json (the whole folder's
       digest and each file's sha256). --require-signature also checks manifest.sigstore.json with cosign.
-      With --bucket it is required; only --unsigned (for a scratch bucket) publishes without it.
+      With --bucket it is required; only --unsigned (for a scratch bucket, never radar) publishes without it.
   node src/radar-cli.ts backfill --repo=<git folder> [--ref=origin/data] <target>
       Publish every scan in the data branch's history, oldest first. Reads the repository only.
   node src/radar-cli.ts restore --from=https://data.stackduke.com --to=<new or empty folder>
@@ -92,6 +92,10 @@ export async function radarMain(argv: string[], { env = process.env, fetchImpl =
   // A scan uploaded to a bucket stays there for good, so it must be the Track workflow's, signed; --unsigned says
   // otherwise out loud, for a scratch bucket. The backfill publishes the data branch's history, which is already public.
   if (command === "publish" && given.has("unsigned") && (given.has("require-signature") || !given.has("bucket"))) { log(usage); return 2; }
+  if (command === "publish" && given.has("unsigned") && given.get("bucket") === "radar") {
+    log("The bucket radar never takes an unsigned scan: --unsigned is for the scratch bucket only. Use --require-signature.");
+    return 2;
+  }
   if (command === "publish" && given.has("bucket") && !given.has("require-signature") && !given.has("unsigned")) {
     log("Uploading to a bucket needs --require-signature (or, for a scratch bucket only, --unsigned).");
     return 2;

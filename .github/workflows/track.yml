@@ -214,11 +214,28 @@ jobs:
           git -c "http.extraheader=Authorization: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" push -q "https://github.com/$REPOSITORY.git" HEAD:data
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      # The folder as committed, for the upload job. If this fails, the commit above stands, and the upload job
-      # fails for want of the artifact, so the run still shows it.
-      - name: Hand the scan to the upload job
-        if: ${{ !cancelled() && steps.commit.outputs.commit != '' }}
+      # Runs whatever happened above, so a lost sign-in, or sign-in steps that did not finish, reach a person.
+      - name: Tell a person about sign-ins
+        if: ${{ !cancelled() }}
+        run: node src/cli.ts sign-in-issues --dir="$RUNNER_TEMP/sign-ins" --repo="$REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+
+      # The folder as committed, for the upload job, only while uploads are on (RADAR_UPLOAD). After the sign-in
+      # issues, so a slow artifact service cannot cost them, and capped at ten minutes. If anything here fails, the
+      # commit above stands, and the upload job fails for want of the artifact, so the run still shows it.
+      # upload-artifact follows links, and the artifact is public: a folder holding a link is not handed on at all.
+      - name: Check the scan folder holds no links
+        id: no-links
+        if: ${{ !cancelled() && steps.commit.outputs.commit != '' && vars.RADAR_UPLOAD == 'on' }}
         continue-on-error: true
+        run: test -z "$(find tracker-data -path tracker-data/.git -prune -o -type l -print)"
+
+      - name: Hand the scan to the upload job
+        if: ${{ !cancelled() && steps.commit.outputs.commit != '' && vars.RADAR_UPLOAD == 'on' && steps.no-links.outcome == 'success' }}
+        continue-on-error: true
+        timeout-minutes: 10
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: scan
@@ -229,14 +246,6 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
-
-      # Runs whatever happened above, so a lost sign-in, or sign-in steps that did not finish, reach a person.
-      - name: Tell a person about sign-ins
-        if: ${{ !cancelled() }}
-        run: node src/cli.ts sign-in-issues --dir="$RUNNER_TEMP/sign-ins" --repo="$REPOSITORY"
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
 
       - name: Forget the sign-ins
         if: always()
