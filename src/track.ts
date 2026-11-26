@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { authorityOf } from "./authority.ts";
 import type { AuthorityReport } from "./authority.ts";
@@ -13,7 +13,7 @@ import { catalog, publicList } from "./catalog.ts";
 import type { PublicServer } from "./catalog.ts";
 import { scanSignedIn, signedInServers as catalogSignedIn, tokenFor } from "./signed-in.ts";
 import type { SignedInServer } from "./signed-in.ts";
-import { buildFeed, endpointId, groupsOfPrint, listHashOf, listHashOfResult, lookupOf, mergeRegistry, planChecks, readPrint, recordCheck, recordSkipped, rereadVerdict, siteOf, watchedEndpoint, watchedOf } from "./tracker.ts";
+import { buildFeed, endpointId, groupsOfPrint, listHashOf, listHashOfResult, listOnSites, lookupOf, mergeRegistry, onSites, planChecks, readPrint, recordCheck, recordSkipped, rereadVerdict, siteOf, watchedEndpoint, watchedOf } from "./tracker.ts";
 import type { CheckFacts, CheckResult, Endpoint, FeedWatched, RegistryState } from "./tracker.ts";
 
 /**
@@ -135,16 +135,14 @@ export const worthRetrying = (facts: CheckFacts & { temporary?: true }): boolean
 
 /**
  * Sites of vendors whose terms forbid publishing about their service, from the catalog: the site of
- * the MCP server's address and of the vendor's website. No address on them is checked or kept,
- * wherever the registry lists it.
+ * the MCP server's address, of the vendor's website, and of any other site the catalog lists as the
+ * vendor's own (`sites`). No address on them is checked or kept, wherever the registry lists it.
  */
 export function keptOffSites(servers = catalog.servers): Set<string> {
-  return new Set(servers.flatMap((server) => (!server.tracker.publish && "forbidden" in server.tracker && server.tracker.forbidden ? [siteOf(server.url), siteOf(server.site)] : [])));
+  return new Set(servers.flatMap((server) => (!server.tracker.publish && "forbidden" in server.tracker && server.tracker.forbidden ? [server.url, server.site, ...(server.tracker.sites ?? [])].map(siteOf) : [])));
 }
 
-function keptOff(url: string, sites: Set<string>): boolean {
-  try { return sites.has(siteOf(url)); } catch { return false; }
-}
+const keptOff = (url: string, sites: Set<string>): boolean => onSites(url, sites);
 
 /**
  * Why a watched server's check did not list, for the run's log, so a missed check says what happened.
@@ -247,7 +245,21 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     }
   }
 
-  for (const [url, endpoint] of byUrl) if (keptOff(endpoint.url, sites)) byUrl.delete(url);
+  // Its saved list goes with it: nothing about a kept-off site stays in the public folder.
+  for (const [url, endpoint] of byUrl) {
+    if (!keptOff(endpoint.url, sites)) continue;
+    byUrl.delete(url);
+    if (endpoint.file) await rm(file(endpoint.file), { force: true });
+  }
+  // And any other saved list about a kept-off site, by the same test the uploader applies: one no endpoint names
+  // any more, or one put back from an earlier scan, would otherwise stop every upload.
+  let sweptLists = 0;
+  for (const entry of await readdir(file("lists"), { recursive: true, withFileTypes: true }).catch(() => [])) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    const relative = path.relative(dataDir, path.join(entry.parentPath, entry.name)).split(path.sep).join("/");
+    if (listOnSites(relative, await readFile(file(relative)), sites)) { await rm(file(relative), { force: true }); sweptLists += 1; }
+  }
+  if (sweptLists) log(`${sweptLists} saved lists about sites kept off were removed`);
 
   let changed = 0, failed = 0, unstable = 0;
   /**
@@ -415,6 +427,7 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
 
   const hostsFile = await readJson<HostsFile>(file("hosts.json"));
   const hosts: HostsFile["hosts"] = hostsFile?.version === 1 && typeof hostsFile.hosts === "object" && hostsFile.hosts !== null ? { ...hostsFile.hosts } : {};
+  for (const host of Object.keys(hosts)) if (keptOff(`https://${host}/`, sites)) delete hosts[host];
   for (const host of crawledHosts) {
     const known = Object.hasOwn(hosts, host) ? hosts[host] : undefined;
     if (overBudget.has(host)) hosts[host] = { overBudgetRuns: (known?.overBudgetRuns ?? 0) + 1, lastOverBudget: startedAt };
