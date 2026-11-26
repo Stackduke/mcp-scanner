@@ -333,7 +333,7 @@ test("a run whose checks stall still finishes and writes its files", async () =>
     // A reply that never comes, cancelled only by the request's own abort signal, as a stalled server behaves.
     return new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
   }) as typeof fetch;
-  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], checkTimeoutMs: 50, environment: {}, fetchImpl });
+  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], attemptTimeoutMs: 50, environment: {}, fetchImpl });
   assert.equal(summary.checked, 1);
   const [line] = (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n");
   assert.equal((JSON.parse(line ?? "{}") as Endpoint).outcome, "unreachable");
@@ -452,18 +452,20 @@ test("a watched server that fails both looks is recorded as one missed check", a
   assert.deepEqual(lines.filter((line) => line.startsWith("flaky: not-usable") && !line.endsWith("after the crawl")), ["flaky: not-usable (initialize answered 424)"], "one missed check in the log");
 });
 
-test("a watched server that times out or answers 429 or 5xx to initialize is looked at again too", async () => {
-  for (const [name, failure, said] of [
-    ["a timeout", timingOut, "unreachable (TimeoutError)"],
-    ["429", answering(429), "not-usable (initialize answered 429)"],
-    ["500", answering(500), "not-usable (initialize answered 500)"],
-    ["503", answering(503), "not-usable (initialize answered 503)"],
-  ] as const) {
+test("a watched server that answers 429 to initialize is looked at again too; a timeout or 5xx is tried again at once", async () => {
+  const { lines, grafanaLooks, grafana } = await runWithFlakyServer(answering(429), 2);
+  assert.equal(grafanaLooks, 2);
+  assert.equal(grafana?.outcome, "listed");
+  assert.equal(grafana?.checks.length, 1);
+  assert.ok(lines.includes("flaky: not-usable (initialize answered 429), so it will be checked again after the crawl"));
+  assert.equal(grafana?.lastCheck?.retries, 1, "the look after the crawl counts as a retry");
+  for (const [name, failure] of [["a timeout", timingOut], ["500", answering(500)], ["503", answering(503)]] as const) {
     const { lines, grafanaLooks, grafana } = await runWithFlakyServer(failure, 2);
     assert.equal(grafanaLooks, 2, name);
     assert.equal(grafana?.outcome, "listed", name);
     assert.equal(grafana?.checks.length, 1, name);
-    assert.ok(lines.includes(`flaky: ${said}, so it will be checked again after the crawl`), name);
+    assert.equal(grafana?.lastCheck?.retries, 1, name);
+    assert.ok(!lines.some((line) => line.endsWith("after the crawl")), `${name}: the second attempt came at once`);
   }
 });
 

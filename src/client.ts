@@ -16,6 +16,23 @@ export type ListToolsResult =
   /** No answer: DNS, connection, TLS or timeout. */
   | { outcome: "unreachable"; detail: string };
 
+/**
+ * Why a listing ended as it did, in the scanner's own terms, so a failed check can be told apart from another:
+ * a login wall from a firewall's 403, a timeout from a server's own error.
+ */
+export type ErrorClass = "ok" | "timeout" | "dns" | "tls" | "connect" | "http_4xx_auth" | "http_4xx_other" | "http_5xx" | "protocol_error" | "invalid_json";
+
+/** What one listing found out besides its result. Nothing in it is the server's own text, except a protocol version cut to identifier characters. */
+export interface ListingFacts {
+  errorClass: ErrorClass;
+  /** The last HTTP status the server answered with. None when no answer came. */
+  status?: number;
+  /** The protocol version the server agreed to in its answer to initialize. */
+  protocolVersion?: string;
+  /** The failure says itself it may clear up: a name server that could not answer yet (EAI_AGAIN). Not kept. */
+  temporary?: true;
+}
+
 export interface ListToolsOptions {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
@@ -132,11 +149,62 @@ export async function listOver(transport: Transport, maxPages = 50): Promise<Lis
   }
 }
 
-export async function listTools(url: string, { fetchImpl = fetch, timeoutMs = 15_000, maxPages = 50, bearerToken }: ListToolsOptions = {}): Promise<ListToolsResult> {
+/** The error class of a request that got no usable answer, from the error fetch threw (or the timeout that cut it). */
+const errorCode = (error: unknown): string => {
+  const cause = error instanceof Error && isRecord(error.cause) ? error.cause : {};
+  return String(cause.code ?? (isRecord(error) ? error.code : "") ?? "");
+};
+
+/** A refused redirect: fetch throws it, but the server did answer. */
+const isRedirect = (error: unknown): boolean => error instanceof Error && isRecord(error.cause) && typeof error.cause.message === "string" && /redirect/i.test(error.cause.message);
+
+export function errorClassOfError(error: unknown): ErrorClass {
+  const name = error instanceof Error || error instanceof DOMException ? error.name : "";
+  if (name === "TimeoutError") return "timeout";
+  const code = errorCode(error);
+  if (/^(ENOTFOUND|EAI_AGAIN|EAI_NONAME|EAI_NODATA|EAI_FAIL)$/.test(code)) return "dns";
+  if (/^(ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT)$/.test(code)) return "timeout";
+  if (/CERT|TLS|SSL|^EPROTO$|^UNABLE_TO_VERIFY_LEAF_SIGNATURE$/.test(code)) return "tls";
+  if (isRedirect(error)) return "protocol_error";
+  // Only what fetch reports as a failed connection is one. Anything else is not the network's doing, and is not retried.
+  if (/^(ECONNREFUSED|ECONNRESET|ECONNABORTED|EHOSTUNREACH|ENETUNREACH|EPIPE|EADDRNOTAVAIL|UND_ERR_SOCKET|UND_ERR_CLOSED)$/.test(code)) return "connect";
+  if (error instanceof TypeError && /^fetch failed/.test(error.message)) return "connect";
+  return "protocol_error";
+}
+
+/** The error class of a listing that ended in `result`, from what the last exchange looked like. */
+export function errorClassOf(result: ListToolsResult, last: { status?: number; authenticate: boolean; json: boolean; error?: unknown }): ErrorClass {
+  if (result.outcome === "listed") return "ok";
+  // A 401 or 403 is a login wall only when it says how to log in; otherwise it may be a firewall or a bot wall.
+  if (result.outcome === "sign-in-required") return last.authenticate ? "http_4xx_auth" : "http_4xx_other";
+  if (result.outcome === "unreachable") return errorClassOfError(last.error);
+  if (last.status !== undefined && last.status >= 500) return "http_5xx";
+  if (last.status !== undefined && last.status >= 400) return "http_4xx_other";
+  if (/returned no result$/.test(result.detail) && !last.json) return "invalid_json";
+  return "protocol_error";
+}
+
+/** Whether a body holds JSON at all: the whole body, or one event of a stream. */
+function holdsJson(contentType: string, body: string): boolean {
+  const candidates = contentType.includes("text/event-stream") ? body.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()) : [body];
+  return candidates.some((text) => { try { JSON.parse(text); return true; } catch { return false; } });
+}
+
+const protocolVersionShape = /^[A-Za-z0-9._-]{1,32}$/;
+
+export async function listTools(url: string, options: ListToolsOptions = {}): Promise<ListToolsResult> {
+  return (await listToolsWithFacts(url, options)).result;
+}
+
+/** `listTools`, with what the listing found out besides its result: why it ended so, the last status, the protocol version agreed. */
+export async function listToolsWithFacts(url: string, { fetchImpl = fetch, timeoutMs = 15_000, maxPages = 50, bearerToken }: ListToolsOptions = {}): Promise<{ result: ListToolsResult; facts: ListingFacts }> {
+  const last: { status?: number; authenticate: boolean; json: boolean; error?: unknown } = { authenticate: false, json: true };
+  let agreedVersion: string | undefined;
+  const withFacts = (result: ListToolsResult) => ({ result, facts: { errorClass: errorClassOf(result, last), ...(last.status !== undefined ? { status: last.status } : {}), ...(agreedVersion ? { protocolVersion: agreedVersion } : {}), ...(result.outcome === "unreachable" && errorCode(last.error) === "EAI_AGAIN" ? { temporary: true as const } : {}) } });
   let sessionId: string | null = null;
   let received = 0;
   let initialized = false;
-  if (bearerToken !== undefined && !/^https:\/\//i.test(url)) return { outcome: "not-usable", detail: "a token is only sent over https" };
+  if (bearerToken !== undefined && !/^https:\/\//i.test(url)) return withFacts({ outcome: "not-usable", detail: "a token is only sent over https" });
 
   async function send(body: Record<string, unknown>): Promise<{ status: number; contentType: string; text: string }> {
     const headers: Record<string, string> = {
@@ -147,21 +215,35 @@ export async function listTools(url: string, { fetchImpl = fetch, timeoutMs = 15
     };
     if (sessionId) headers["Mcp-Session-Id"] = sessionId;
     if (bearerToken !== undefined) headers.Authorization = `Bearer ${bearerToken}`;
-    const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs), redirect: "error" });
-    sessionId = response.headers.get("Mcp-Session-Id") ?? sessionId;
-    const text = await readCapped(response, Math.min(maxBodyBytes, maxListBytes - received));
-    received += text.length;
-    return { status: response.status, contentType: response.headers.get("Content-Type") ?? "", text };
+    try {
+      const response = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs), redirect: "error" });
+      last.status = response.status;
+      last.authenticate = Boolean(response.headers.get("WWW-Authenticate")?.trim());
+      sessionId = response.headers.get("Mcp-Session-Id") ?? sessionId;
+      const text = await readCapped(response, Math.min(maxBodyBytes, maxListBytes - received));
+      received += text.length;
+      return { status: response.status, contentType: response.headers.get("Content-Type") ?? "", text };
+    } catch (error) {
+      last.error = error;
+      // The server answered, with a redirect this client will not follow: an answer it cannot use, not no answer.
+      if (isRedirect(error)) throw new ListingStopped({ outcome: "not-usable", detail: "the server answered with a redirect" });
+      throw error;
+    }
   }
 
-  return listOver({
+  return withFacts(await listOver({
     async request(body) {
       const answer = await send(body);
       if (answer.status === 401 || answer.status === 403) throw new ListingStopped({ outcome: "sign-in-required", status: answer.status });
       if (!initialized && (answer.status < 200 || answer.status >= 300)) throw new ListingStopped({ outcome: "not-usable", detail: `initialize answered ${answer.status}` });
       initialized = true;
-      return readRpcReply(answer.contentType, answer.text);
+      const reply = readRpcReply(answer.contentType, answer.text);
+      last.json = reply !== null || holdsJson(answer.contentType, answer.text);
+      const agreed = body.method === "initialize" ? reply?.result?.protocolVersion : undefined;
+      if (typeof agreed === "string" && protocolVersionShape.test(agreed)) agreedVersion = agreed;
+      return reply;
     },
-    async notify(body) { await send(body); },
-  }, maxPages);
+    // A notification's answer says nothing about the listing, so it leaves the last exchange as it was.
+    async notify(body) { const { status, authenticate } = last; await send(body); Object.assign(last, { status, authenticate }); },
+  }, maxPages));
 }
