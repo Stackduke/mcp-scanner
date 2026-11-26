@@ -245,6 +245,8 @@ Inputs: `watchfile` (default `stackduke.watch.json`), `working-directory`, `time
 | `feed.json` | What the web page reads: coverage, the servers watched with a token, and the latest change on each server that changed in the last 30 days (at most 300, within 1 MB, with the total), with how many checks in those 30 days listed tools. |
 | `servers.json` | Every endpoint that listed tools, with its counts and the same 30-day coverage. |
 | `lookup.json` | The same endpoints, cut down for a web page to search. |
+| `manifest.json` | The full sha256 of every file the latest scan wrote, the method version ([docs/METHOD.md](docs/METHOD.md)), the scanner's commit, the workflow run and when the registry was read. |
+| `manifest.sigstore.json` | A Sigstore keyless signature of `manifest.json` by the Track workflow, added in a commit right after the scan's. `npm run scan -- verify-manifest --data=<checkout>` checks both; see [docs/verify-a-scan.md](docs/verify-a-scan.md). |
 
 The `data` branch must exist before the first run; the workflow checks it out.
 

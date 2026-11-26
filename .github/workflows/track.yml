@@ -15,6 +15,10 @@
 # that may do nothing but set this repository's secrets. Every token is hidden from this log, which
 # is public, before anything could print it. The renewed access tokens reach the later steps in a
 # folder outside the checkout, readable by the runner's user only, deleted when the job ends.
+#
+# Each scan writes manifest.json, the full sha256 of every file it wrote. The sign job then signs it with
+# Sigstore keyless signing and commits the signature next to it (docs/verify-a-scan.md). Only that job may
+# ask GitHub for an identity token, so the scan, which reads what servers send, never can.
 name: Track
 
 on:
@@ -35,6 +39,9 @@ jobs:
   track:
     runs-on: ubuntu-latest
     timeout-minutes: 80
+    outputs:
+      # The data commit this run pushed, for the sign job. Empty when nothing was pushed.
+      data-commit: ${{ steps.commit.outputs.commit }}
     steps:
       - name: Check out the scanner
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -173,6 +180,7 @@ jobs:
           echo "Saved."
 
       - name: Commit what changed
+        id: commit
         if: ${{ !cancelled() && steps.scan.outcome == 'success' && (steps.private-data.outcome != 'success' || steps.private-commit.outcome == 'success') }}
         working-directory: tracker-data
         env:
@@ -185,6 +193,7 @@ jobs:
           if git diff --cached --quiet; then echo "Nothing to commit."; exit 0; fi
           git commit -q -m "Scan $(date -u +%Y-%m-%d)"
           git -c "http.extraheader=Authorization: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" push -q "https://github.com/$REPOSITORY.git" HEAD:data
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Runs whatever happened above, so a lost sign-in, or sign-in steps that did not finish, reach a person.
       - name: Tell a person about sign-ins
@@ -197,3 +206,70 @@ jobs:
       - name: Forget the sign-ins
         if: always()
         run: rm -rf "$RUNNER_TEMP/sign-ins"
+
+  # Signs the manifest the scan just pushed, with no stored key: GitHub vouches for this workflow's identity
+  # with a short-lived OIDC token, Sigstore's Fulcio issues a ten-minute certificate for that identity, and
+  # the signature is logged in Sigstore's public transparency log, Rekor. The bundle (signature, certificate
+  # and log proof) is committed next to the manifest.
+  sign:
+    needs: track
+    if: ${{ !cancelled() && needs.track.outputs.data-commit != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Set here, so this job has only these two (it does not inherit the workflow's issues: write).
+    permissions:
+      # To push the signature to the data branch.
+      contents: write
+      # To ask GitHub for the OIDC token Sigstore checks. No other job has it.
+      id-token: write
+    steps:
+      - name: Check out the scanner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out the scan's data commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.track.outputs.data-commit }}
+          path: tracker-data
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      # Signs only a manifest this run wrote, whose files match it.
+      - name: Check the manifest before signing it
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          test "$(jq -r .run.id tracker-data/manifest.json)" = "$RUN_ID"
+          node src/cli.ts verify-manifest --data=tracker-data --hashes-only
+
+      # Installs cosign and checks the download against its published signature.
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
+
+      - name: Sign the manifest
+        working-directory: tracker-data
+        run: cosign sign-blob --yes --bundle manifest.sigstore.json manifest.json
+
+      # The same check anyone can run (docs/verify-a-scan.md), so a signature that would not verify is never committed.
+      - name: Verify the signature
+        run: node src/cli.ts verify-manifest --data=tracker-data --repo="$REPOSITORY"
+        env:
+          REPOSITORY: ${{ github.repository }}
+
+      - name: Commit the signature
+        working-directory: tracker-data
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git config user.name "stackduke-tracker[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.sigstore.json
+          git commit -q -m "Sign scan $(date -u +%Y-%m-%d)"
+          git -c "http.extraheader=Authorization: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" push -q "https://github.com/$REPOSITORY.git" HEAD:data

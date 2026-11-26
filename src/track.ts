@@ -5,6 +5,7 @@ import type { AuthorityReport } from "./authority.ts";
 import { listTools, userAgent } from "./client.ts";
 import { crawl } from "./crawl.ts";
 import { readSnapshot, snapshotText, writeWhole } from "./files.ts";
+import { buildManifest, writeManifest } from "./manifest.ts";
 import { readRegistry } from "./registry.ts";
 import type { RegistryRead } from "./registry.ts";
 import { catalog, publicList } from "./catalog.ts";
@@ -22,6 +23,7 @@ import type { CheckResult, Endpoint, FeedWatched, RegistryState } from "./tracke
  *   registry.json     when the registry was last read, and whether to the end
  *   feed.json         what the web page reads: coverage, the servers watched with a login, recent changes
  *   servers.json      every endpoint that listed tools, with counts, for a searchable table
+ *   manifest.json     the full sha256 of every file this run wrote, the method version, the scanner commit and the run
  *
  * The folder is meant to be committed after each run, so its history is the history of every change.
  *
@@ -142,6 +144,9 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   const clock = options.now ?? (() => new Date());
   const startedAt = clock().toISOString();
   const file = (relative: string) => path.join(dataDir, relative);
+  // What this run writes to the public folder, by path relative to it, for the manifest.
+  const written = new Set<string>();
+  const writePublic = async (relative: string, text: string) => { await writeWhole(file(relative), text); written.add(relative); };
   const privateFile = (relative: string) => path.join(privateDataDir ?? "", relative);
 
   const published = (vendor: string | undefined) => vendor !== undefined && signedInServers[vendor]?.publish === true;
@@ -206,13 +211,16 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     // The public log's count leaves out servers tracked privately, so it says nothing about them.
     if (endpoint.changes[0] !== latestChange && store === publicStore) changed += 1;
     if (!saved || !endpoint.file) return;
-    await writeWhole(store.file(endpoint.file), `${JSON.stringify(saved.print)}\n`);
+    if (store === publicStore) await writePublic(endpoint.file, `${JSON.stringify(saved.print)}\n`);
+    else await writeWhole(store.file(endpoint.file), `${JSON.stringify(saved.print)}\n`);
     // The definitions are rewritten only when the server changed them (or the file is missing), so a
     // watched file's history is its server's history. Its takenAt is when that version was first
     // seen; how recently it was confirmed is the endpoint's lastListed.
     if (!endpoint.signedIn) return;
     const watchedPath = store.file(watchedFile(endpoint.signedIn));
-    if (!saved.reread || !(await readSnapshot(watchedPath))) await writeWhole(watchedPath, snapshotText(saved.snapshot));
+    if (saved.reread && (await readSnapshot(watchedPath))) return;
+    if (store === publicStore) await writePublic(watchedFile(endpoint.signedIn), snapshotText(saved.snapshot));
+    else await writeWhole(watchedPath, snapshotText(saved.snapshot));
   }
 
   /** One look at a server watched with a login, as the result to record. */
@@ -312,11 +320,13 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
 
   const endpoints = [...byUrl.values(), ...publicStore.watched.values()].sort(byId);
   const { feed, servers } = buildFeed(endpoints, await reportsOf(publicStore), registry, clock().toISOString(), publicGroups, publicServers);
-  await writeWhole(file("endpoints.jsonl"), endpoints.map((endpoint) => JSON.stringify(endpoint)).join("\n") + (endpoints.length ? "\n" : ""));
-  await writeWhole(file("registry.json"), `${JSON.stringify(registry, null, 2)}\n`);
-  await writeWhole(file("feed.json"), `${JSON.stringify(feed)}\n`);
-  await writeWhole(file("servers.json"), `${JSON.stringify(servers)}\n`);
-  await writeWhole(file("lookup.json"), `${JSON.stringify({ version: 1, generatedAt: feed.generatedAt, rows: lookupOf(servers) })}\n`);
+  await writePublic("endpoints.jsonl", endpoints.map((endpoint) => JSON.stringify(endpoint)).join("\n") + (endpoints.length ? "\n" : ""));
+  await writePublic("registry.json", `${JSON.stringify(registry, null, 2)}\n`);
+  await writePublic("feed.json", `${JSON.stringify(feed)}\n`);
+  await writePublic("servers.json", `${JSON.stringify(servers)}\n`);
+  await writePublic("lookup.json", `${JSON.stringify({ version: 1, generatedAt: feed.generatedAt, rows: lookupOf(servers) })}\n`);
+  // Last, so it covers everything above. The private folder has no manifest: its files are never published.
+  await writeManifest(dataDir, await buildManifest({ dataDir, written, scanStartedAt: startedAt, generatedAt: clock().toISOString(), registry, environment }));
 
   if (privateDataDir !== undefined) {
     const privateEndpoints = [...privateStore.watched.values()].sort(byId);
