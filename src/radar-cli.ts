@@ -91,7 +91,9 @@ export async function radarMain(argv: string[], { env = process.env, fetchImpl =
     await run(input);
   } else {
     let scans = 0;
-    for await (const { input, leftOut } of backfillScans(given.get("repo") as string, given.get("ref") ?? "origin/data")) {
+    // A scan with a manifest is checked as publish checks one, its signature with cosign, before it is planned.
+    const repository = /^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPOSITORY ?? "") ? env.GITHUB_REPOSITORY : undefined;
+    for await (const { input, leftOut } of backfillScans(given.get("repo") as string, given.get("ref") ?? "origin/data", { now, ...(repository ? { repository } : {}), ...(cosign ? { cosign } : {}) })) {
       // Counted, never named: a server tracked privately is not named in a log.
       await run(input, leftOut ? `${leftOut} records about servers tracked privately or kept off left out` : "");
       scans += 1;

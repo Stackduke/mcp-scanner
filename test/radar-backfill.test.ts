@@ -93,7 +93,7 @@ async function dataBranch(): Promise<string> {
   // Since manifests: a scan's commit, then the commit adding its signature. Then a scan whose signing failed.
   const scanWithManifest = async (scanStartedAt: string, committedAt: string) => {
     await put({ "registry.json": `${JSON.stringify({ readAt: scanStartedAt })}\n` });
-    await writeManifest(repo, await buildManifest({ dataDir: repo, written: ["registry.json"], scanStartedAt, generatedAt: scanStartedAt, registry: { readAt: scanStartedAt, attemptedAt: scanStartedAt, attemptOk: true }, previous: { verified: false, reason: "no manifest" }, environment: {} }));
+    await writeManifest(repo, await buildManifest({ dataDir: repo, written: ["registry.json"], scanStartedAt, generatedAt: scanStartedAt, registry: { readAt: scanStartedAt, attemptedAt: scanStartedAt, attemptOk: true }, previous: { verified: false, reason: "no manifest" }, environment: { GITHUB_SHA: "a".repeat(40), GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1", GITHUB_REPOSITORY: "Stackduke/mcp-scanner" } }));
     git(["add", "-A"]);
     git(["commit", "-q", "-m", "Scan"], committedAt);
   };
@@ -104,6 +104,9 @@ async function dataBranch(): Promise<string> {
   await scanWithManifest("2026-11-27T04:17:00.000Z", "2026-11-27T05:00:00Z");
   return repo;
 }
+
+/** A clock after every scan of the test branch. */
+const afterAll = () => new Date("2026-12-01T00:00:00Z");
 
 async function allFiles(root: string, relative = ""): Promise<string[]> {
   const found: string[] = [];
@@ -120,7 +123,12 @@ test("backfill turns the data branch's history into the layout, leaving out priv
   const refsBefore = execFileSync("git", ["-C", repo, "show-ref"]).toString();
   const out = await folder();
   const lines: string[] = [];
-  assert.equal(await radarMain(["backfill", `--repo=${repo}`, "--ref=data", `--to-folder=${out}`], { log: (line) => lines.push(line), now: () => new Date("2026-11-26T00:00:00Z") }), 0);
+  // The signed scan's signature is checked with cosign (stubbed here), and every manifest against its commit.
+  const asked: string[][] = [];
+  const deps = { now: afterAll, cosign: async (args: string[]) => { asked.push(args); return { code: 0, output: "Verified OK" }; } };
+  assert.equal(await radarMain(["backfill", `--repo=${repo}`, "--ref=data", `--to-folder=${out}`], { log: (line) => lines.push(line), ...deps }), 0);
+  assert.equal(asked.length, 1, "cosign is asked about the one signed scan");
+  assert.ok(asked[0]?.includes("--certificate-identity"));
 
   const first = "2026-10-20T100500Z", second = "2026-10-25T100500Z";
   // Named by the manifest's start time, not the commit's: the scan and its signing commit are one scan.
@@ -177,16 +185,19 @@ test("backfill turns the data branch's history into the layout, leaving out priv
   assert.equal(execFileSync("git", ["-C", repo, "show-ref"]).toString(), refsBefore);
   assert.equal(execFileSync("git", ["-C", repo, "status", "--porcelain"]).toString(), "");
   lines.length = 0;
-  assert.equal(await radarMain(["backfill", `--repo=${repo}`, "--ref=data", `--to-folder=${out}`], { log: (line) => lines.push(line) }), 0);
+  assert.equal(await radarMain(["backfill", `--repo=${repo}`, "--ref=data", `--to-folder=${out}`], { log: (line) => lines.push(line), ...deps }), 0);
   assert.match(lines.join("\n"), /0 objects written/);
 
   // A dry run prints a plan per scan, and changes neither the repository nor the output.
   const outBefore = await allFiles(out);
   lines.length = 0;
-  assert.equal(await radarMain(["backfill", `--repo=${repo}`, "--ref=data", "--dry-run"], { log: (line) => lines.push(line) }), 0);
+  assert.equal(await radarMain(["backfill", `--repo=${repo}`, "--ref=data", "--dry-run"], { log: (line) => lines.push(line), ...deps }), 0);
   assert.match(lines.join("\n"), /4 scans planned/);
   assert.deepEqual(await allFiles(out), outBefore);
   assert.equal(execFileSync("git", ["-C", repo, "status", "--porcelain"]).toString(), "");
+  // A signature that does not verify stops the backfill, and so does a scan dated in the future.
+  await assert.rejects(radarMain(["backfill", `--repo=${repo}`, "--ref=data", "--dry-run"], { log: () => undefined, now: afterAll, cosign: async () => ({ code: 1, output: "error: invalid signature" }) }), /does not match its signed manifest.*signature did not verify/);
+  await assert.rejects(radarMain(["backfill", `--repo=${repo}`, "--ref=data", "--dry-run"], { log: () => undefined, ...deps, now: () => new Date("2026-11-26T12:00:00Z") }), /is dated in the future/);
   // A ref that git would read as an option is refused before git runs.
   await assert.rejects(radarMain(["backfill", `--repo=${repo}`, "--ref=--output=written-by-git", "--dry-run"], { log: () => undefined }), /Not a branch or ref name/);
 });

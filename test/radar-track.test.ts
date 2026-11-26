@@ -20,11 +20,12 @@ const made = async (prefix: string) => { const dir = await mkdtemp(path.join(tmp
 const start = Date.parse("2026-11-20T04:17:00.000Z"), day = 24 * 3_600_000, minute = 60_000;
 const urls = ["https://busy.example.com/a", "https://busy.example.com/b", "https://calm.example.com/mcp"];
 
-async function trackOnce(dataDir: string, at: number) {
+async function trackOnce(dataDir: string, at: number, registry = urls, contacted: string[] = []) {
   let clock = at;
   const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
     const url = String(input);
-    if (url.startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: urls.map((address, index) => ({ server: { name: `com.example/server-${index}`, remotes: [{ type: "streamable-http", url: address }] } })), metadata: {} });
+    if (url.startsWith("https://registry.modelcontextprotocol.io/")) return Response.json({ servers: registry.map((address, index) => ({ server: { name: `com.example/server-${index}`, remotes: [{ type: "streamable-http", url: address }] } })), metadata: {} });
+    contacted.push(url);
     const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
     // The busy host uses up its time on its first server, so the run counts it in hosts.json.
     if (body.method === "initialize") {
@@ -88,4 +89,42 @@ test("a server on a kept-off site leaves nothing behind for the bucket: its list
     const text = (object.key.endsWith(".gz") ? gunzipSync(object.body) : object.body).toString("utf8");
     assert.doesNotMatch(text, /sentry/, object.key);
   }
+});
+
+/** Every planned object's text, decompressed, that mentions any of the words. */
+const mentioning = (plan: ReturnType<typeof planScan>, words: RegExp) => plan.objects.filter((object) => words.test((object.key.endsWith(".gz") ? gunzipSync(object.body) : object.body).toString("utf8"))).map((object) => object.key);
+
+test("a kept-off vendor's address spelled with a trailing dot, or on its other domain, is neither checked nor planned", async () => {
+  // The re-check's repro: anyone publishing to the registry can list these, and DNS reads them as the vendor's hosts.
+  const dataDir = await made("radar-track-");
+  const contacted: string[] = [];
+  const listed = ["https://calm.example.com/mcp", "https://mcp.sentry.dev./mcp", "https://MCP.AIRTABLE.COM.:443/mcp", "https://api.intercom.io/mcp", "https://mcp.getsentry.com/mcp"];
+  await trackOnce(dataDir, start, listed, contacted);
+  assert.deepEqual(contacted.filter((url) => !url.includes("calm.example.com")), [], "only the open server is checked");
+  assert.deepEqual(mentioning(planScan(await scanInputFromFolder(dataDir)), /sentry|airtable|intercom/i), []);
+  assert.doesNotMatch(await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8"), /sentry|airtable|intercom/i);
+});
+
+test("the tracker removes any saved list about a kept-off site, by its name or by the address it was read from", async () => {
+  // Lists no endpoint names: one left from before a vendor was kept off, one put back from an earlier scan.
+  const dataDir = await made("radar-track-");
+  const lists = {
+    byName: "lists/ab/mcp.sentry.dev.-abcdefabcdef.json",
+    bySource: "lists/cd/gateway.example.com-cdcdcdcdcdcd.json",
+    open: "lists/ef/gone.example.com-efefefefefef.json",
+  };
+  const write = async (relative: string, source: string) => {
+    await mkdir(path.join(dataDir, path.dirname(relative)), { recursive: true });
+    await writeFile(path.join(dataDir, relative), `${JSON.stringify({ source, tools: [] })}\n`);
+  };
+  await write(lists.byName, "https://elsewhere.example.com/mcp");
+  await write(lists.bySource, "https://api.intercom.io/mcp");
+  await write(lists.open, "https://gone.example.com/mcp");
+  await trackOnce(dataDir, start);
+  await assert.rejects(access(path.join(dataDir, lists.byName)));
+  await assert.rejects(access(path.join(dataDir, lists.bySource)));
+  await access(path.join(dataDir, lists.open));
+  // So the scan publishes, the open orphan with it.
+  const plan = planScan(await scanInputFromFolder(dataDir));
+  assert.equal(plan.orphanLists, 1);
 });

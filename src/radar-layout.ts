@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { sha256 } from "./manifest.ts";
 import { keptOffSites } from "./track.ts";
-import { lookupOf, siteOf } from "./tracker.ts";
+import { listFileUrl, listOnSites, lookupOf, onSites } from "./tracker.ts";
 import type { FeedServer } from "./tracker.ts";
 
 /**
@@ -106,15 +106,8 @@ const keptOff = keptOffSites();
  * catalog, the tracker's keptOffSites). The tracker never checks or keeps such an address; this is the uploader's
  * own check, so a slip in the tracker still cannot publish one.
  */
-export function isKeptOff(url: unknown, sites: ReadonlySet<string> = keptOff): boolean {
-  if (typeof url !== "string") return false;
-  try { return sites.has(siteOf(url)); } catch { return false; }
-}
-/** The host in a list file's name (lists/ab/<host>-<id>.json), as an address. */
-export const listFileUrl = (listPath: string) => {
-  const host = /^lists\/[^/]+\/(.+)-[^-/]+\.json$/.exec(listPath)?.[1];
-  return host ? `https://${host}/` : undefined;
-};
+export const isKeptOff = (url: unknown, sites: ReadonlySet<string> = keptOff): boolean => onSites(url, sites);
+export { listFileUrl };
 
 export type ScanSource =
   | { kind: "track"; scanStartedAt: string; scannerCommit: string; methodVersion?: string; run?: { id: string; attempt: string; repository: string } }
@@ -249,7 +242,7 @@ export function planScan(input: ScanInput): ScanPlan {
   let orphanLists = 0, leftOutLists = 0;
   for (const [listPath, bytes] of [...input.lists].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
     // By the host in its name, and by the address it says it was read from.
-    if (isKeptOff(listFileUrl(listPath)) || isKeptOff((() => { try { return (JSON.parse(bytes.toString("utf8")) as { source?: unknown })?.source; } catch { return undefined; } })())) throw keptOffRefused("a tool list");
+    if (listOnSites(listPath, bytes, keptOff)) throw keptOffRefused("a tool list");
     if (listPath.includes("signed-in-") && !listOwner.has(listPath)) throw refused(listPath.slice(0, listPath.lastIndexOf("/") + 1));
     // A list no endpoint names (its endpoint left the registry, or was kept off) is still public: it is kept
     // under the id in its file name, which the tracker derives from the endpoint's address.

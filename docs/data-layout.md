@@ -60,6 +60,7 @@ The code that writes this layout is `src/radar-layout.ts`. Its tests check every
 ```
 
 - `source.kind` is `track` for a scan published by the Track workflow, or `data-branch` (with `commit` and `committedAt`, and `scanStartedAt` when the commit has a manifest) for one taken from the data branch's history.
+- `signed` is true when the scan's `manifest.sigstore.json` verified with cosign when the scan was published, as signed by this repository's Track workflow: the uploader checks it for every daily scan, and the backfill for every scan from the data branch's history that has one. A scan without a signature says false.
 - `files` lists the scan's other files (its manifest and signature under `scans/<scan-id>/`, and everything under `snapshots/<scan-id>/`) with the sha256 and size **of its content**. For a `.gz` file that is the content after decompressing it, so check a download by decompressing it first.
 - `lists.written` names the list versions first seen in this scan. Together, the `written` lists of all scans hold the history of every endpoint's tools.
 
@@ -117,7 +118,8 @@ A local build can use a folder written by `node src/radar-cli.ts publish --to-fo
 
 Only public data is published:
 - **Servers that need a sign-in are tracked privately,** and nothing about them is ever uploaded. Layout 1 publishes no server watched with a sign-in at all.
-- **Sites whose terms forbid publishing about them are kept off:** no address on them is checked, kept or published.
+- **Sites whose terms forbid publishing about them are kept off:** no address on them is checked, kept or published. That covers the vendor's own other domains listed in the catalog, and any spelling of a host that DNS reads as the same (`mcp.example.com.`). Another company's server for such a vendor, on that company's own domain, is not the vendor's site and is published.
+- **A server tracked privately also has a public registry address.** Its anonymous record (the address answered that it needs a sign-in, and when it was checked, with no tool details) is published like any other endpoint's.
 
 The uploader refuses a whole scan that holds any endpoint record, feed entry, `servers.json` row, tool list or `watched/` file of such a server, or a `hosts.json` host on a kept-off site. It also refuses:
 - a file with fields this layout does not know;

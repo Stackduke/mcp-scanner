@@ -186,12 +186,34 @@ const sharedHosting = ["workers.dev", "pages.dev", "vercel.app", "netlify.app", 
 
 /** The site an address belongs to: its registrable domain, roughly, or the whole host on shared hosting. */
 export function siteOf(url: string): string {
-  const host = new URL(url).hostname.toLowerCase();
+  // A name ending in dots (mcp.example.com.) is the same host to DNS, so it is the same site here.
+  const host = new URL(url).hostname.toLowerCase().replace(/\.+$/, "");
   if (sharedHosting.some((suffix) => host.endsWith(`.${suffix}`))) return host;
   const labels = host.split(".");
   // example.co.uk, example.com.au: a country's own second level is part of the suffix.
   const countrySecondLevel = /^[a-z]{2}$/.test(labels.at(-1) ?? "") && ["co", "com", "net", "org", "ac", "gov", "edu"].includes(labels.at(-2) ?? "");
   return labels.slice(countrySecondLevel ? -3 : -2).join(".");
+}
+
+/** Whether an address is on one of the sites given. One that cannot be read as an address is not. */
+export function onSites(url: unknown, sites: ReadonlySet<string>): boolean {
+  if (typeof url !== "string") return false;
+  try { return sites.has(siteOf(url)); } catch { return false; }
+}
+
+/** The host in a list file's name (lists/ab/<host>-<id>.json), as an address. */
+export const listFileUrl = (listPath: string) => {
+  const host = /^lists\/[^/]+\/(.+)-[^-/]+\.json$/.exec(listPath)?.[1];
+  return host ? `https://${host}/` : undefined;
+};
+
+/**
+ * Whether a saved tool list is about one of the sites given: by the host in its file name, or by the address it
+ * says it was read from (`source`), since a long host is cut short in the name.
+ */
+export function listOnSites(listPath: string, bytes: Buffer | string, sites: ReadonlySet<string>): boolean {
+  if (onSites(listFileUrl(listPath), sites)) return true;
+  try { return onSites((JSON.parse(bytes.toString()) as { source?: unknown } | null)?.source, sites); } catch { return false; }
 }
 
 /** How long to wait before looking again at an endpoint that did not list tools: 4 to 10 days, spread by address. */

@@ -1,5 +1,9 @@
 import { execFile, spawn } from "node:child_process";
-import { manifestName, readManifest, signatureName } from "./manifest.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { manifestName, readManifest, signatureName, verifyManifest } from "./manifest.ts";
+import type { RunCosign } from "./manifest.ts";
 import { isKeptOff, isPrivateRecord, listFileUrl, scanIdOf } from "./radar-layout.ts";
 import { lookupOf } from "./tracker.ts";
 import type { FeedServer } from "./tracker.ts";
@@ -17,8 +21,17 @@ import type { ScanInput } from "./radar-layout.ts";
  * out the same way.
  *
  * Since scans carry a manifest, each one is two commits: the scan's, then the one adding its signature. They
- * are one scan here, named by the manifest's start time, with the signature when there is one.
+ * are one scan here, named by the manifest's start time, with the signature when there is one. Such a commit is
+ * checked as the uploader checks a folder (verifyManifest): its files against the manifest, and the signature
+ * with cosign, so `signed` means verified here too. A scan dated in the future is refused, as publish refuses it.
  */
+export interface BackfillOptions {
+  now?: () => Date;
+  /** The repository whose Track workflow must have signed a scan. Default Stackduke/mcp-scanner. */
+  repository?: string;
+  /** For tests: what runs cosign. */
+  cosign?: RunCosign;
+}
 export interface BackfillScan {
   input: ScanInput;
   /** Endpoint records, feed entries, servers rows and list files left out: about servers tracked privately, or kept off. */
@@ -73,8 +86,36 @@ async function treeOf(repo: string, commit: string): Promise<Map<string, string>
 
 const tops = ["endpoints.jsonl", "feed.json", "servers.json", "lookup.json", "registry.json", "hosts.json"];
 
+/** A commit's files, written to a new folder exactly as git holds them: `git archive`, unpacked by tar. */
+function extract(repo: string, commit: string, dir: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const archive = spawn("git", ["-C", repo, "archive", "--format=tar", commit], { stdio: ["ignore", "pipe", "ignore"] });
+    const untar = spawn("tar", ["-x", "-C", dir], { stdio: ["pipe", "ignore", "ignore"] });
+    archive.stdout.pipe(untar.stdin);
+    let failed = false;
+    const fail = (what: string) => { if (!failed) { failed = true; reject(new Error(`${what} failed while reading commit ${commit.slice(0, 12)}`)); } };
+    archive.on("error", () => fail("git archive"));
+    untar.on("error", () => fail("tar"));
+    archive.on("close", (code) => { if (code !== 0) fail("git archive"); });
+    untar.on("close", (code) => { if (code !== 0) fail("tar"); else if (!failed) resolve(); });
+  });
+}
+
+/** Checks a commit's scan against its manifest, and its signature with cosign when it has one; throws if it does not hold. */
+async function verifyCommit(repo: string, commit: string, signed: boolean, { repository, cosign }: BackfillOptions): Promise<void> {
+  const dir = await mkdtemp(path.join(tmpdir(), "radar-backfill-"));
+  try {
+    await extract(repo, commit, dir);
+    const check = await verifyManifest(dir, { hashesOnly: !signed, thisScanOnly: true, ...(repository ? { repository } : {}), ...(cosign ? { cosign } : {}) });
+    if (!check.ok) throw new Error(`Commit ${commit.slice(0, 12)} does not match its ${signed ? "signed " : ""}manifest, so nothing more was published: ${check.problems.slice(0, 3).join("; ")}${check.problems.length > 3 ? ` (and ${check.problems.length - 3} more)` : ""}`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 /** The scans of a data branch, oldest first. Commits with no endpoints.jsonl (the branch's first) are skipped. */
-export async function* backfillScans(repo: string, ref: string): AsyncGenerator<BackfillScan> {
+export async function* backfillScans(repo: string, ref: string, options: BackfillOptions = {}): AsyncGenerator<BackfillScan> {
+  const now = options.now ?? (() => new Date());
   // A ref that starts with "-" would reach git as an option (--output=<file> writes a file), so it is refused.
   if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(ref)) throw new Error(`Not a branch or ref name: ${ref}`);
   const log = (await git(repo, ["log", "--reverse", "--first-parent", "--format=%H %cI", ref, "--"])).toString("utf8").trim();
@@ -165,7 +206,10 @@ export async function* backfillScans(repo: string, ref: string): AsyncGenerator<
     // A signed scan is published as it was signed: one that needed filtering would no longer match its manifest.
     if (manifest && leftOut) throw new Error(`Commit ${commit.slice(0, 12)} has a manifest and data about servers tracked privately; it cannot be published as signed.`);
     const scanStartedAt = read && typeof read !== "string" ? read.scanStartedAt : undefined;
+    // The pointer never moves back, so a scan dated ahead would hold it: refused, as publish refuses it.
+    if (Date.parse(scanStartedAt ?? committedAt) > now().getTime() + 10 * 60_000) throw new Error(`Commit ${commit.slice(0, 12)} is dated in the future, so it was not published.`);
     const signatureId = tree.get(signatureName);
+    if (manifest) await verifyCommit(repo, commit, signatureId !== undefined, options);
     yield {
       input: {
         id: scanIdOf(scanStartedAt ?? committedAt),

@@ -154,7 +154,8 @@
       "tracker": {
         "publish": false,
         "reason": "Sentry's terms (section 2.3(g)) forbid publishing benchmarks or performance information about the service, and treat any technical information about it as confidential.",
-        "forbidden": true
+        "forbidden": true,
+        "sites": ["https://getsentry.com"]
       }
     },
     {
@@ -169,7 +170,8 @@
       "tracker": {
         "publish": false,
         "reason": "Intercom's terms forbid publishing performance information about the service.",
-        "forbidden": true
+        "forbidden": true,
+        "sites": ["https://intercom.io"]
       }
     },
     {

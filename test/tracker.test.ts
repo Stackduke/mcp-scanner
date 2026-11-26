@@ -23,6 +23,8 @@ test("only plain https addresses on public hosts are scanned", () => {
   for (const bad of ["http://mcp.example.com/mcp", "https://{host}/mcp", "https://user:pass@example.com/mcp", "https://localhost/mcp", "https://169.254.169.254/latest", "https://[::1]/mcp", "https://printer.local/mcp", "https://intranet/mcp", "https://x.internal/mcp", "not a url", 42, `https://example.com/${"a".repeat(600)}`]) {
     assert.equal(scannableAddress(bad), null, String(bad));
   }
+  // A name ending in a dot is the same host to DNS under another spelling, so it is not scanned either.
+  for (const dotted of ["https://mcp.sentry.dev./mcp", "https://MCP.AIRTABLE.COM.:443/mcp", "https://mcp.example.com%2E/mcp", "https://mcp.example.com../mcp"]) assert.equal(scannableAddress(dotted), null, dotted);
 });
 
 test("a registry entry keeps its Streamable HTTP endpoints only", () => {
@@ -287,6 +289,9 @@ test("a server that renames thousands of tools gets a short record with full cou
 test("subdomains of one site share a looser cap, and on shared hosting each host is its own site", () => {
   assert.equal(siteOf("https://a.evil.com/mcp"), "evil.com");
   assert.equal(siteOf("https://deep.b.evil.com/mcp"), "evil.com");
+  // A trailing dot is the same host to DNS, so the same site.
+  assert.equal(siteOf("https://mcp.sentry.dev./mcp"), "sentry.dev");
+  assert.equal(siteOf("https://MCP.AIRTABLE.COM..:443/mcp"), "airtable.com");
   assert.equal(siteOf("https://mcp.example.co.uk/mcp"), "example.co.uk");
   assert.equal(siteOf("https://x.abc.io/mcp"), "abc.io");
   for (const host of ["one.workers.dev", "svc-123.a.run.app", "app.up.railway.app", "abc.execute-api.us-east-1.amazonaws.com"]) assert.equal(siteOf(`https://${host}/mcp`), host);

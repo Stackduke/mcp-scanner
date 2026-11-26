@@ -74,7 +74,11 @@ The bucket is public, so nothing about a server tracked privately, or on the sit
 
 - Planning a scan refuses the whole scan if any endpoint record, feed entry, `servers.json` row, tool list or `watched/` file belongs to a server watched with a sign-in. It reads only fields the scanner writes itself (`signedIn`, and ids of the form `signed-in-<vendor>`), so no server can block uploads by giving a tool a vendor's name. The refusal names no server, because workflow logs are public.
 - Layout 1 has no place for any server watched with a sign-in, so all of them are refused, even a vendor the catalog marks `publish: true` (none is today). Publishing one would first need a key for its `watched/` file and for its list, whose id is not 12 hex characters.
-- **Kept-off sites.** The catalog marks some vendors `forbidden`: their terms forbid publishing about their service (Sentry, Intercom and Airtable today). The tracker keeps their sites off: it never checks an address on them. When a site becomes kept off, it now also deletes the endpoint's saved list and the site's `hosts.json` entries. The uploader does not rely on that. It refuses a whole scan with any endpoint record, feed entry, `hosts.json` host or tool list on such a site. A tool list is judged both by the host in its file name and by the address it was read from (`source`).
+- **Kept-off sites.** The catalog marks some vendors `forbidden`: their terms forbid publishing about their service (Sentry, Intercom and Airtable today).
+  - **Which sites.** A vendor's sites are those of its server's address and its website, plus any other domain the catalog lists as the vendor's own (`sites`, such as `intercom.io` and `getsentry.com`). A host name ending in a dot (`mcp.sentry.dev.`) is the same host to DNS, so it counts as the same site, and the registry reader drops such addresses outright.
+  - **The tracker** never checks an address on those sites. When a site becomes kept off, it deletes the endpoint's saved list and the site's `hosts.json` entries. Each run it also removes any other saved list about a kept-off site, using the same test as the uploader.
+  - **The uploader** does not rely on the tracker. It refuses a whole scan with any endpoint record, feed entry, `hosts.json` host or tool list on such a site. A tool list is judged both by the host in its file name and by the address it was read from (`source`).
+  - **Third-party servers** for those vendors (another company's gateway on its own domain) are not the vendor's site, and stay published (decision of 26 November 2026).
 - Beyond those fields, each file may hold only what the layout knows:
   - `feed.json`, `registry.json`, `lookup.json` and `hosts.json` may have only the top-level fields of the tracker's own types;
   - every `servers.json` row must be an endpoint of the same scan;
@@ -141,7 +145,8 @@ Have this ready to apply by about 8 December, so it can ship before the push fai
 The `track` job needs the previous scan's folder to start from. A `restore` command rebuilds it from the bucket, with no key: it reads `latest.json`, then that scan's files.
 
 - `endpoints.jsonl`, `feed.json`, `servers.json`, `lookup.json`, `registry.json` and `hosts.json` come from `snapshots/<scan>/`.
-- Each line of `lists.jsonl.gz` becomes the file at its `path`: the raw text of its `list`, as it stands in the line, followed by a newline, checked against its `sha256`. `list` is always the line's last field, so its text is everything after `"list":` but the closing `}`. It is taken as it is, not parsed and written out again, which could change the bytes. Lists no endpoint names are in the bundle too, so every list comes back.
+- Each line of `lists.jsonl.gz` becomes the file at its `path`, except a line about a kept-off site (by the same test the tracker and the uploader use), which is skipped (`listOnSites` in `tracker.ts`). Otherwise a vendor marked forbidden after it was published would come back each day. Until `restore` exists, the tracker's sweep is the guard in code: a list on a kept-off site that is put back is removed by the next run, before the upload.
+- The file is the raw text of its `list`, as it stands in the line, followed by a newline, checked against its `sha256`. `list` is always the line's last field, so its text is everything after `"list":` but the closing `}`. It is taken as it is, not parsed and written out again, which could change the bytes. Lists no endpoint names are in the bundle too, so every list comes back.
 - `manifest.json` and `manifest.sigstore.json` come from `scans/<scan>/`.
 - `.gitattributes` is written from the scanner's own constant (`dataAttributes` in `track.ts`). It is the same in every scan, so it needs no copy in the bucket.
 
@@ -225,11 +230,19 @@ jobs:
 
 ### The backfill job
 
-It runs once, before the switch, from its own workflow file. It shares the Track workflow's concurrency group, so it never runs alongside a scan, and it reads the data branch only.
+It runs once, before the switch, from its own workflow file. It shares the Track workflow's concurrency group, so it never runs alongside a scan, and it reads the data branch only. Whatever it publishes stays for good, so it publishes exactly what was reviewed:
+- **Pinned commit.** It takes the data branch's commit as an input. Use the SHA whose dry run (`backfill --repo=<checkout> --ref=<sha> --dry-run`) was reviewed, not the branch's moving tip. The job checks that the commit is on the data branch.
+- **Checked manifests.** A scan with a manifest is checked as `publish` checks a folder: its files against the manifest, and its signature with cosign when it has one. So `signed` in `scan.json` means the signature verified, here as for daily scans. A scan that does not verify stops the backfill.
+- **No future dates.** A scan dated in the future is refused, as `publish` refuses it.
 
 ```yaml
 name: Radar backfill
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "The data branch commit whose dry run was reviewed (40 hex characters)"
+        required: true
 permissions:
   contents: read
 concurrency:
@@ -248,15 +261,42 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-      - run: git fetch -q origin data
-      - run: node src/radar-cli.ts backfill --repo=. --ref=origin/data --bucket=radar
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
+      - name: Take the reviewed commit, and only one on the data branch
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+          git fetch -q origin data
+          git merge-base --is-ancestor "$SHA" origin/data
         env:
+          SHA: ${{ inputs.sha }}
+      - run: node src/radar-cli.ts backfill --repo=. --ref="$SHA" --bucket=radar
+        env:
+          SHA: ${{ inputs.sha }}
           R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 ```
 
-Planning takes about three minutes, and it writes about 73,500 objects. Running it again writes nothing new. Run it after the last scan committed to the data branch and before the first scan published to the bucket. Otherwise that last scan has to be backfilled again, which is safe.
+Planning takes about three minutes, and it writes about 73,500 objects. Running it again writes nothing new. Run it after the last scan committed to the data branch and before the first scan published to the bucket. Otherwise that last scan has to be backfilled again, from a newer reviewed SHA, which is safe.
+
+### When a vendor becomes forbidden
+
+When someone reads a vendor's terms and they forbid publishing about its service:
+
+1. **Mark it in the catalog:** `"forbidden": true`, the reason, and in `sites` any other domain that is clearly the vendor's own.
+2. **New scans clean themselves, from the next run on.**
+   - The tracker stops checking every address on those sites.
+   - It drops their endpoint records with their saved lists, removes any other saved list about them, and drops their hosts from `hosts.json`.
+   - `restore` (phase 2) skips their lists.
+   - The uploader refuses any scan that still holds something about them, so a slip stops the upload rather than publishing.
+3. **What is already published stays.** Earlier scans under `snapshots/`, and their list versions under `lists/`, keep what they held, and the bucket lock keeps them. The vendor's records sit inside whole-day files (`endpoints.jsonl.gz`, `lists.jsonl.gz`, `servers.json`, `lookup.json`), so they cannot be cut out without removing those days.
+4. **If they must go, an account admin decides.** There are two tools, and they do different things:
+   - **`withdrawn` in `latest.json`** hides whole scans from readers who follow the pointer. The files are still there at their addresses.
+   - **Lifting the lock** removes files for real. Remove the lock rule, delete the affected objects (that day's snapshot files, and the vendor's `lists/<endpoint-id>/` versions), and put the rule back straight away. Then withdraw those scans in `latest.json`, so the pointer names no scan whose files are gone.
+
+Third-party servers for a forbidden vendor (another company's gateway on its own domain) are not the vendor's site and stay published. Anonymous records of servers tracked privately (an address that answered "sign-in required", with no tool details) are public registry endpoints and stay published too.
 
 ### Before the first upload: check R2 with a scratch bucket
 

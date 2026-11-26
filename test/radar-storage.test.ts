@@ -367,6 +367,13 @@ test("nothing about a server tracked privately is ever planned", async () => {
     ["a list read from a kept-off address", { manifestExtra: { "lists/ab/other.example.com-abcdefabcdef.json": `${JSON.stringify({ source: "https://mcp.airtable.com/mcp", tools: [] })}\n` } }],
     ["a feed change on a kept-off site", { feed: { version: 1, watched: [], changes: [{ id: "abcdefabcdef", url: "https://eu.sentry.io/mcp" }] } }],
     ["a kept-off host in hosts.json", { manifestExtra: { "hosts.json": `${JSON.stringify({ version: 1, hosts: { "api.intercom.com": { overBudgetRuns: 1 } } })}\n` } }],
+    // The same with a trailing dot, which DNS reads as the same host, and on a vendor's other domain.
+    ["an endpoint on a kept-off site, with a trailing dot", { extraEndpoints: [{ id: endpointId("https://mcp.sentry.dev./mcp"), url: "https://mcp.sentry.dev./mcp", names: [], firstSeen: started, inRegistry: true, checks: [], changes: [] }] }],
+    ["an endpoint on a kept-off vendor's other domain", { extraEndpoints: [{ id: endpointId("https://api.intercom.io/mcp"), url: "https://api.intercom.io/mcp", names: [], firstSeen: started, inRegistry: true, checks: [], changes: [] }] }],
+    ["a feed entry on a kept-off site, with a trailing dot", { feed: { version: 1, watched: [], changes: [{ id: "abcdefabcdef", url: "https://eu.sentry.io./mcp" }] } }],
+    ["a kept-off host in hosts.json, with a trailing dot", { manifestExtra: { "hosts.json": `${JSON.stringify({ version: 1, hosts: { "mcp.sentry.dev.": { overBudgetRuns: 1 } } })}\n` } }],
+    ["a list named for a kept-off host, with a trailing dot", { manifestExtra: { "lists/ab/mcp.sentry.dev.-abcdefabcdef.json": `${JSON.stringify({ source: "https://elsewhere.example.com/mcp", tools: [] })}\n` } }],
+    ["a list read from a kept-off address, with a trailing dot", { manifestExtra: { "lists/ab/other.example.com-abcdefabcdef.json": `${JSON.stringify({ source: "https://MCP.AIRTABLE.COM.:443/mcp", tools: [] })}\n` } }],
   ];
   for (const [what, options] of cases) {
     const dir = await folder();
