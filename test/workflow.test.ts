@@ -31,6 +31,11 @@ test("only the sign job may ask for an identity token, and it cannot push; the j
 test("only a run on main pushes scan data, so the data branch never holds data the signature cannot name", () => {
   const commit = /- name: Commit what changed\n(?: {8}.*\n)+/.exec(job("track"))?.[0] ?? assert.fail("no commit step");
   assert.match(commit, /if: \$\{\{ !cancelled\(\) && github\.ref == 'refs\/heads\/main' && /);
+  // Nor does a run from another branch send the private notice, or make the key for, or push, the private data.
+  for (const name of ["Private notice", "Key for saving the private data", "Commit the private data"]) {
+    const step = new RegExp(`- name: ${name}\\n(?: {8}.*\\n)+`).exec(job("track"))?.[0] ?? assert.fail(`no step ${name}`);
+    assert.match(step, /\n {8}if: \$\{\{ !cancelled\(\) && github\.ref == 'refs\/heads\/main' && /, name);
+  }
   assert.match(job("sign"), /if: \$\{\{ !cancelled\(\) && needs\.track\.outputs\.data-commit != '' \}\}/);
 });
 

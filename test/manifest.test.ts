@@ -52,7 +52,7 @@ test("each run writes a manifest with the full sha256 of every file it wrote, th
 
   assert.equal(manifest.version, 1);
   assert.equal(manifest.methodVersion, methodVersion);
-  assert.equal(manifest.methodVersion, "1.0.0");
+  assert.equal(manifest.methodVersion, "1.1.0");
   assert.deepEqual(manifest.scanner, { commit });
   assert.deepEqual(manifest.run, { id: "9876543210", attempt: "2", repository: "Stackduke/mcp-scanner" });
   assert.equal(manifest.scanStartedAt, now);

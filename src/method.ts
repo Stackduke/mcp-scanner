@@ -7,4 +7,4 @@
  * Major: a field changes meaning or shape. Minor: a rule change that can move a tool to another kind, or
  * change what is recorded as a change. Patch: a fix that changes no kind and no change record.
  */
-export const methodVersion = "1.0.0";
+export const methodVersion = "1.1.0";

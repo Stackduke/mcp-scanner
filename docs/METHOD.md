@@ -18,6 +18,15 @@ A list file is rewritten only when the server's tools change, or when newer rule
 
 Every new version gets an entry below, in the same pull request that changes `methodVersion`.
 
+## 1.1.0 (26 November 2026)
+
+What counts as a change, and how a check's outcome is reached, changed. How tools are read did not: no tool moves to another kind.
+
+- **Why a check ended as it did.** Each check now records an error class: `ok`, `timeout`, `dns`, `tls`, `connect`, `http_4xx_auth` (a 401 or 403 with a `WWW-Authenticate` header), `http_4xx_other` (any other 4xx, including a 401 or 403 without that header), `http_5xx`, `protocol_error` or `invalid_json`. It also records the last HTTP status, the protocol version the server agreed to, and the retries made. These go in `lastCheck` and in `checkDetails` lines (`endpoints.jsonl`). The outcome letters keep their meaning, with one exception: a redirect, which this client never follows, is now not usable (`N`) where it was unreachable (`U`).
+- **Retries and time limits.** Each request has 15 seconds, and each attempt 45 seconds in all. A check that times out, cannot connect, gets a 5xx or meets a name server not ready yet (`EAI_AGAIN`) is tried once more after the host's gap, unless that host has already timed out in the run. So some checks recorded `U` or `N` under 1.0.0 would now be `L`.
+- **Flapping.** A list that differs from the saved one is read again. If the second read gives the same new list, the change is recorded. If it gives the saved list back or yet another list, the server is flapping. Its change is held back for that run, at most once in 7 days: a server that flaps again within 7 days of its last flap has the first read's list recorded as a change marked `unstable: true`. A held-back run does not count as confirming the saved list, so a later change's `since` covers the whole time it may have happened in. A second read that lists nothing proves nothing, so the change stands.
+- **Host time.** Each host gets 10 minutes of the crawl per run. An endpoint left over is recorded as `host_budget_exceeded` in `checkDetails` and `lastSkipped`, not as a check: its outcome, its last check and its rest are unchanged. `hosts.json` counts how many runs in a row each host went over. It is written by the scan, so it is in the manifest.
+
 ## 1.0.0 (26 November 2026)
 
 The first numbered version. It is the method as it stood when numbering began. Nothing about how tools are read changed with it.

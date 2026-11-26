@@ -284,14 +284,6 @@ test("a look at a server watched with a login that never answers is cut at one a
   assert.equal(grafana?.lastCheck?.errorClass, "timeout");
 });
 
-test("only a run on main sends the private notice or saves the private data", async () => {
-  const text = await readFile(new URL("../.github/workflows/track.yml", import.meta.url), "utf8");
-  const steps = new Map(text.split(/\n(?=      - name: )/).slice(1).map((block) => [/- name: (.+)/.exec(block)?.[1] as string, block]));
-  for (const name of ["Private notice", "Key for saving the private data", "Commit the private data"]) {
-    assert.match(/if: \$\{\{(.+)\}\}/.exec(steps.get(name) ?? "")?.[1] ?? "", /github\.ref == 'refs\/heads\/main' &&/, name);
-  }
-});
-
 test("a server watched with a login is read again when its list changes, and a flapping list is held back there too", async () => {
   const privateDir = await mkdtemp(path.join(tmpdir(), "tracker-limits-private-"));
   const publicDir = await mkdtemp(path.join(tmpdir(), "tracker-limits-"));
