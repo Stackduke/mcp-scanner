@@ -5,11 +5,14 @@ import type { AuthorityReport } from "./authority.ts";
 import { listTools, userAgent } from "./client.ts";
 import { crawl } from "./crawl.ts";
 import { readSnapshot, snapshotText, writeWhole } from "./files.ts";
+import { buildManifest, checkPrevious, folderDigest, writeManifest } from "./manifest.ts";
+import type { RunCosign } from "./manifest.ts";
 import { readRegistry } from "./registry.ts";
 import type { RegistryRead } from "./registry.ts";
 import { catalog, publicList } from "./catalog.ts";
 import type { PublicServer } from "./catalog.ts";
-import { scanSignedIn, signedInServers, tokenFor } from "./signed-in.ts";
+import { scanSignedIn, signedInServers as catalogSignedIn, tokenFor } from "./signed-in.ts";
+import type { SignedInServer } from "./signed-in.ts";
 import { buildFeed, endpointId, groupsOfPrint, lookupOf, mergeRegistry, planChecks, readPrint, recordCheck, siteOf, watchedEndpoint, watchedOf } from "./tracker.ts";
 import type { CheckResult, Endpoint, FeedWatched, RegistryState } from "./tracker.ts";
 
@@ -22,6 +25,7 @@ import type { CheckResult, Endpoint, FeedWatched, RegistryState } from "./tracke
  *   registry.json     when the registry was last read, and whether to the end
  *   feed.json         what the web page reads: coverage, the servers watched with a login, recent changes
  *   servers.json      every endpoint that listed tools, with counts, for a searchable table
+ *   manifest.json     the full sha256 of every file this run wrote, the method version, the scanner commit and the run
  *
  * The folder is meant to be committed after each run, so its history is the history of every change.
  *
@@ -54,6 +58,10 @@ export interface TrackOptions {
   privateDataDir?: string;
   /** The servers the page shows that answer with no sign-in. Default: catalog/tracker-public.json. */
   publicServers?: readonly PublicServer[];
+  /** For tests: what runs cosign when the folder the run starts from is checked against its signed manifest. */
+  cosign?: RunCosign;
+  /** The servers watched with a login. Default: the catalog's. */
+  signedInServers?: Readonly<Record<string, SignedInServer>>;
 }
 
 export interface TrackSummary {
@@ -137,13 +145,30 @@ interface Store {
 
 const plainUrl = (url: string) => url.replace(/\/$/, "");
 
+/** The data folder's .gitattributes: every file is text with LF line endings, in the repository and in every checkout. */
+export const dataAttributes = "* text eol=lf\n";
+
 export async function track(options: TrackOptions): Promise<TrackSummary> {
   const { dataDir, environment, fetchImpl, log = () => undefined, privateDataDir } = options;
   const clock = options.now ?? (() => new Date());
   const startedAt = clock().toISOString();
   const file = (relative: string) => path.join(dataDir, relative);
+  // What this run writes to the public folder, by path relative to it, for the manifest.
+  const written = new Set<string>();
+  const writePublic = async (relative: string, text: string) => { await writeWhole(file(relative), text); written.add(relative); };
   const privateFile = (relative: string) => path.join(privateDataDir ?? "", relative);
 
+  // Before anything changes: is the folder exactly the previous scan's, as signed? The answer is signed with
+  // this scan's manifest, so a file changed between scans cannot quietly become part of this one.
+  const previous = await checkPrevious(dataDir, { ...(environment.GITHUB_REPOSITORY ? { repository: environment.GITHUB_REPOSITORY } : {}), ...(options.cosign ? { cosign: options.cosign } : {}) });
+  log(previous.verified ? "the data folder is exactly the previous scan's, as signed" : `the data folder is not exactly a signed scan's: ${previous.reason}`);
+  // The tracker writes only plain files. Anything else (a link, say) came from elsewhere: it is removed, never
+  // followed, so no write can leave the folder, and the scan goes on. Its start is already recorded as unclean.
+  const { others } = await folderDigest(dataDir);
+  for (const other of others) await rm(file(other), { force: true });
+  if (others.length) log(`${others.length} entries in the data folder were not plain files, and were removed`);
+
+  const signedInServers = options.signedInServers ?? catalogSignedIn;
   const published = (vendor: string | undefined) => vendor !== undefined && signedInServers[vendor]?.publish === true;
   const all = await readEndpoints(file("endpoints.jsonl"));
   const byUrl = new Map(all.filter((endpoint) => !endpoint.signedIn).map((endpoint) => [endpoint.url, endpoint]));
@@ -206,18 +231,21 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     // The public log's count leaves out servers tracked privately, so it says nothing about them.
     if (endpoint.changes[0] !== latestChange && store === publicStore) changed += 1;
     if (!saved || !endpoint.file) return;
-    await writeWhole(store.file(endpoint.file), `${JSON.stringify(saved.print)}\n`);
+    if (store === publicStore) await writePublic(endpoint.file, `${JSON.stringify(saved.print)}\n`);
+    else await writeWhole(store.file(endpoint.file), `${JSON.stringify(saved.print)}\n`);
     // The definitions are rewritten only when the server changed them (or the file is missing), so a
     // watched file's history is its server's history. Its takenAt is when that version was first
     // seen; how recently it was confirmed is the endpoint's lastListed.
     if (!endpoint.signedIn) return;
     const watchedPath = store.file(watchedFile(endpoint.signedIn));
-    if (!saved.reread || !(await readSnapshot(watchedPath))) await writeWhole(watchedPath, snapshotText(saved.snapshot));
+    if (saved.reread && (await readSnapshot(watchedPath))) return;
+    if (store === publicStore) await writePublic(watchedFile(endpoint.signedIn), snapshotText(saved.snapshot));
+    else await writeWhole(watchedPath, snapshotText(saved.snapshot));
   }
 
   /** One look at a server watched with a login, as the result to record. */
   async function lookSignedIn(vendor: string): Promise<CheckResult> {
-    const scan = await scanSignedIn(vendor, environment, fetchImpl);
+    const scan = await scanSignedIn(vendor, environment, fetchImpl, signedInServers);
     if (scan.outcome === "unsafe-connection") throw new Error("Certificate checking is switched off here, so no token was sent.");
     // A privately tracked server is not named in this public log.
     if (scan.outcome === "token-echoed") log(`${published(vendor) ? vendor : "a privately tracked server"}: the server sent the token back. Nothing it returned was kept. Replace that token.`);
@@ -312,11 +340,16 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
 
   const endpoints = [...byUrl.values(), ...publicStore.watched.values()].sort(byId);
   const { feed, servers } = buildFeed(endpoints, await reportsOf(publicStore), registry, clock().toISOString(), publicGroups, publicServers);
-  await writeWhole(file("endpoints.jsonl"), endpoints.map((endpoint) => JSON.stringify(endpoint)).join("\n") + (endpoints.length ? "\n" : ""));
-  await writeWhole(file("registry.json"), `${JSON.stringify(registry, null, 2)}\n`);
-  await writeWhole(file("feed.json"), `${JSON.stringify(feed)}\n`);
-  await writeWhole(file("servers.json"), `${JSON.stringify(servers)}\n`);
-  await writeWhole(file("lookup.json"), `${JSON.stringify({ version: 1, generatedAt: feed.generatedAt, rows: lookupOf(servers) })}\n`);
+  await writePublic("endpoints.jsonl", endpoints.map((endpoint) => JSON.stringify(endpoint)).join("\n") + (endpoints.length ? "\n" : ""));
+  await writePublic("registry.json", `${JSON.stringify(registry, null, 2)}\n`);
+  await writePublic("feed.json", `${JSON.stringify(feed)}\n`);
+  await writePublic("servers.json", `${JSON.stringify(servers)}\n`);
+  await writePublic("lookup.json", `${JSON.stringify({ version: 1, generatedAt: feed.generatedAt, rows: lookupOf(servers) })}\n`);
+  // Every checkout keeps the files' line endings as committed (Git for Windows would otherwise turn them to
+  // CRLF), so their hashes match the manifest on every system. Written once, and again only if it changed.
+  if ((await readFile(file(".gitattributes"), "utf8").catch(() => null)) !== dataAttributes) await writePublic(".gitattributes", dataAttributes);
+  // Last, so it covers everything above. The private folder has no manifest: its files are never published.
+  await writeManifest(dataDir, await buildManifest({ dataDir, written, previous, scanStartedAt: startedAt, generatedAt: clock().toISOString(), registry, environment }));
 
   if (privateDataDir !== undefined) {
     const privateEndpoints = [...privateStore.watched.values()].sort(byId);

@@ -6,6 +6,7 @@ import { catalog, publicList } from "./catalog.ts";
 import type { PublicServer } from "./catalog.ts";
 import type { ChangedField } from "./diff.ts";
 import type { RegistryRead } from "./registry.ts";
+import { methodVersion } from "./method.ts";
 import { canonical, takeSnapshot, toolKey } from "./snapshot.ts";
 import type { Snapshot } from "./types.ts";
 
@@ -63,6 +64,8 @@ export interface ChangeRecord {
   counts: { added: number; removed: number; changed: number; moreSerious: number };
   /** Written by the scanner. Tool names are the only words of the server's in it. */
   summary: string;
+  /** The method version that recorded the change. Records from before 26 November 2026 have none. */
+  methodVersion?: string;
 }
 
 export interface Endpoint {
@@ -200,7 +203,14 @@ export interface ToolPrint { name: string; kind: AuthorityKind; fields: Partial<
  * which tools and which of their fields changed. The full definitions are kept only for servers
  * watched with a login; for the rest, the server itself is the place to read them.
  */
-export interface ListPrint { source: string; takenAt: string; server?: { name?: string; version?: string }; tools: ToolPrint[] }
+export interface ListPrint {
+  source: string;
+  takenAt: string;
+  /** The method version whose rules gave each tool its kind. Files from before 26 November 2026 have none. */
+  methodVersion?: string;
+  server?: { name?: string; version?: string };
+  tools: ToolPrint[];
+}
 
 export function printOf(snapshot: Snapshot): ListPrint {
   const tools = snapshot.tools.map((tool) => ({
@@ -208,7 +218,7 @@ export function printOf(snapshot: Snapshot): ListPrint {
     kind: assessTool(tool).tool.kind,
     fields: Object.fromEntries(fields.filter((field) => tool[field] !== undefined).map((field) => [field, shortHash(tool[field])])),
   }));
-  return { source: snapshot.source, takenAt: snapshot.takenAt, ...(snapshot.server ? { server: snapshot.server } : {}), tools };
+  return { source: snapshot.source, takenAt: snapshot.takenAt, methodVersion, ...(snapshot.server ? { server: snapshot.server } : {}), tools };
 }
 
 /** A print read back from a file, or null when the file is not one. */
@@ -280,7 +290,7 @@ export function changeBetween(before: ListPrint, after: ListPrint, since: string
     moreSerious: moreSerious.slice(0, keptNames).map((tool) => ({ name: shown(tool.name), kind: tool.kind })),
     counts: { added: added.length, removed: removed.length, changed: changed.length, moreSerious: moreSerious.length },
   };
-  return { ...change, summary: describeChange(change) };
+  return { ...change, summary: describeChange(change), methodVersion };
 }
 
 export type CheckResult = ListToolsResult | { outcome: "no-token" };

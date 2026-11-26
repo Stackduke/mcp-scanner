@@ -187,10 +187,11 @@ test("when an issue cannot be opened, the step fails, so the run shows that nobo
   assert.equal(await signInIssues(lost, [], "2026-10-18", issues([], { works: false }).deps), false);
 });
 
-/** The run's steps, by name, with the text of each. */
+/** The track job's steps, by name, with the text of each. Other jobs' steps are not among them. */
 function steps(): Map<string, string> {
   const text = readFileSync(new URL("../.github/workflows/track.yml", import.meta.url), "utf8");
-  return new Map(text.split(/\n(?=      - name: )/).slice(1).map((block) => [/- name: (.+)/.exec(block)?.[1] as string, block]));
+  const job = text.split(/\n(?=  [\w-]+:\n)/).find((block) => block.startsWith("  track:\n")) as string;
+  return new Map(job.split(/\n(?=      - name: )/).slice(1).map((block) => [/- name: (.+)/.exec(block)?.[1] as string, block]));
 }
 
 test("each browser sign-in reaches the renew step only, and the scan step gets only the keys", () => {
@@ -206,6 +207,8 @@ test("each browser sign-in reaches the renew step only, and the scan step gets o
   for (const name of ["Check sign-ins", "Scan"]) assert.ok(!/(?<![A-Z_])(GH_TOKEN|GITHUB_TOKEN)|github\.token/.test(all.get(name) as string), name);
   assert.match(all.get("Key for saving renewed sign-ins") as string, /permission-secrets: write/);
   assert.match(all.get("Forget the sign-ins") as string, /if: always\(\)/);
+  // Each step's block is that step alone: the last one does not run on into the jobs after it.
+  assert.ok(!/id-token|\n  [\w-]+:\n/.test(all.get("Forget the sign-ins") as string));
 });
 
 test("the scan is handed the access tokens of servers it tracks, published or privately, and of no other", () => {
