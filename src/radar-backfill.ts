@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { manifestName, readManifest, signatureName, verifyManifest } from "./manifest.ts";
 import type { RunCosign } from "./manifest.ts";
-import { isKeptOff, isPrivateRecord, listFileUrl, scanIdOf } from "./radar-layout.ts";
+import { isKeptOff, isPrivateRecord, listVerdict, scanIdOf } from "./radar-layout.ts";
 import { lookupOf } from "./tracker.ts";
 import type { FeedServer } from "./tracker.ts";
 import type { ScanInput } from "./radar-layout.ts";
@@ -189,8 +189,8 @@ export async function* backfillScans(repo: string, ref: string, options: Backfil
     const lists = new Map<string, Buffer>();
     const newLists = new Set<string>();
     for (const name of listPaths) {
-      if (privateLists.has(name) || name.includes("signed-in-") || isKeptOff(listFileUrl(name))) { leftOut += 1; continue; }
       const id = tree.get(name) as string;
+      if (privateLists.has(name) || name.includes("signed-in-") || listVerdict(name, blob(id)) !== "public") { leftOut += 1; continue; }
       lists.set(name, blob(id));
       if (previous.get(name) !== id) newLists.add(name);
     }

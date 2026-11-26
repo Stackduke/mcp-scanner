@@ -4,20 +4,28 @@ import { backfillScans } from "./radar-backfill.ts";
 import { planScan } from "./radar-layout.ts";
 import type { ScanInput } from "./radar-layout.ts";
 import type { RunCosign } from "./manifest.ts";
+import { preflight } from "./radar-preflight.ts";
 import { describePlan, folderStore, publish, s3Store, scanInputFromFolder } from "./radar-publish.ts";
-import type { Store } from "./radar-publish.ts";
+import type { Credentials, Store } from "./radar-publish.ts";
+import { restore } from "./radar-restore.ts";
 
 /**
- * Radar's storage commands. Kept apart from cli.ts until the Track workflow uses them (docs/decisions/0001-radar-storage-r2.md).
+ * Radar's storage commands (docs/decisions/0001-radar-storage-r2.md), kept apart from cli.ts: the scan never loads them.
  * The R2 key is read from the environment, by the upload job only; the scan never holds it.
  */
 const usage = `Usage:
   node src/radar-cli.ts publish --data=<scan folder> [--require-signature] <target>
       Publish one scan: the Track job's data folder, checked against its manifest.json (the whole folder's
       digest and each file's sha256). --require-signature also checks manifest.sigstore.json with cosign.
-      With --bucket it is required; only --unsigned (for a scratch bucket) publishes without it.
+      With --bucket it is required; only --unsigned (for a scratch bucket, never radar) publishes without it.
   node src/radar-cli.ts backfill --repo=<git folder> [--ref=origin/data] <target>
       Publish every scan in the data branch's history, oldest first. Reads the repository only.
+  node src/radar-cli.ts restore --from=https://data.stackduke.com --to=<new or empty folder>
+      Rebuild the tracker's data folder from the latest scan, with no key. Every file is checked against its
+      sha256 before anything is written. Lists on kept-off sites, or with an address that cannot be read, are skipped.
+  node src/radar-cli.ts preflight --bucket=<scratch bucket> [--expect-lock] [--endpoint=<https origin>]
+      Check, once, that R2 keeps the uploader's headers and honours its conditional writes. Writes test objects,
+      so it refuses the bucket radar. --expect-lock: the scratch bucket has a lock rule on scans/.
 
   The target, exactly one of:
   --dry-run              Print what would be written. Reads no bucket, writes nothing.
@@ -42,10 +50,38 @@ export async function radarMain(argv: string[], { env = process.env, fetchImpl =
   const [command, ...flags] = argv;
   const given = new Map<string, string>();
   for (const flag of flags) {
-    const match = /^--(data|repo|ref|to-folder|bucket|endpoint)=(.+)$|^--(dry-run|require-signature|unsigned)$/.exec(flag);
+    const match = /^--(data|repo|ref|to-folder|bucket|endpoint|from|to)=(.+)$|^--(dry-run|require-signature|unsigned|expect-lock)$/.exec(flag);
     const name = match?.[1] ?? match?.[3];
     if (!name || given.has(name)) { log(usage); return 2; }
     given.set(name, match?.[2] ?? "");
+  }
+  /** The bucket's address and the key from the environment, or null (said in the log) when either is missing. */
+  const bucketAccess = (): { endpoint: string; credentials: Credentials } | null => {
+    const account = env.R2_ACCOUNT_ID ?? "";
+    const endpoint = given.get("endpoint") ?? (/^[0-9a-f]{32}$/.test(account) ? `https://${account}.r2.cloudflarestorage.com` : "");
+    if (!endpoint) { log("Set R2_ACCOUNT_ID (the Cloudflare account id, 32 hex characters) or pass --endpoint."); return null; }
+    const accessKeyId = env.R2_ACCESS_KEY_ID ?? "", secretAccessKey = env.R2_SECRET_ACCESS_KEY ?? "";
+    if (!accessKeyId || !secretAccessKey) { log("Set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY to upload."); return null; }
+    return { endpoint, credentials: { accessKeyId, secretAccessKey } };
+  };
+
+  if (command === "restore") {
+    if (given.size !== 2 || !given.has("from") || !given.has("to")) { log(usage); return 2; }
+    const report = await restore(given.get("from") as string, given.get("to") as string, { fetchImpl });
+    // Counted, never named: a list's path names its host.
+    log(`Restored scan ${report.scan}: ${report.files} files and ${report.lists} lists${report.skipped ? `; ${report.skipped} lists on kept-off sites, or with an address that cannot be read, skipped` : ""}.`);
+    log(report.matchesManifest === null ? "The scan has no manifest." : report.matchesManifest ? "The folder matches the digest in the scan's manifest." : "The folder does not match the digest in the scan's manifest (expected once after the switch, and after a list was skipped): the next scan records an unclean start.");
+    return 0;
+  }
+  if (command === "preflight") {
+    if (!given.has("bucket") || [...given.keys()].some((name) => !["bucket", "endpoint", "expect-lock"].includes(name))) { log(usage); return 2; }
+    if (given.get("bucket") === "radar") { log("The pre-flight check writes test objects, so it never runs against the bucket radar. Use a scratch bucket."); return 2; }
+    const access = bucketAccess();
+    if (!access) return 2;
+    const result = await preflight({ ...access, bucket: given.get("bucket") as string, expectLock: given.has("expect-lock"), fetchImpl, now });
+    for (const line of result.lines) log(line);
+    log(result.ok ? "Every check passed." : "Some checks FAILED: do not upload to radar until they pass.");
+    return result.ok ? 0 : 1;
   }
   const targets = ["dry-run", "to-folder", "bucket"].filter((name) => given.has(name));
   const allowed = command === "publish" ? ["data", "require-signature", "unsigned"] : command === "backfill" ? ["repo", "ref"] : null;
@@ -56,6 +92,10 @@ export async function radarMain(argv: string[], { env = process.env, fetchImpl =
   // A scan uploaded to a bucket stays there for good, so it must be the Track workflow's, signed; --unsigned says
   // otherwise out loud, for a scratch bucket. The backfill publishes the data branch's history, which is already public.
   if (command === "publish" && given.has("unsigned") && (given.has("require-signature") || !given.has("bucket"))) { log(usage); return 2; }
+  if (command === "publish" && given.has("unsigned") && given.get("bucket") === "radar") {
+    log("The bucket radar never takes an unsigned scan: --unsigned is for the scratch bucket only. Use --require-signature.");
+    return 2;
+  }
   if (command === "publish" && given.has("bucket") && !given.has("require-signature") && !given.has("unsigned")) {
     log("Uploading to a bucket needs --require-signature (or, for a scratch bucket only, --unsigned).");
     return 2;
@@ -63,12 +103,9 @@ export async function radarMain(argv: string[], { env = process.env, fetchImpl =
   let store: Store | null = null;
   if (given.has("to-folder")) store = folderStore(given.get("to-folder") as string);
   if (given.has("bucket")) {
-    const account = env.R2_ACCOUNT_ID ?? "";
-    const endpoint = given.get("endpoint") ?? (/^[0-9a-f]{32}$/.test(account) ? `https://${account}.r2.cloudflarestorage.com` : "");
-    if (!endpoint) { log("Set R2_ACCOUNT_ID (the Cloudflare account id, 32 hex characters) or pass --endpoint."); return 2; }
-    const accessKeyId = env.R2_ACCESS_KEY_ID ?? "", secretAccessKey = env.R2_SECRET_ACCESS_KEY ?? "";
-    if (!accessKeyId || !secretAccessKey) { log("Set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY to upload."); return 2; }
-    store = s3Store({ endpoint, bucket: given.get("bucket") as string, credentials: { accessKeyId, secretAccessKey }, fetchImpl, now });
+    const access = bucketAccess();
+    if (!access) return 2;
+    store = s3Store({ ...access, bucket: given.get("bucket") as string, fetchImpl, now });
   }
 
   const run = async (input: ScanInput, note = "") => {

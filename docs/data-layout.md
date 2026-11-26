@@ -114,6 +114,8 @@ A site that today downloads the whole `data` branch as one archive, to read `loo
 
 A local build can use a folder written by `node src/radar-cli.ts publish --to-folder=<dir>` (or `backfill --to-folder`) in place of the bucket: the folder has the same paths.
 
+To get the tracker's own data folder back, as the latest scan left it, run `node src/radar-cli.ts restore --from=https://data.stackduke.com --to=<new folder>`. It checks every file against `scan.json`, and every list against its `sha256`, before it writes anything.
+
 ## Privacy
 
 Only public data is published:
@@ -121,7 +123,7 @@ Only public data is published:
 - **Sites whose terms forbid publishing about them are kept off:** no address on them is checked, kept or published. That covers the vendor's own other domains listed in the catalog, and any spelling of a host that DNS reads as the same (`mcp.example.com.`). Another company's server for such a vendor, on that company's own domain, is not the vendor's site and is published.
 - **A server tracked privately also has a public registry address.** Its anonymous record (the address answered that it needs a sign-in, and when it was checked, with no tool details) is published like any other endpoint's.
 
-The uploader refuses a whole scan that holds any endpoint record, feed entry, `servers.json` row, tool list or `watched/` file of such a server, or a `hosts.json` host on a kept-off site. It also refuses:
+The uploader refuses a whole scan that holds any endpoint record, feed entry, `servers.json` row, tool list or `watched/` file of such a server, or a `hosts.json` host on a kept-off site. The check fails closed: an address it cannot read (missing, not a URL, or with no host) is refused too, since it cannot be shown to be off those sites. It also refuses:
 - a file with fields this layout does not know;
 - `servers.json` rows that are not endpoints of the same scan;
 - a `lookup.json` that is not the lookup of its `servers.json`.

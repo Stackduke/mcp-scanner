@@ -1,17 +1,20 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { radarMain } from "../src/radar-cli.ts";
-import { PrivateDataError, evidenceKey, isLayoutKey, isPrivateRecord, listKey, nextPointer, planScan, scanIdOf } from "../src/radar-layout.ts";
+import { PrivateDataError, evidenceKey, isLayoutKey, isPrivateRecord, listKey, listVerdict, nextPointer, planScan, scanIdOf, siteVerdict } from "../src/radar-layout.ts";
 import { encodeKey, folderStore, publish, s3Store, scanInputFromFolder, signV4 } from "../src/radar-publish.ts";
 import type { Store } from "../src/radar-publish.ts";
-import { buildManifest, writeManifest } from "../src/manifest.ts";
+import { buildManifest, verifyManifest, writeManifest } from "../src/manifest.ts";
+import { preflight } from "../src/radar-preflight.ts";
+import { readBundleLine, restore } from "../src/radar-restore.ts";
+import { dataAttributes } from "../src/track.ts";
 import { signedInServers } from "../src/signed-in.ts";
 import { endpointId, lookupOf } from "../src/tracker.ts";
 import type { FeedServer } from "../src/tracker.ts";
@@ -50,7 +53,7 @@ async function writeScan(dir: string, options: ScanOptions = {}): Promise<void> 
   const files: Record<string, string> = {
     "endpoints.jsonl": [{ id: idA, url: urlA, names: ["com.example/a"], firstSeen: started, inRegistry: true, checks: [`${started} L`], changes: [], file: listA }, { id: endpointId("https://b.example.com/mcp"), url: "https://b.example.com/mcp", names: [], firstSeen: started, inRegistry: true, checks: [], changes: [] }, ...(options.extraEndpoints ?? [])].map((record) => JSON.stringify(record)).join("\n") + "\n",
     [listA]: options.listText ?? `${JSON.stringify({ source: urlA, takenAt: started, tools: [{ name: "read_thing", kind: "read" }] })}\n`,
-    "feed.json": `${JSON.stringify(options.feed ?? { version: 1, generatedAt: started, watched: [{ id: idA, vendor: "example" }], changes: [] })}\n`,
+    "feed.json": `${JSON.stringify(options.feed ?? { version: 1, generatedAt: started, watched: [{ id: idA, vendor: "example", url: urlA }], changes: [] })}\n`,
     "servers.json": `${JSON.stringify(servers)}\n`,
     "lookup.json": `${JSON.stringify({ version: 1, generatedAt: started, rows: (() => { try { return lookupOf(servers as FeedServer[]); } catch { return []; } })() })}\n`,
     "registry.json": `${JSON.stringify({ readAt: started })}\n`,
@@ -70,7 +73,8 @@ async function writeScan(dir: string, options: ScanOptions = {}): Promise<void> 
 }
 
 /** A local stand-in for R2's S3 API: checks each request's signature, and keeps objects in memory. */
-async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Promise<void>; locked?: boolean } = {}) {
+async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Promise<void>; locked?: boolean; bucket?: string; dropMetadata?: boolean; ignoreIfMatch?: boolean } = {}) {
+  const bucket = options.bucket ?? "radar";
   const objects = new Map<string, { body: Buffer; headers: Record<string, string> }>();
   let pointerPuts = 0;
   const requests: Array<{ method: string; key: string }> = [];
@@ -81,7 +85,7 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
     request.on("end", async () => {
       const body = Buffer.concat(chunks);
       const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
-      const key = decodeURIComponent(url.pathname.replace(/^\/radar\//, ""));
+      const key = decodeURIComponent(url.pathname.slice(`/${bucket}/`.length));
       requests.push({ method: request.method ?? "", key });
       // The signature is recomputed from what arrived: a header changed on the way, or the wrong body, fails it.
       const auth = /SignedHeaders=([^,]+), Signature=([0-9a-f]+)$/.exec(String(request.headers.authorization));
@@ -89,13 +93,13 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
       const amzDate = String(request.headers["x-amz-date"]);
       const date = new Date(`${amzDate.slice(0, 4)}-${amzDate.slice(4, 6)}-${amzDate.slice(6, 8)}T${amzDate.slice(9, 11)}:${amzDate.slice(11, 13)}:${amzDate.slice(13, 15)}Z`);
       const expected = signV4({ method: request.method ?? "", url, headers: Object.fromEntries(names.map((name) => [name, String(request.headers[name])])), payloadHash: sha(body), credentials, region: "auto", service: "s3", date });
-      if (!url.pathname.startsWith("/radar/") || request.headers["x-amz-content-sha256"] !== sha(body) || expected.authorization !== request.headers.authorization) { response.writeHead(403).end("SignatureDoesNotMatch"); return; }
+      if (!url.pathname.startsWith(`/${bucket}/`) || request.headers["x-amz-content-sha256"] !== sha(body) || expected.authorization !== request.headers.authorization) { response.writeHead(403).end("SignatureDoesNotMatch"); return; }
       // Another run's turn, between this run's last read of latest.json and its write (the first time only).
       if (request.method === "PUT" && key === "latest.json" && (pointerPuts += 1) === 1) await options.beforePointerPut?.();
       const stored = objects.get(key);
       if (request.method === "HEAD" || request.method === "GET") {
         if (!stored) { response.writeHead(404).end(); return; }
-        response.writeHead(200, stored.headers).end(request.method === "GET" ? stored.body : undefined);
+        response.writeHead(200, { ...stored.headers, "content-length": String(stored.body.length) }).end(request.method === "GET" ? stored.body : undefined);
         return;
       }
       if (request.method === "PUT") {
@@ -104,9 +108,9 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
         if (options.locked && stored && key !== "latest.json") { response.writeHead(409).end("<Error><Code>ObjectLockedByBucketPolicy</Code></Error>"); return; }
         // As R2 does: If-None-Match: * only if absent, If-Match only if the ETag is the one there now.
         if (request.headers["if-none-match"] === "*" && stored) { response.writeHead(412).end("PreconditionFailed"); return; }
-        if (request.headers["if-match"] !== undefined && request.headers["if-match"] !== stored?.headers.etag) { response.writeHead(412).end("PreconditionFailed"); return; }
+        if (!options.ignoreIfMatch && request.headers["if-match"] !== undefined && request.headers["if-match"] !== stored?.headers.etag) { response.writeHead(412).end("PreconditionFailed"); return; }
         const headers: Record<string, string> = { etag: `"${createHash("md5").update(body).digest("hex")}"` };
-        for (const name of ["content-type", "cache-control", "x-amz-meta-source-sha256"]) if (request.headers[name]) headers[name] = String(request.headers[name]);
+        for (const name of ["content-type", "cache-control", ...(options.dropMetadata ? [] : ["x-amz-meta-source-sha256"])]) if (request.headers[name]) headers[name] = String(request.headers[name]);
         objects.set(key, { body, headers });
         response.writeHead(200).end();
         return;
@@ -117,7 +121,7 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   after(() => server.close());
   const endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { objects, requests, endpoint, store: s3Store({ endpoint, bucket: "radar", credentials }) };
+  return { objects, requests, endpoint, credentials, store: s3Store({ endpoint, bucket, credentials }) };
 }
 
 test("SigV4 signs as AWS's published examples do", () => {
@@ -323,17 +327,17 @@ test("--dry-run prints the plan and makes no network call, even with a bucket's 
 test("the CLI uploads to a bucket with the keys from the environment", async () => {
   const dir = await folder();
   await writeScan(dir);
-  const s3 = await fakeS3();
-  const code = await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: soon });
+  const s3 = await fakeS3({ bucket: "radar-preflight" });
+  const code = await radarMain(["publish", `--data=${dir}`, "--bucket=radar-preflight", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: soon });
   assert.equal(code, 0);
   assert.ok(s3.objects.has(`scans/${scanId}/scan.json`));
-  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned"], { env: {}, log: () => undefined }), 2);
+  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar-preflight", "--unsigned"], { env: {}, log: () => undefined }), 2);
   // The stand-in checks signatures for real: a wrong secret is turned away.
-  await assert.rejects(radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "wrong" }, log: () => undefined, now: soon }), /answered 403/);
+  await assert.rejects(radarMain(["publish", `--data=${dir}`, "--bucket=radar-preflight", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "wrong" }, log: () => undefined, now: soon }), /answered 403/);
   // A scan dated in the future (or long ago) is refused before anything is sent: the pointer never moves back, so it would stick.
   const before = s3.requests.length;
   for (const clock of ["2026-11-20T00:00:00Z", "2026-12-10T00:00:00Z"]) {
-    assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: () => new Date(clock) }), 1, clock);
+    assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar-preflight", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: () => new Date(clock) }), 1, clock);
   }
   assert.equal(s3.requests.length, before);
 });
@@ -390,6 +394,53 @@ test("nothing about a server tracked privately is ever planned", async () => {
   // Even a vendor the catalog marked publish: true is refused: the layout has no place for it yet.
   assert.equal(isPrivateRecord({ id: "signed-in-github", signedIn: "github" }), true);
   assert.equal(isPrivateRecord({ id: idA }), false);
+});
+
+test("a list is published only when restore can rebuild it byte for byte: one line of JSON and a newline", async () => {
+  const json = JSON.stringify({ source: urlA, takenAt: started, tools: [] });
+  for (const [what, listText] of [["no newline at the end", json], ["Windows line endings", `${json}\r\n`], ["space in front", ` ${json}\n`], ["two newlines", `${json}\n\n`]]) {
+    const dir = await folder();
+    await writeScan(dir, { listText });
+    await assert.rejects(async () => planScan(await scanInputFromFolder(dir)), /restore could not rebuild/, what);
+  }
+  // A byte-order mark is refused before that: the list does not parse, so its address cannot be read.
+  const marked = await folder();
+  await writeScan(marked, { listText: `\ufeff${json}\n` });
+  await assert.rejects(async () => planScan(await scanInputFromFolder(marked)), /cannot be read/);
+  const dir = await folder();
+  await writeScan(dir, { listText: `${json}\n` });
+  assert.ok(planScan(await scanInputFromFolder(dir)).objects.length > 0);
+});
+
+test("an address that cannot be read is refused, not taken as off the kept-off sites", async () => {
+  const endpoint = (url: unknown) => ({ id: "abcdefabcdef", ...(url === undefined ? {} : { url }), names: [], firstSeen: started, inRegistry: true, checks: [], changes: [] });
+  const cases: Array<[string, ScanOptions]> = [
+    ["an endpoint whose address is not a URL", { extraEndpoints: [endpoint("not an address")] }],
+    ["an endpoint with no address", { extraEndpoints: [endpoint(undefined)] }],
+    ["an endpoint whose address has no host", { extraEndpoints: [endpoint("mailto:someone")] }],
+    ["a feed change whose address is not a URL", { feed: { version: 1, watched: [], changes: [{ id: "abcdefabcdef", url: "https://" }] } }],
+    ["a feed entry with no address", { feed: { version: 1, watched: [{ id: idA, vendor: "example" }], changes: [] } }],
+    ["a hosts.json key that is not a host", { manifestExtra: { "hosts.json": `${JSON.stringify({ version: 1, hosts: { "mcp.sentry.dev/@a.example.com": { overBudgetRuns: 1 } } })}\n` } }],
+    ["a list whose source is not a URL", { manifestExtra: { "lists/ab/other.example.com-abcdefabcdef.json": `${JSON.stringify({ source: "nowhere", tools: [] })}\n` } }],
+    ["a list with no source", { manifestExtra: { "lists/ab/other.example.com-abcdefabcdef.json": `${JSON.stringify({ tools: [] })}\n` } }],
+  ];
+  for (const [what, options] of cases) {
+    const dir = await folder();
+    await writeScan(dir, options);
+    const error = await (async () => { try { planScan(await scanInputFromFolder(dir)); } catch (caught) { return caught; } return null; })();
+    assert.ok(error instanceof PrivateDataError, `${what} was not refused`);
+    assert.match((error as Error).message, /cannot be read/, what);
+  }
+  assert.equal(siteVerdict("https://a.example.com/mcp"), "public");
+  assert.equal(siteVerdict("https://mcp.sentry.dev/mcp"), "kept off");
+  for (const url of [undefined, null, 42, "", "nowhere", "mailto:someone"]) assert.equal(siteVerdict(url), "unreadable", String(url));
+  // The tracker cuts a long host short in a list's name; the list's own address (source) is what is judged.
+  const longHost = `${"a".repeat(60)}.example.com`;
+  const cut = `lists/ab/${"a".repeat(60)}…-abcdefabcdef.json`;
+  assert.equal(listVerdict(cut, JSON.stringify({ source: `https://${longHost}/mcp` })), "public");
+  assert.equal(listVerdict(cut, JSON.stringify({ source: "https://mcp.sentry.dev/mcp" })), "kept off");
+  assert.equal(listVerdict(cut, "{}"), "unreadable");
+  assert.equal(listVerdict("lists/ab/mcp.sentry.dev-abcdefabcdef.json", JSON.stringify({ source: urlA })), "kept off");
 });
 
 test("two publishes that overlap both end up in latest.json, and it never moves back", async () => {
@@ -538,6 +589,10 @@ test("an upload to a bucket needs a verified signature, unless --unsigned says o
   // --unsigned only with a bucket, and never with --require-signature.
   assert.equal(await radarMain(["publish", `--data=${dir}`, "--dry-run", "--unsigned"], { log: () => undefined, now: soon }), 2);
   assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", "--require-signature", `--endpoint=${s3.endpoint}`], { env, log: () => undefined, now: soon }), 2);
+  // --unsigned is for the scratch bucket only: the public bucket radar never takes an unsigned scan.
+  lines.length = 0;
+  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env, log: (line) => lines.push(line), now: soon }), 2);
+  assert.match(lines.join("\n"), /never takes an unsigned scan/);
   assert.equal(s3.requests.length, 0);
   // Signed and verified (cosign stubbed), it goes up.
   await writeFile(path.join(dir, "manifest.sigstore.json"), "{\"bundle\":true}\n");
@@ -578,4 +633,143 @@ test("a folder store replaces latest.json only if it is the version read", async
   assert.equal(await store.putPointer(pointer("b"), "0".repeat(64)), false);
   assert.equal(await store.putPointer(pointer("b"), current?.etag ?? null), true);
   assert.equal(await readFile(path.join(out, "latest.json"), "utf8"), "b\n");
+});
+
+/** The bucket as a reader sees it over HTTPS, served from a folder written by folderStore. */
+const servedFrom = (root: string): typeof fetch => async (input) => {
+  const url = new URL(String(input));
+  const bytes = await readFile(path.join(root, ...decodeURIComponent(url.pathname).split("/").filter(Boolean))).catch(() => null);
+  return bytes === null ? new Response(null, { status: 404 }) : new Response(new Uint8Array(bytes));
+};
+/** A scan published to a folder laid out as the bucket, from a scan folder with the tracker's .gitattributes. */
+async function publishedScan(options: ScanOptions = {}): Promise<{ dir: string; bucket: string }> {
+  const dir = await folder();
+  await writeScan(dir, { ...options, manifestExtra: { ".gitattributes": dataAttributes, ...options.manifestExtra } });
+  const bucket = await folder();
+  await publish(planScan(await scanInputFromFolder(dir)), folderStore(bucket));
+  return { dir, bucket };
+}
+
+/** Changes a published scan's list bundle, and its sha256 in scan.json to match, as a bucket changed by hand would be. */
+async function rewriteBundle(bucket: string, change: (text: string) => string): Promise<void> {
+  const bundleFile = path.join(bucket, "snapshots", scanId, "lists.jsonl.gz");
+  const bundle = change(gunzipSync(await readFile(bundleFile)).toString("utf8"));
+  await rm(bundleFile);
+  await writeFile(bundleFile, gzipSync(bundle));
+  const recordFile = path.join(bucket, "scans", scanId, "scan.json");
+  const record = JSON.parse(await readFile(recordFile, "utf8"));
+  for (const file of record.files) if (file.key.endsWith("lists.jsonl.gz")) Object.assign(file, { sha256: sha(bundle), bytes: Buffer.byteLength(bundle) });
+  await rm(recordFile);
+  await writeFile(recordFile, JSON.stringify(record));
+}
+
+test("restore rebuilds the scan's data folder from the bucket, byte for byte, with no key", async () => {
+  // Odd spacing in a list: it must come back as it was written, not parsed and written out again.
+  const listText = `{"source": "${urlA}",  "takenAt":"${started}","tools":[ {"name":"read_thing","kind":"read"} ]}\n`;
+  const { dir, bucket } = await publishedScan({ listText });
+  const to = path.join(await folder(), "tracker-data");
+  const report = await restore("https://data.example.com", to, { fetchImpl: servedFrom(bucket) });
+  assert.deepEqual(report, { scan: scanId, files: 7, lists: 1, skipped: 0, matchesManifest: true });
+  for (const relative of ["endpoints.jsonl", "feed.json", "servers.json", "lookup.json", "registry.json", "hosts.json", "manifest.json", ".gitattributes", listA]) {
+    assert.deepEqual(await readFile(path.join(to, relative)), await readFile(path.join(dir, relative)), relative);
+  }
+  // The folder is exactly the scan's, so the next scan's check of where it starts passes.
+  const check = await verifyManifest(to, { hashesOnly: true });
+  assert.ok(check.ok, check.problems.join("; "));
+  // The CLI says the same, and never writes into a folder that has files in it.
+  const lines: string[] = [];
+  assert.equal(await radarMain(["restore", "--from=https://data.example.com", `--to=${path.join(await folder(), "again")}`], { fetchImpl: servedFrom(bucket), log: (line) => lines.push(line) }), 0);
+  assert.match(lines.join("\n"), /Restored scan 2026-11-25T142908Z: 7 files and 1 lists\.\nThe folder matches the digest/);
+  await assert.rejects(restore("https://data.example.com", to, { fetchImpl: servedFrom(bucket) }), /is not empty/);
+  assert.equal(await radarMain(["restore", "--from=https://data.example.com"], { log: () => undefined }), 2);
+  await assert.rejects(restore("http://data.example.com", path.join(await folder(), "x"), { fetchImpl: servedFrom(bucket) }), /https origin/);
+});
+
+test("restore skips a list on a site kept off since the scan was published", async () => {
+  const { bucket } = await publishedScan();
+  // A vendor marked forbidden after this scan went up: its list is in the published bundle.
+  const sentryId = endpointId("https://mcp.sentry.dev/mcp");
+  const sentryPath = `lists/${sentryId.slice(0, 2)}/mcp.sentry.dev-${sentryId}.json`;
+  const sentryText = JSON.stringify({ source: "https://mcp.sentry.dev/mcp", takenAt: started, tools: [] });
+  await rewriteBundle(bucket, (text) => `${text}{"id":"${sentryId}","path":"${sentryPath}","sha256":"${sha(`${sentryText}\n`)}","list":${sentryText}}\n`);
+  const to = path.join(await folder(), "tracker-data");
+  const report = await restore("https://data.example.com", to, { fetchImpl: servedFrom(bucket) });
+  assert.deepEqual([report.lists, report.skipped, report.matchesManifest], [1, 1, true]);
+  await assert.rejects(readFile(path.join(to, sentryPath)), /ENOENT/);
+  await readFile(path.join(to, listA));
+  // A list whose address cannot be read is skipped the same way: it cannot be shown to be off those sites.
+  const { bucket: other } = await publishedScan();
+  const nowhere = JSON.stringify({ source: "nowhere", tools: [] });
+  const nowherePath = "lists/ab/other.example.com-abcdefabcdef.json";
+  await rewriteBundle(other, (text) => `${text}{"id":"abcdefabcdef","path":"${nowherePath}","sha256":"${sha(`${nowhere}\n`)}","list":${nowhere}}\n`);
+  const again = path.join(await folder(), "tracker-data");
+  assert.deepEqual((await restore("https://data.example.com", again, { fetchImpl: servedFrom(other) })).skipped, 1);
+  await assert.rejects(readFile(path.join(again, nowherePath)), /ENOENT/);
+});
+
+test("restore refuses a scan with evidence, which it cannot put back yet", async () => {
+  const { bucket } = await publishedScan();
+  const recordFile = path.join(bucket, "scans", scanId, "scan.json");
+  const record = JSON.parse(await readFile(recordFile, "utf8"));
+  record.evidence = [evidenceKey(idA, "0".repeat(64))];
+  await rm(recordFile);
+  await writeFile(recordFile, JSON.stringify(record));
+  const to = path.join(await folder(), "tracker-data");
+  await assert.rejects(restore("https://data.example.com", to, { fetchImpl: servedFrom(bucket) }), /has evidence/);
+  await assert.rejects(readdir(to), /ENOENT/);
+});
+
+test("restore writes nothing unless every file matches its sha256", async () => {
+  const { bucket } = await publishedScan();
+  const to = path.join(await folder(), "tracker-data");
+  // A file changed in the bucket (or on the way) after scan.json recorded it.
+  const feedFile = path.join(bucket, "snapshots", scanId, "feed.json");
+  await rm(feedFile);
+  await writeFile(feedFile, "{}\n");
+  await assert.rejects(restore("https://data.example.com", to, { fetchImpl: servedFrom(bucket) }), /feed\.json does not match its sha256/);
+  await assert.rejects(readdir(to), /ENOENT/);
+  // A list line whose text is not what its sha256 says.
+  const { bucket: other } = await publishedScan();
+  await rewriteBundle(other, (text) => text.replace("read_thing", "read_other"));
+  await assert.rejects(restore("https://data.example.com", to, { fetchImpl: servedFrom(other) }), /line 1 does not match its sha256/);
+  await assert.rejects(readdir(to), /ENOENT/);
+  // A path that would leave the folder, even with a matching sha256.
+  const { bucket: third } = await publishedScan();
+  const outside = JSON.stringify({ source: urlA, tools: [] });
+  await rewriteBundle(third, (text) => `${text}{"id":"${idA}","path":"lists/../escaped.json","sha256":"${sha(`${outside}\n`)}","list":${outside}}\n`);
+  await assert.rejects(restore("https://data.example.com", to, { fetchImpl: servedFrom(third) }), /line 2 has a path restore does not take/);
+  await assert.rejects(readdir(to), /ENOENT/);
+  // The list's text is everything after the fixed prefix, as it stands; a line in another shape is refused.
+  assert.equal(readBundleLine(`{"id":"x","path":"lists/ab/a-x.json","sha256":"${"0".repeat(64)}","list":{"a": 1}}`, 1).text, '{"a": 1}');
+  assert.throws(() => readBundleLine(`{"path":"lists/ab/a-x.json","id":"x","sha256":"${"0".repeat(64)}","list":{}}`, 1), /not a list line/);
+});
+
+test("the pre-flight check passes against a store that behaves as the uploader needs, and catches one that does not", async () => {
+  const run = async (options: Parameters<typeof fakeS3>[0], expectLock = false) => {
+    const s3 = await fakeS3({ bucket: "radar-preflight", ...options });
+    return preflight({ endpoint: s3.endpoint, bucket: "radar-preflight", credentials: s3.credentials, expectLock, now: soon });
+  };
+  const good = await run({});
+  assert.ok(good.ok, good.lines.join("\n"));
+  assert.equal(good.lines.length, 12);
+  // Under a bucket lock, a create-only PUT to a locked key answers 409; that is expected only when said.
+  assert.ok((await run({ locked: true }, true)).ok);
+  const lockedUnsaid = await run({ locked: true });
+  assert.ok(!lockedUnsaid.ok);
+  assert.match(lockedUnsaid.lines.join("\n"), /FAILED: a create-only PUT .* \(got 409: the bucket has a lock rule/);
+  assert.ok(!(await run({}, true)).ok);
+  // Metadata dropped by the store, or If-Match ignored: each is caught.
+  assert.match((await run({ dropMetadata: true })).lines.join("\n"), /FAILED: HEAD answers x-amz-meta-source-sha256/);
+  assert.match((await run({ ignoreIfMatch: true })).lines.join("\n"), /FAILED: If-Match with a stale ETag answers 412/);
+  // It never runs against the real bucket.
+  await assert.rejects(preflight({ endpoint: "https://example.com", bucket: "radar", credentials: { accessKeyId: "a", secretAccessKey: "b" } }), /never runs against the bucket radar/);
+  let calls = 0;
+  const counting: typeof fetch = async () => { calls += 1; return new Response(null, { status: 500 }); };
+  const env = { R2_ACCOUNT_ID: "0".repeat(32), R2_ACCESS_KEY_ID: "a", R2_SECRET_ACCESS_KEY: "b" };
+  assert.equal(await radarMain(["preflight", "--bucket=radar"], { env, fetchImpl: counting, log: () => undefined }), 2);
+  assert.equal(calls, 0);
+  const s3 = await fakeS3({ bucket: "radar-preflight" });
+  const lines: string[] = [];
+  assert.equal(await radarMain(["preflight", "--bucket=radar-preflight", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: (line) => lines.push(line), now: soon }), 0);
+  assert.match(lines.at(-1) as string, /Every check passed/);
 });
