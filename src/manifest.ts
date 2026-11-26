@@ -50,8 +50,9 @@ export interface Manifest {
   files: ManifestFile[];
 }
 
-export type PreviousReason = "no manifest" | "not signed" | "signature did not verify" | "folder changed since that scan" | "manifest unreadable";
-const previousReasons: readonly string[] = ["no manifest", "not signed", "signature did not verify", "folder changed since that scan", "manifest unreadable"];
+/** "not checked": cosign could not be run, so nothing is said about the signature either way. */
+export type PreviousReason = "no manifest" | "not signed" | "not checked" | "signature did not verify" | "folder changed since that scan" | "manifest unreadable";
+const previousReasons: readonly string[] = ["no manifest", "not signed", "not checked", "signature did not verify", "folder changed since that scan", "manifest unreadable"];
 
 export const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 
@@ -110,8 +111,8 @@ export async function buildManifest({ dataDir, written, scanStartedAt, generated
     const bytes = await readFile(path.join(dataDir, relative));
     files.push({ path: relative, sha256: sha256(bytes), bytes: bytes.length });
   }
+  // Anything that is not a plain file is left out of the digest; verify reports it, so such a folder is never signed.
   const tree = await folderDigest(dataDir);
-  if (tree.others.length) throw new Error(`The data folder holds something that is not a plain file: ${tree.others[0]}`);
   const { GITHUB_SHA, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, GITHUB_REPOSITORY } = environment;
   return {
     version: 1,
@@ -255,7 +256,8 @@ export async function verifyManifest(dataDir: string, { repository = "Stackduke/
       if (/^[0-9a-f]{40}$/.test(manifest.scanner.commit)) args.push("--certificate-github-workflow-sha", manifest.scanner.commit);
       else problems.push(`The manifest names no scanner commit (${manifest.scanner.commit}), so the signature cannot be tied to one.`);
       const result = await cosign([...args, path.join(dataDir, manifestName)]);
-      signature = result.code === 0 ? "verified" : "failed";
+      // cosign missing says nothing about the signature: it was not checked, not found bad.
+      signature = result.code === 0 ? "verified" : result.code === 127 ? "not checked" : "failed";
       if (result.code === 127) problems.push("cosign was not found. Install it (https://docs.sigstore.dev/cosign/system_config/installation/) or pass --hashes-only.");
       else if (result.code !== 0) problems.push(`The signature did not verify: ${result.output.split("\n").slice(-3).join(" ")}`);
     }
@@ -274,9 +276,10 @@ export async function checkPrevious(dataDir: string, options: VerifyOptions = {}
   if (!result.manifest) return { verified: false, reason: "manifest unreadable", manifestSha256: sha256(bytes) };
   const about = { ...(result.manifest.run ? { run: result.manifest.run.id } : {}), scanStartedAt: result.manifest.scanStartedAt, manifestSha256: sha256(bytes) };
   if (result.problems.length === 0) return { verified: true, ...about };
+  const folderChanged = result.matched < result.manifest.files.length || result.problems.some((problem) => problem.startsWith("The folder does not match") || problem.endsWith(": not a plain file"));
   const reason: PreviousReason = result.signature === "missing" ? "not signed"
-    : result.signature === "failed" ? "signature did not verify"
-    : result.matched < result.manifest.files.length || result.problems.some((problem) => problem.startsWith("The folder does not match")) ? "folder changed since that scan"
+    : folderChanged ? "folder changed since that scan"
+    : result.signature === "not checked" ? "not checked"
     : "signature did not verify";
   return { verified: false, reason, ...about };
 }
@@ -337,7 +340,11 @@ export function describeVerification(result: Verification): string {
     : `Signature: ${result.signature}.`);
   if (!result.ok || !manifest) lines.push("NOT VERIFIED.");
   else if (result.signature === "verified") {
-    lines.push(`OK: all ${manifest.tree.files} files in this folder are exactly as run ${manifest.run?.id ?? "(none)"} of ${result.repository}'s Track workflow left them, at scanner commit ${manifest.scanner.commit}, in the scan started ${manifest.scanStartedAt}. That scan started from the signed scan of run ${manifest.previous.run ?? "(none)"} (started ${manifest.previous.scanStartedAt ?? "(unknown)"}), unchanged.`);
+    lines.push(`OK: all ${manifest.tree.files} files in this folder are exactly as run ${manifest.run?.id ?? "(none)"} of ${result.repository}'s Track workflow left them, at scanner commit ${manifest.scanner.commit}, in the scan started ${manifest.scanStartedAt}.`);
+    // Only a verified start is claimed. With --this-scan-only an unclean start passes, and says so.
+    lines.push(manifest.previous.verified
+      ? `That scan started from the signed scan of run ${manifest.previous.run ?? "(none)"} (started ${manifest.previous.scanStartedAt ?? "(unknown)"}), unchanged.`
+      : `Its start was not checked here (--this-scan-only). The scan recorded that the folder it started from was not exactly a signed scan's: ${manifest.previous.reason ?? "no reason given"}.`);
     lines.push("Not shown: that this is the latest scan, that the code at that commit was reviewed, or that the scanner read each server correctly.");
   } else lines.push(`Hashes OK: all ${manifest.tree.files} files match the manifest. The signature was not checked, so this does not show who wrote the manifest.`);
   return lines.join("\n");

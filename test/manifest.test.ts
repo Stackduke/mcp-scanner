@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -199,6 +199,7 @@ test("verify says so when the manifest is not signed yet, or cosign is not insta
   await writeFile(path.join(dataDir, "manifest.sigstore.json"), "{}");
   const noCosign = await verifyManifest(dataDir, { cosign: async () => ({ code: 127, output: "cosign was not found" }) });
   assert.equal(noCosign.ok, false);
+  assert.equal(noCosign.signature, "not checked", "a missing cosign is not a bad signature");
   assert.ok(noCosign.problems.some((problem) => problem.startsWith("cosign was not found")));
 });
 
@@ -268,7 +269,11 @@ test("a file changed between two scans does not become part of what the next sca
   assert.equal(atHead.signature, "verified");
   assert.match(describeVerification(atHead), /The scan started from a folder that was not exactly a signed scan's \(folder changed since that scan\)/);
   // The workflow still publishes this scan's signature: its folder and signature are sound, and the next scan needs a signed start.
-  assert.equal((await verifyManifest(dataDir, { cosign: verifies, thisScanOnly: true })).ok, true);
+  const thisScan = await verifyManifest(dataDir, { cosign: verifies, thisScanOnly: true });
+  assert.equal(thisScan.ok, true);
+  // Its OK line claims only what was checked: never a clean start it did not have.
+  assert.doesNotMatch(describeVerification(thisScan), /started from the signed scan/);
+  assert.match(describeVerification(thisScan), /Its start was not checked here \(--this-scan-only\)\. The scan recorded that the folder it started from was not exactly a signed scan's: folder changed since that scan\./);
 
   // The next scan starts from that signed folder, unchanged, so it is clean again; the record above stays in history.
   await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now) + 2 * day, verifies);
@@ -337,4 +342,49 @@ test("the check before signing refuses another run's manifest and a commit with 
   await writeFile(path.join(dataDir, "manifest.json"), JSON.stringify(manifest));
   git("add", "-A"); git("commit", "-q", "--amend", "-m", "scan");
   assert.deepEqual(await checkBeforeSigning(dataDir, "9876543210"), ["The commit has a change the manifest does not account for: A README.md"]);
+});
+
+test("a scan without cosign records its start as not checked, never as a signature that did not verify", async () => {
+  const dataDir = await scanned();
+  await sign(dataDir);
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now) + day, async () => ({ code: 127, output: "cosign was not found" }));
+  assert.deepEqual((await readJson<Manifest>(path.join(dataDir, "manifest.json"))).previous.reason, "not checked");
+});
+
+test("a link in the data folder is removed, never followed, and the scan still publishes, recording an unclean start", async () => {
+  const dataDir = await scanned();
+  await sign(dataDir);
+  const outside = await mkdtemp(path.join(tmpdir(), "outside-"));
+  const listFile = (await readJson<Endpoint>(path.join(dataDir, "endpoints.jsonl"))).file as string;
+  // A link in place of a list's folder would send the scan's writes outside the data folder; another stands alone.
+  const listFolder = path.join(dataDir, path.dirname(listFile));
+  await rm(listFolder, { recursive: true });
+  execFileSync("ln", ["-s", outside, listFolder]);
+  execFileSync("ln", ["-s", "/etc/hostname", path.join(dataDir, "stray.json")]);
+
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }, { name: "send_invoice" }], Date.parse(now) + day, verifies);
+  const manifest = await readJson<Manifest>(path.join(dataDir, "manifest.json"));
+  assert.deepEqual(manifest.previous.reason, "folder changed since that scan");
+  assert.deepEqual(await readdir(outside), [], "nothing was written through the link");
+  assert.deepEqual((await folderDigest(dataDir)).others, [], "both links are gone");
+  assert.ok(manifest.files.some((file) => file.path === listFile), "the list was written inside the folder again");
+  await sign(dataDir);
+  assert.equal((await verifyManifest(dataDir, { cosign: verifies, thisScanOnly: true })).ok, true, "and the scan's own folder verifies");
+});
+
+test("a published server's watched definitions are listed in the manifest, so the check before signing accepts them", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "manifest-"));
+  const servers = { demo: { url: "https://mcp.demo.example/mcp", tokenVariable: "STACKDUKE_SCAN_DEMO_TOKEN", publish: true, kind: "api-key" as const, keyPage: "https://demo.example/keys", keyAdvice: "A read-only key." } };
+  const fetchImpl = (async (_input: URL | string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { method: string; id?: number };
+    if (body.method === "initialize") return Response.json({ jsonrpc: "2.0", id: body.id, result: { serverInfo: { name: "Demo" } } });
+    if (body.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [{ name: "get_page", ...readOnly }] } });
+    return new Response(null, { status: 202 });
+  }) as typeof fetch;
+  await track({ dataDir, readRegistry: false, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], environment: { ...environment, STACKDUKE_SCAN_DEMO_TOKEN: "demo-token" }, fetchImpl, now: () => new Date(now), signedInServers: servers });
+  const manifest = await readJson<Manifest>(path.join(dataDir, "manifest.json"));
+  const watched = manifest.files.find((file) => file.path === "watched/demo.json");
+  assert.ok(watched, "the watched file is listed");
+  assert.equal(watched.sha256, sha256(await readFile(path.join(dataDir, "watched", "demo.json"), "utf8")));
+  assert.deepEqual(unaccountedChanges(manifest, [{ status: "A", path: "watched/demo.json" }]), []);
 });

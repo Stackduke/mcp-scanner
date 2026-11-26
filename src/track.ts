@@ -5,13 +5,14 @@ import type { AuthorityReport } from "./authority.ts";
 import { listTools, userAgent } from "./client.ts";
 import { crawl } from "./crawl.ts";
 import { readSnapshot, snapshotText, writeWhole } from "./files.ts";
-import { buildManifest, checkPrevious, writeManifest } from "./manifest.ts";
+import { buildManifest, checkPrevious, folderDigest, writeManifest } from "./manifest.ts";
 import type { RunCosign } from "./manifest.ts";
 import { readRegistry } from "./registry.ts";
 import type { RegistryRead } from "./registry.ts";
 import { catalog, publicList } from "./catalog.ts";
 import type { PublicServer } from "./catalog.ts";
-import { scanSignedIn, signedInServers, tokenFor } from "./signed-in.ts";
+import { scanSignedIn, signedInServers as catalogSignedIn, tokenFor } from "./signed-in.ts";
+import type { SignedInServer } from "./signed-in.ts";
 import { buildFeed, endpointId, groupsOfPrint, lookupOf, mergeRegistry, planChecks, readPrint, recordCheck, siteOf, watchedEndpoint, watchedOf } from "./tracker.ts";
 import type { CheckResult, Endpoint, FeedWatched, RegistryState } from "./tracker.ts";
 
@@ -59,6 +60,8 @@ export interface TrackOptions {
   publicServers?: readonly PublicServer[];
   /** For tests: what runs cosign when the folder the run starts from is checked against its signed manifest. */
   cosign?: RunCosign;
+  /** The servers watched with a login. Default: the catalog's. */
+  signedInServers?: Readonly<Record<string, SignedInServer>>;
 }
 
 export interface TrackSummary {
@@ -159,7 +162,13 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   // this scan's manifest, so a file changed between scans cannot quietly become part of this one.
   const previous = await checkPrevious(dataDir, { ...(environment.GITHUB_REPOSITORY ? { repository: environment.GITHUB_REPOSITORY } : {}), ...(options.cosign ? { cosign: options.cosign } : {}) });
   log(previous.verified ? "the data folder is exactly the previous scan's, as signed" : `the data folder is not exactly a signed scan's: ${previous.reason}`);
+  // The tracker writes only plain files. Anything else (a link, say) came from elsewhere: it is removed, never
+  // followed, so no write can leave the folder, and the scan goes on. Its start is already recorded as unclean.
+  const { others } = await folderDigest(dataDir);
+  for (const other of others) await rm(file(other), { force: true });
+  if (others.length) log(`${others.length} entries in the data folder were not plain files, and were removed`);
 
+  const signedInServers = options.signedInServers ?? catalogSignedIn;
   const published = (vendor: string | undefined) => vendor !== undefined && signedInServers[vendor]?.publish === true;
   const all = await readEndpoints(file("endpoints.jsonl"));
   const byUrl = new Map(all.filter((endpoint) => !endpoint.signedIn).map((endpoint) => [endpoint.url, endpoint]));
@@ -236,7 +245,7 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
 
   /** One look at a server watched with a login, as the result to record. */
   async function lookSignedIn(vendor: string): Promise<CheckResult> {
-    const scan = await scanSignedIn(vendor, environment, fetchImpl);
+    const scan = await scanSignedIn(vendor, environment, fetchImpl, signedInServers);
     if (scan.outcome === "unsafe-connection") throw new Error("Certificate checking is switched off here, so no token was sent.");
     // A privately tracked server is not named in this public log.
     if (scan.outcome === "token-echoed") log(`${published(vendor) ? vendor : "a privately tracked server"}: the server sent the token back. Nothing it returned was kept. Replace that token.`);

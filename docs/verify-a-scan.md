@@ -30,7 +30,9 @@ What it does **not** show:
 - **That the code at that commit was reviewed.** The signature names a commit on `main`. Its value depends on what can reach `main`, and the commit is public, so anyone can read it.
 - **That the scanner read each server correctly.** The method version says which rules were used, and [METHOD.md](METHOD.md) describes them.
 
-The very first signed scan has no signed scan before it, so its own check fails on point 3 (`previous.reason: "no manifest"`). So does a scan that follows a day whose signing failed (`"not signed"`). The next scan after a clean signed one passes again.
+The very first signed scan has no signed scan before it, so its own check fails on point 3 (`previous.reason: "no manifest"`). So does a scan that follows a day whose signing failed (`"not signed"`), or a scan that could not run cosign (`"not checked"`, which says nothing either way about the signature). The next scan after a clean signed one passes again.
+
+Anything in the data folder that is not a plain file, a link for example, is never followed. A scan removes it before it writes anything, and records an unclean start (`"folder changed since that scan"`).
 
 ## With the scanner (recommended)
 
@@ -58,6 +60,8 @@ for commit in $(git -C tracker-data log --format=%H --diff-filter=A -- manifest.
 done
 git -C tracker-data checkout -q data
 ```
+
+This walk can only see the history the branch shows. A force push could remove the scan that recorded an edit, and the walk would not notice that it is missing. The walk is only as reliable as a ruleset on `data` that blocks force pushes and deletion. Each manifest's `previous.run` and `previous.manifestSha256` name the scan before it, so a gap can also be found by comparing them, though the walk above does not do that.
 
 ## By hand, with cosign and sha256sum only
 

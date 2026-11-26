@@ -38,6 +38,13 @@ test("the scan's commit is checked before it is signed, and every action is pinn
   const sign = job("sign");
   assert.ok(sign.indexOf("check-before-signing") < sign.indexOf("cosign sign-blob"), "checked first");
   assert.match(sign, /fetch-depth: 2/);
+  // The artifact is unpacked outside the data checkout, and only the signature file is copied in.
+  const publish = job("publish-signature");
+  assert.match(publish, /name: manifest-signature\n {10}path: \$\{\{ runner\.temp \}\}\/signature\n/);
+  assert.doesNotMatch(publish, /path: tracker-data\n(?! {10}persist)/);
+  assert.match(publish, /cp "\$RUNNER_TEMP\/signature\/manifest\.sigstore\.json" tracker-data\/manifest\.sigstore\.json/);
+  // cosign is installed whenever the scan runs, so a failed sign-in step cannot make a good signature look bad.
+  assert.match(job("track"), /- name: Install cosign to check the previous signature\n {8}if: \$\{\{ !cancelled\(\) \}\}\n/);
   // A scan that started from an unclean folder must still have its signature published, or signing never recovers.
   assert.match(job("publish-signature"), /verify-manifest --data=tracker-data --repo="\$REPOSITORY" --this-scan-only\n/);
   const uses = [...text.matchAll(/uses: (\S+)/g)].map((match) => match[1] as string);

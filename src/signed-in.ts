@@ -106,8 +106,8 @@ export type SignedInScan =
  * The only place a token meets an address. The name picks both the address and the variable the
  * token is read from; nothing else the caller passes can change where the token goes.
  */
-export async function scanSignedIn(name: string, environment: Record<string, string | undefined>, fetchImpl?: typeof fetch): Promise<SignedInScan> {
-  const server = Object.hasOwn(signedInServers, name) ? signedInServers[name] : undefined;
+export async function scanSignedIn(name: string, environment: Record<string, string | undefined>, fetchImpl?: typeof fetch, servers: Readonly<Record<string, SignedInServer>> = signedInServers): Promise<SignedInScan> {
+  const server = Object.hasOwn(servers, name) ? servers[name] : undefined;
   if (!server) return { outcome: "unknown-server" };
   return listWithToken(server.url, server.tokenVariable, tokenFor(server, environment), environment, fetchImpl ? { fetchImpl } : {});
 }
