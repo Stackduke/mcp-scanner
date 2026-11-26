@@ -1,5 +1,5 @@
-import { listTools } from "./client.ts";
-import type { ListToolsResult } from "./client.ts";
+import { listToolsWithFacts } from "./client.ts";
+import type { ListingFacts, ListToolsResult } from "./client.ts";
 import { catalog, tokenVariableOf } from "./catalog.ts";
 import type { CatalogServer } from "./catalog.ts";
 
@@ -100,7 +100,7 @@ export type SignedInScan =
   | { outcome: "unsafe-connection"; tokenVariable: string }
   /** The server sent the token back in what it returned. Nothing it returned is passed on. */
   | { outcome: "token-echoed"; url: string }
-  | { outcome: "answered"; url: string; tokenVariable: string; result: ListToolsResult };
+  | { outcome: "answered"; url: string; tokenVariable: string; result: ListToolsResult; facts: ListingFacts };
 
 /**
  * The only place a token meets an address. The name picks both the address and the variable the
@@ -123,8 +123,8 @@ export async function listWithToken(url: string, tokenVariable: string, value: s
   const read = readToken(value);
   if (!read.ok) return { outcome: "no-token", tokenVariable, reason: read.reason };
   if (environment.NODE_TLS_REJECT_UNAUTHORIZED === "0") return { outcome: "unsafe-connection", tokenVariable };
-  const result = await listTools(url, { bearerToken: read.token, ...(fetchImpl ? { fetchImpl } : {}), ...(timeoutMs ? { timeoutMs } : {}) });
-  // Everything in the result is the server's text and is about to be printed and perhaps saved.
-  if (JSON.stringify(result).includes(JSON.stringify(read.token).slice(1, -1))) return { outcome: "token-echoed", url };
-  return { outcome: "answered", url, tokenVariable, result };
+  const { result, facts } = await listToolsWithFacts(url, { bearerToken: read.token, ...(fetchImpl ? { fetchImpl } : {}), ...(timeoutMs ? { timeoutMs } : {}) });
+  // Everything in the result is the server's text and is about to be printed and perhaps saved; so is the protocol version it agreed.
+  if (JSON.stringify({ result, facts }).includes(JSON.stringify(read.token).slice(1, -1))) return { outcome: "token-echoed", url };
+  return { outcome: "answered", url, tokenVariable, result, facts };
 }

@@ -152,8 +152,9 @@ jobs:
       # about what was found.
       # The notice token is handed to this step only.
       - name: Private notice
-        # Runs whenever the scan did, as the commit step does, whatever happened to the sign-in steps.
-        if: ${{ !cancelled() && steps.scan.outcome == 'success' && steps.private-data.outcome == 'success' }}
+        # Runs whenever the scan did, as the commit step does, whatever happened to the sign-in steps. Only a run on
+        # main sends it, so a run dispatched from another branch cannot report its own findings.
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.scan.outcome == 'success' && steps.private-data.outcome == 'success' }}
         run: node src/cli.ts notice --before="$RUNNER_TEMP/watched-before" --data=private-data
         env:
           STACKDUKE_NOTICE_URL: ${{ secrets.STACKDUKE_NOTICE_URL }}
@@ -163,9 +164,10 @@ jobs:
       # servers that need a sign-in move out of the public data, their history must reach the private
       # repository before it leaves the public one.
       # The private repository's commit gets a fresh key: the one made before the scan may have run out.
+      # Only a run on main saves the private data: a run dispatched from another branch must not push to tracker-private.
       - name: Key for saving the private data
         id: private-save-key
-        if: ${{ !cancelled() && steps.scan.outcome == 'success' && steps.private-data.outcome == 'success' }}
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.scan.outcome == 'success' && steps.private-data.outcome == 'success' }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.STACKDUKE_SIGN_IN_APP_CLIENT_ID }}
@@ -176,7 +178,7 @@ jobs:
 
       - name: Commit the private data
         id: private-commit
-        if: ${{ !cancelled() && steps.private-save-key.outcome == 'success' }}
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.private-save-key.outcome == 'success' }}
         working-directory: private-data
         env:
           PRIVATE_TOKEN: ${{ steps.private-save-key.outputs.token }}

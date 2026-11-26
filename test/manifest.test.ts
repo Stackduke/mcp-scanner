@@ -10,7 +10,7 @@ import { checkBeforeSigning, describeVerification, folderDigest, githubIssuer, r
 import type { Manifest, RunCosign } from "../src/manifest.ts";
 import { methodVersion } from "../src/method.ts";
 import { takeSnapshot } from "../src/snapshot.ts";
-import { dataAttributes, track } from "../src/track.ts";
+import { dataAttributes, hostBudgetMinutes, track } from "../src/track.ts";
 import { changeBetween, printOf, readPrint } from "../src/tracker.ts";
 import type { Endpoint, Feed, ListPrint } from "../src/tracker.ts";
 import type { ToolDefinition } from "../src/types.ts";
@@ -52,7 +52,7 @@ test("each run writes a manifest with the full sha256 of every file it wrote, th
 
   assert.equal(manifest.version, 1);
   assert.equal(manifest.methodVersion, methodVersion);
-  assert.equal(manifest.methodVersion, "1.0.0");
+  assert.equal(manifest.methodVersion, "1.1.0");
   assert.deepEqual(manifest.scanner, { commit });
   assert.deepEqual(manifest.run, { id: "9876543210", attempt: "2", repository: "Stackduke/mcp-scanner" });
   assert.equal(manifest.scanStartedAt, now);
@@ -342,6 +342,28 @@ test("the check before signing refuses another run's manifest and a commit with 
   await writeFile(path.join(dataDir, "manifest.json"), JSON.stringify(manifest));
   git("add", "-A"); git("commit", "-q", "--amend", "-m", "scan");
   assert.deepEqual(await checkBeforeSigning(dataDir, "9876543210"), ["The commit has a change the manifest does not account for: A README.md"]);
+});
+
+test("hosts.json, written when a host uses up its time, is in the manifest and passes the check before signing", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "manifest-"));
+  const git = (...args: string[]) => execFileSync("git", ["-C", dataDir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { encoding: "utf8" });
+  git("init", "-q");
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now) - day);
+  git("add", "-A"); git("commit", "-q", "-m", "first");
+  // The one host's check takes longer than its share of the run, so hosts.json is written.
+  let clock = Date.parse(now);
+  const slow = fakeNetwork(() => [{ name: "get_page", ...readOnly }]);
+  const fetchImpl = (async (input: URL | string, init?: RequestInit) => {
+    if (!String(input).startsWith("https://registry.") && JSON.parse(String(init?.body)).method === "initialize") clock += (hostBudgetMinutes + 1) * 60_000;
+    return slow(input, init);
+  }) as typeof fetch;
+  await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 120, publicServers: [], environment, fetchImpl, now: () => new Date(clock) });
+  git("add", "-A"); git("commit", "-q", "-m", "scan");
+  const manifest = await readJson<Manifest>(path.join(dataDir, "manifest.json"));
+  const listed = manifest.files.find((file) => file.path === "hosts.json");
+  assert.equal(listed?.sha256, sha256(await readFile(path.join(dataDir, "hosts.json"), "utf8")));
+  assert.deepEqual(unaccountedChanges(manifest, [{ status: "A", path: "hosts.json" }]), []);
+  assert.deepEqual(await checkBeforeSigning(dataDir, "9876543210"), []);
 });
 
 test("a scan without cosign records its start as not checked, never as a signature that did not verify", async () => {

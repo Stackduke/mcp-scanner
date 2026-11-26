@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { assessTool, authorityOf, canDo, confined, plural, seriousFirst, shownName } from "./authority.ts";
 import type { AuthorityKind, AuthorityReport } from "./authority.ts";
-import type { ListToolsResult } from "./client.ts";
+import type { ErrorClass, ListToolsResult } from "./client.ts";
 import { catalog, publicList } from "./catalog.ts";
 import type { PublicServer } from "./catalog.ts";
 import type { ChangedField } from "./diff.ts";
@@ -62,11 +62,34 @@ export interface ChangeRecord {
   /** Tools added or changed that are counted as able to do more than before, with the most serious thing each now does. */
   moreSerious: Array<{ name: string; kind: AuthorityKind }>;
   counts: { added: number; removed: number; changed: number; moreSerious: number };
+  /** Seen on a list that did not read the same twice, on a second run in a row: recorded, but the server is flapping. */
+  unstable?: true;
   /** Written by the scanner. Tool names are the only words of the server's in it. */
   summary: string;
   /** The method version that recorded the change. Records from before 26 November 2026 have none. */
   methodVersion?: string;
 }
+
+/**
+ * What one check found out besides its outcome. `retries` counts the extra attempts made after a failure that may
+ * clear up; `unstable` marks a check whose list changed and, read again at once, did not read the same.
+ */
+/** A check's error class, or the tracker's own reason for not making it: the host had used its time for this run. */
+export type CheckErrorClass = ErrorClass | "host_budget_exceeded";
+
+export interface CheckFacts {
+  errorClass?: CheckErrorClass;
+  status?: number;
+  protocolVersion?: string;
+  retries?: number;
+  unstable?: boolean;
+}
+
+/** The latest check in full. Its time is the endpoint's `lastChecked`. */
+export interface LastCheck { errorClass?: CheckErrorClass; status?: number; protocolVersion?: string; retries: number; unstable?: true }
+
+/** A server held back from recording a flapping list once per this many days at most. */
+export const flapHoldBackDays = 7;
 
 export interface Endpoint {
   /** Stable and short: from the address, or `signed-in-<vendor>` for a server scanned with a token. */
@@ -92,6 +115,18 @@ export interface Endpoint {
   file?: string;
   /** The most recent checks, newest last, as `<time> <code>`. */
   checks: string[];
+  /** The latest check's facts. Missing on an endpoint not checked since they were first recorded. */
+  lastCheck?: LastCheck;
+  /**
+   * The checks among `checks` with something to say, newest last, as `<time> <error class> <status or -> <retries>`,
+   * and ` unstable` when the list did not read the same twice. A check that listed tools at the first attempt has
+   * none, nor does any check made before these were first recorded.
+   */
+  checkDetails?: string[];
+  /** When the list last changed and, read again at once, did not read the same. */
+  unstable?: string;
+  /** When a check was last left for the next run because its host had used its time: not a check, nor a failure. */
+  lastSkipped?: string;
   /** Newest first. */
   changes: ChangeRecord[];
 }
@@ -295,13 +330,58 @@ export function changeBetween(before: ListPrint, after: ListPrint, since: string
 
 export type CheckResult = ListToolsResult | { outcome: "no-token" };
 
+/** The fingerprint of a list as it would be saved, or null when the list cannot be processed. */
+export function listHashOfResult(url: string, result: CheckResult, now: string): string | null {
+  if (result.outcome !== "listed") return null;
+  try { return listHashOf(printOf(takeSnapshot(url, result.tools, result.server, now))); } catch { return null; }
+}
+
+/**
+ * A list that differed from the saved one was read again at once. When the second read gives the same new list, the
+ * change stands. When it gives the saved list back, or yet another list, the server is flapping: it is marked
+ * unstable and no change is recorded. A second read that lists nothing proves neither, so the change stands.
+ */
+export function rereadVerdict(first: string, second: string | null): "changed" | "unstable" {
+  return second === null || second === first ? "changed" : "unstable";
+}
+
+/**
+ * Adds a check's line to `checkDetails` when it has something new to say, and drops lines older than the checks kept.
+ * A line holds for the checks after it until the next line, so one that repeats the class and status of the check
+ * before it is not written, and the newest line older than the kept checks stays: it still describes the oldest ones.
+ */
+export function withDetail(endpoint: Endpoint, now: string, facts: CheckFacts, before: LastCheck | undefined): void {
+  const errorClass = facts.errorClass ?? "ok";
+  // After a skip's line, a check repeating the one before the skip still needs its own line, or the skip would describe it.
+  const afterSkip = endpoint.checkDetails?.at(-1)?.split(" ")[1] === "host_budget_exceeded";
+  const differs = afterSkip || errorClass !== (before?.errorClass ?? "ok") || facts.status !== before?.status;
+  const entry = (errorClass !== "ok" && differs) || facts.retries || facts.unstable ? [detailOf(now, facts)] : [];
+  const oldest = endpoint.checks[0]?.split(" ")[0] ?? now;
+  const all = [...(endpoint.checkDetails ?? []), ...entry];
+  const older = all.filter((line) => (line.split(" ")[0] ?? "") < oldest);
+  const details = [...older.slice(-1), ...all.filter((line) => (line.split(" ")[0] ?? "") >= oldest)];
+  if (details.length) endpoint.checkDetails = details; else delete endpoint.checkDetails;
+}
+
+/**
+ * Records a check not made because its host had used its time for this run. It is the tracker's limit, not the
+ * server's failure: no check, outcome or rest is recorded, so the endpoint is among the first looked at next run.
+ */
+export function recordSkipped(endpoint: Endpoint, now: string): void {
+  endpoint.lastSkipped = now;
+  // Its last real check is kept as it was; only a line says the endpoint was left.
+  withDetail(endpoint, now, { errorClass: "host_budget_exceeded" }, undefined);
+}
+
+const detailOf = (now: string, facts: CheckFacts) => `${now} ${facts.errorClass ?? "-"} ${facts.status ?? "-"} ${facts.retries ?? 0}${facts.unstable ? " unstable" : ""}`;
+
 /**
  * Records one look at an endpoint. When the list is new or different, returns it to be saved, in
  * full and as a print; an unchanged list is not saved again, so the history of the saved files is
  * the history of changes. The same list read differently by newer rules comes back with `reread`
  * set: its print holds the new reading and is saved, but the full list has not changed.
  */
-export function recordCheck(endpoint: Endpoint, result: CheckResult, now: string, previous: ListPrint | null): { snapshot: Snapshot; print: ListPrint; reread: boolean } | null {
+export function recordCheck(endpoint: Endpoint, result: CheckResult, now: string, previous: ListPrint | null, facts: CheckFacts = {}): { snapshot: Snapshot; print: ListPrint; reread: boolean } | null {
   // Everything that can fail on a hostile list is worked out before the endpoint is touched.
   const listed = result.outcome === "listed" ? (() => {
     const snapshot = takeSnapshot(endpoint.url, result.tools, result.server, now);
@@ -313,12 +393,27 @@ export function recordCheck(endpoint: Endpoint, result: CheckResult, now: string
   if (endpoint.outcome !== result.outcome) endpoint.outcomeSince = now;
   endpoint.outcome = result.outcome;
   endpoint.lastChecked = now;
+  const unstable = Boolean(listed && previous && facts.unstable);
+  // A flapping list is held back only when the server has not flapped in the last week. A server that flaps again
+  // within it, however many clean runs come between, has the first read's list recorded, its change marked unstable.
+  const flappedRecently = endpoint.unstable !== undefined && Date.parse(now) - Date.parse(endpoint.unstable) < flapHoldBackDays * day;
+  const heldBack = unstable && !flappedRecently;
+  const retries = facts.retries ?? 0;
+  const before = endpoint.lastCheck;
+  endpoint.lastCheck = {
+    ...(facts.errorClass ? { errorClass: facts.errorClass } : {}), ...(facts.status !== undefined ? { status: facts.status } : {}),
+    ...(facts.protocolVersion ? { protocolVersion: facts.protocolVersion } : {}), retries, ...(unstable ? { unstable: true as const } : {}),
+  };
+  withDetail(endpoint, now, { ...facts, retries, unstable }, before);
   if (!listed) return null;
+  if (unstable) endpoint.unstable = now;
+  // lastListed stays when the saved list was last confirmed, so a later change's `since` cannot leave out when it happened.
+  if (heldBack) return null;
 
   const unchanged = previous !== null && listHashOf(previous) === listed.listHash;
   // The server sent the same list, but the scanner now reads it differently: keep the new reading, record no change.
   const reread = unchanged && canonical(previous.tools.map((tool) => tool.kind)) !== canonical(listed.print.tools.map((tool) => tool.kind));
-  if (previous && !unchanged && endpoint.lastListed) endpoint.changes = [changeBetween(previous, listed.print, endpoint.lastListed), ...endpoint.changes].slice(0, keptChanges);
+  if (previous && !unchanged && endpoint.lastListed) endpoint.changes = [{ ...changeBetween(previous, listed.print, endpoint.lastListed), ...(unstable ? { unstable: true as const } : {}) }, ...endpoint.changes].slice(0, keptChanges);
   endpoint.listHash = listed.listHash;
   endpoint.lastListed = now;
   endpoint.tools = listed.snapshot.tools.length;
@@ -358,6 +453,8 @@ export interface FeedServer {
   changesIn30Days: number;
   watchIn30Days: Watch;
   lastChange?: string;
+  /** When its list last changed and did not read the same when read again at once. */
+  unstable?: string;
 }
 
 /** What the catalog says about a watched server that a reader needs: its name and website. */
@@ -382,6 +479,9 @@ export interface FeedWatched {
   /** Tool names under the most serious thing each is counted as doing. "read" means said to only read. */
   groups: Array<{ kind: AuthorityKind; tools: string[] }>;
   checks: Array<{ at: string; outcome: CheckOutcome }>;
+  /** The latest check's facts: why it ended as it did, the status, the protocol version agreed, how many retries. */
+  lastCheck?: LastCheck;
+  unstable?: string;
   changes: ChangeRecord[];
 }
 
@@ -451,6 +551,8 @@ function watchedEntry(endpoint: Endpoint, groups: FeedWatched["groups"]): FeedWa
     ...(endpoint.kinds ? { kinds: endpoint.kinds } : {}),
     groups,
     checks: checksOf(endpoint),
+    ...(endpoint.lastCheck ? { lastCheck: endpoint.lastCheck } : {}),
+    ...(endpoint.unstable ? { unstable: endpoint.unstable } : {}),
     changes: endpoint.changes.slice(0, 5).map(shorterChange),
   };
 }
@@ -524,6 +626,7 @@ export function buildFeed(
       lastChecked: endpoint.lastChecked, lastListed: endpoint.lastListed, outcome: endpoint.outcome,
       changesIn30Days: recent(endpoint).length, watchIn30Days: watchOf(endpoint),
       ...(endpoint.changes[0] ? { lastChange: endpoint.changes[0].at } : {}),
+      ...(endpoint.unstable ? { unstable: endpoint.unstable } : {}),
     }] : [])
     .sort((a, b) => (a.url < b.url ? -1 : 1));
 
