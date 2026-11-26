@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { signedInServers } from "./signed-in.ts";
+import { sha256 } from "./manifest.ts";
 
 /**
  * Where Radar's history lives in object storage (the `radar` bucket, served at https://data.stackduke.com), and
@@ -8,15 +7,17 @@ import { signedInServers } from "./signed-in.ts";
  *
  *   latest.json                              the one mutable object, written last: which scan is current
  *   scans/<scan-id>/scan.json                what the scan is, and the sha256 of each of its files
- *   scans/<scan-id>/endpoints.jsonl.gz       every endpoint as the scan left it
- *   scans/<scan-id>/lists.jsonl.gz           every current tool list, one per line
- *   scans/<scan-id>/{feed,servers,lookup,registry}.json
  *   scans/<scan-id>/manifest.json            the scan's manifest and, when signed, manifest.sigstore.json
+ *   snapshots/<scan-id>/endpoints.jsonl.gz   every endpoint as the scan left it
+ *   snapshots/<scan-id>/lists.jsonl.gz       every current tool list, one per line
+ *   snapshots/<scan-id>/{feed,servers,lookup,registry,hosts}.json
  *   lists/<endpoint-id>/<sha256>.json        each version of an endpoint's tool list, by the sha256 of its bytes
  *   evidence/<endpoint-id>/<sha256>.json     reserved for raw responses, the same way
  *
- * Every key but latest.json is immutable: written once, never overwritten. Nothing about a server tracked
- * privately is ever planned: a scan that holds any is refused whole.
+ * Every key but latest.json is immutable: written once, never overwritten, never deleted. The bulky copies have
+ * their own prefix, snapshots/, apart from the small records under scans/, because a bucket rule (a lock, or a
+ * storage class should one ever be worth it) can only match a prefix, and keys cannot be moved once readers use
+ * them. Nothing about a server tracked privately is ever planned: a scan that holds any is refused whole.
  */
 export const layoutVersion = 1;
 export const pointerKey = "latest.json";
@@ -41,7 +42,7 @@ export interface PlannedObject {
   sourceBytes: number;
 }
 
-export const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
+export { sha256 };
 
 /** A scan's id: when it started, to the second, in UTC. Sortable, so the newest id is the greatest. */
 export function scanIdOf(time: string): string {
@@ -54,12 +55,16 @@ const scanIdPattern = /^\d{4}-\d{2}-\d{2}T\d{6}Z$/;
 const publicId = /^[0-9a-f]{12}$/;
 
 export const scanKey = (id: string, name: string) => `scans/${id}/${name}`;
+export const snapshotKey = (id: string, name: string) => `snapshots/${id}/${name}`;
 export const listKey = (endpointId: string, hash: string) => `lists/${endpointId}/${hash}.json`;
 export const evidenceKey = (endpointId: string, hash: string) => `evidence/${endpointId}/${hash}.json`;
 
-/** The files of a scan's folder, under scans/<scan-id>/. */
-export const scanFiles = ["scan.json", "endpoints.jsonl.gz", "lists.jsonl.gz", "feed.json", "servers.json", "lookup.json", "registry.json", "manifest.json", "manifest.sigstore.json"] as const;
-const keyPattern = new RegExp(`^(latest\\.json|scans/\\d{4}-\\d{2}-\\d{2}T\\d{6}Z/(${scanFiles.map((name) => name.replace(/\./g, "\\.")).join("|")})|(lists|evidence)/[0-9a-f]{12}/[0-9a-f]{64}\\.json)$`);
+/** A scan's small records, under scans/<scan-id>/, kept in Standard storage. */
+export const recordFiles = ["scan.json", "manifest.json", "manifest.sigstore.json"] as const;
+/** A scan's copies of the data folder, under snapshots/<scan-id>/: the bulk of each scan. */
+export const snapshotFiles = ["endpoints.jsonl.gz", "lists.jsonl.gz", "feed.json", "servers.json", "lookup.json", "registry.json", "hosts.json"] as const;
+const names = (list: readonly string[]) => list.map((name) => name.replace(/\./g, "\\.")).join("|");
+const keyPattern = new RegExp(`^(latest\\.json|scans/\\d{4}-\\d{2}-\\d{2}T\\d{6}Z/(${names(recordFiles)})|snapshots/\\d{4}-\\d{2}-\\d{2}T\\d{6}Z/(${names(snapshotFiles)})|(lists|evidence)/[0-9a-f]{12}/[0-9a-f]{64}\\.json)$`);
 /** Every key the layout has. Nothing else is ever written. */
 export const isLayoutKey = (key: string) => keyPattern.test(key);
 
@@ -77,30 +82,29 @@ export const sourceSha256Of = (key: string, body: Buffer) => sha256(key.endsWith
 /** Thrown when a scan holds anything about a server tracked privately. Its message names no server: logs are public. */
 export class PrivateDataError extends Error {}
 
-/** The vendors whose signed-in data is published. Every other signed-in vendor is tracked privately. */
-export const publishedVendors = (servers = signedInServers) => new Set(Object.entries(servers).filter(([, server]) => server.publish === true).map(([vendor]) => vendor));
-
 /**
- * Whether a record (an endpoint, a feed entry, a servers row) is about a server tracked privately. Only fields the
- * scanner writes itself are read (`signedIn`, and an id of the form signed-in-<vendor>); a server's own text never
- * decides it, so no server can block an upload by naming a tool after a vendor.
+ * Whether a record (an endpoint, a feed entry, a servers row) is about a server watched with a sign-in. Layout 1
+ * has no place for those (their ids are not 12 hex characters, and watched/ has no key), so every one is treated
+ * as tracked privately, even a vendor the catalog marks `publish: true`: such a scan is refused until the layout
+ * gives them a place. Only fields the scanner writes itself are read (`signedIn`, and an id of the form
+ * signed-in-<vendor>); a server's own text never decides it, so no server can block an upload by naming a tool
+ * after a vendor.
  */
-export function isPrivateRecord(record: unknown, published: ReadonlySet<string>): boolean {
+export function isPrivateRecord(record: unknown): boolean {
   if (typeof record !== "object" || record === null) return false;
   const { id, signedIn } = record as { id?: unknown; signedIn?: unknown };
-  if (signedIn !== undefined && !(typeof signedIn === "string" && published.has(signedIn))) return true;
-  return typeof id === "string" && id.startsWith("signed-in-") && !published.has(id.slice("signed-in-".length));
+  return signedIn !== undefined || (typeof id === "string" && id.startsWith("signed-in-"));
 }
 
 export type ScanSource =
   | { kind: "track"; scanStartedAt: string; scannerCommit: string; methodVersion?: string; run?: { id: string; attempt: string; repository: string } }
-  | { kind: "data-branch"; commit: string; committedAt: string };
+  | { kind: "data-branch"; commit: string; committedAt: string; scanStartedAt?: string };
 
 /** One scan's files, wherever they came from: a scan's data folder, or a commit of the data branch. */
 export interface ScanInput {
   id: string;
   source: ScanSource;
-  /** The data folder's own files by name: endpoints.jsonl (required), feed.json, servers.json, lookup.json, registry.json. */
+  /** The data folder's own files by name: endpoints.jsonl (required), feed.json, servers.json, lookup.json, registry.json, hosts.json. */
   files: Map<string, Buffer>;
   /** Every tool list in the folder, by its path there (lists/ab/<host>-<id>.json). */
   lists: Map<string, Buffer>;
@@ -110,8 +114,6 @@ export interface ScanInput {
   evidence?: Map<string, Buffer>;
   manifest?: Buffer;
   signature?: Buffer;
-  /** For tests: the vendors published. Default from the catalog. */
-  published?: ReadonlySet<string>;
 }
 
 export interface ScanRecord {
@@ -120,7 +122,7 @@ export interface ScanRecord {
   source: ScanSource;
   /** Whether manifest.sigstore.json is among the files. */
   signed: boolean;
-  /** Every file under scans/<id>/ but this one, with the sha256 and size of its content (before compression for .gz). */
+  /** Every other file of the scan (its manifest and snapshot), with the sha256 and size of its content (before compression for .gz). */
   files: Array<{ key: string; sha256: string; bytes: number }>;
   /** How many lists the scan holds, and the keys of the versions first seen in it. */
   lists: { current: number; written: string[] };
@@ -132,11 +134,28 @@ export interface ScanPlan {
   record: ScanRecord;
   /** Every immutable object of the scan. latest.json is not among them: it is written last, from what is in the bucket. */
   objects: PlannedObject[];
-  /** List files no endpoint names, left out. */
+  /** List files no endpoint names, kept under the endpoint id in their file name. */
   orphanLists: number;
+  /** List files no endpoint names and with no endpoint id in their name, left out. */
+  leftOutLists: number;
 }
 
-const topFiles = ["feed.json", "servers.json", "lookup.json", "registry.json"] as const;
+const topFiles = ["feed.json", "servers.json", "lookup.json", "registry.json", "hosts.json"] as const;
+
+/**
+ * The fields each top file may have, from the tracker's own types (Feed, RegistryState, HostsFile and the lookup
+ * file). Anything else stops the scan: a field added later is published only once the layout knows it holds
+ * public data alone.
+ */
+const knownFields: Record<string, ReadonlySet<string>> = {
+  "feed.json": new Set(["version", "generatedAt", "registry", "coverage", "watched", "changes", "changesTotal", "trackingSince", "across"]),
+  "registry.json": new Set(["readAt", "complete", "entries", "endpoints", "attemptedAt", "attemptOk"]),
+  "lookup.json": new Set(["version", "generatedAt", "rows"]),
+  "hosts.json": new Set(["version", "hosts"]),
+};
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+/** The 12-hex endpoint id at the end of a list file's name: lists/ab/<host>-<id>.json. */
+const listFileId = (listPath: string) => /-([0-9a-f]{12})\.json$/.exec(listPath)?.[1];
 
 function parseJson(name: string, bytes: Buffer): unknown {
   try { return JSON.parse(bytes.toString("utf8")); } catch { throw new Error(`${name} is not valid JSON.`); }
@@ -148,50 +167,77 @@ const refused = (where: string) => new PrivateDataError(`Refused: ${where} holds
 export function planScan(input: ScanInput): ScanPlan {
   const { id, source } = input;
   if (!scanIdPattern.test(id)) throw new Error(`Not a scan id: ${id}`);
-  const published = input.published ?? publishedVendors();
 
   const endpointsText = input.files.get("endpoints.jsonl");
   if (!endpointsText) throw new Error("The scan has no endpoints.jsonl.");
   /** Each public endpoint's list file, to the endpoint's id. */
   const listOwner = new Map<string, string>();
-  const endpointIds = new Set<string>();
+  const endpointIds = new Set<string>(), endpointUrls = new Set<string>();
   endpointsText.toString("utf8").split("\n").forEach((line, index) => {
     if (!line.trim()) return;
     const record = parseJson(`endpoints.jsonl line ${index + 1}`, Buffer.from(line));
-    if (isPrivateRecord(record, published)) throw refused(`endpoints.jsonl line ${index + 1}`);
-    const { id: endpointId, file } = (record ?? {}) as { id?: unknown; file?: unknown };
+    if (isPrivateRecord(record)) throw refused(`endpoints.jsonl line ${index + 1}`);
+    const { id: endpointId, url, file } = (record ?? {}) as { id?: unknown; url?: unknown; file?: unknown };
     if (typeof endpointId !== "string") throw new Error(`endpoints.jsonl line ${index + 1} has no id.`);
     endpointIds.add(endpointId);
+    if (typeof url === "string") endpointUrls.add(url);
     if (typeof file === "string") listOwner.set(file, endpointId);
   });
 
-  const feed = input.files.get("feed.json");
-  if (feed) {
-    const parsed = parseJson("feed.json", feed) as { watched?: unknown; changes?: unknown };
-    for (const field of ["watched", "changes"] as const) {
-      const entries = parsed?.[field];
-      if (Array.isArray(entries) && entries.some((entry) => isPrivateRecord(entry, published))) throw refused(`feed.json (${field})`);
-    }
+  // Each top file holds only fields the layout knows, and its rows are about endpoints of this scan.
+  const parsedTop = new Map<string, unknown>();
+  for (const [name, fields] of Object.entries(knownFields)) {
+    const bytes = input.files.get(name);
+    if (!bytes) continue;
+    const parsed = parseJson(name, bytes);
+    if (!isObject(parsed)) throw new Error(`${name} is not an object.`);
+    const unknown = Object.keys(parsed).filter((field) => !fields.has(field));
+    if (unknown.length) throw new Error(`${name} has fields layout ${layoutVersion} does not know (${unknown.join(", ")}), so nothing was planned.`);
+    parsedTop.set(name, parsed);
+  }
+  const feed = parsedTop.get("feed.json") as Record<string, unknown> | undefined;
+  for (const field of ["watched", "changes"] as const) {
+    const entries = feed?.[field];
+    if (Array.isArray(entries) && entries.some((entry) => isPrivateRecord(entry))) throw refused(`feed.json (${field})`);
   }
   const servers = input.files.get("servers.json");
   if (servers) {
     const rows = parseJson("servers.json", servers);
-    if (Array.isArray(rows) && rows.some((row) => isPrivateRecord(row, published))) throw refused("servers.json");
+    if (!Array.isArray(rows)) throw new Error("servers.json is not a list.");
+    rows.forEach((row, index) => {
+      if (isPrivateRecord(row)) throw refused("servers.json");
+      if (!endpointIds.has((row as { id?: unknown })?.id as string)) throw new Error(`servers.json row ${index + 1} is not an endpoint of this scan.`);
+    });
+  }
+  const lookupRows = (parsedTop.get("lookup.json") as { rows?: unknown } | undefined)?.rows;
+  if (lookupRows !== undefined) {
+    if (!Array.isArray(lookupRows)) throw new Error("lookup.json rows is not a list.");
+    lookupRows.forEach((row, index) => {
+      if (!Array.isArray(row) || !endpointUrls.has(row[1] as string)) throw new Error(`lookup.json row ${index + 1} is not an endpoint of this scan.`);
+    });
+  }
+  // hosts.json names hosts the public crawl spent its time on; each entry holds two counters and nothing else.
+  const hosts = (parsedTop.get("hosts.json") as { hosts?: unknown } | undefined)?.hosts;
+  if (parsedTop.has("hosts.json") && (!isObject(hosts) || Object.values(hosts).some((entry) => !isObject(entry) || Object.keys(entry).some((field) => field !== "overBudgetRuns" && field !== "lastOverBudget")))) {
+    throw new Error(`hosts.json has fields layout ${layoutVersion} does not know, so nothing was planned.`);
   }
 
   // Every current list, in one file a reader can take whole, and each version first seen here on its own.
   const bundle: string[] = [];
   const objects: PlannedObject[] = [];
   const written: string[] = [];
-  let orphanLists = 0;
+  let orphanLists = 0, leftOutLists = 0;
   for (const [listPath, bytes] of [...input.lists].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-    const owner = listOwner.get(listPath);
+    if (listPath.includes("signed-in-") && !listOwner.has(listPath)) throw refused(listPath.slice(0, listPath.lastIndexOf("/") + 1));
+    // A list no endpoint names (its endpoint left the registry, or was kept off) is still public: it is kept
+    // under the id in its file name, which the tracker derives from the endpoint's address.
+    const owner = listOwner.get(listPath) ?? listFileId(listPath);
     if (owner === undefined) {
-      if (listPath.includes("signed-in-")) throw refused(listPath.slice(0, listPath.lastIndexOf("/") + 1));
       if (input.newLists.has(listPath)) throw new Error(`${listPath} was written by the scan, but no endpoint names it.`);
-      orphanLists += 1;
+      leftOutLists += 1;
       continue;
     }
+    if (!listOwner.has(listPath)) orphanLists += 1;
     if (!publicId.test(owner)) throw new Error(`An endpoint id that is not part of layout ${layoutVersion} owns ${listPath}.`);
     const text = bytes.toString("utf8").trim();
     if (text.includes("\n")) throw new Error(`${listPath} is not one line of JSON.`);
@@ -215,9 +261,9 @@ export function planScan(input: ScanInput): ScanPlan {
   }
 
   const scanObjects: PlannedObject[] = [
-    planned(scanKey(id, "endpoints.jsonl.gz"), endpointsText),
-    planned(scanKey(id, "lists.jsonl.gz"), Buffer.from(bundle.length ? `${bundle.join("\n")}\n` : "")),
-    ...topFiles.flatMap((name) => { const bytes = input.files.get(name); return bytes ? [planned(scanKey(id, name), bytes)] : []; }),
+    planned(snapshotKey(id, "endpoints.jsonl.gz"), endpointsText),
+    planned(snapshotKey(id, "lists.jsonl.gz"), Buffer.from(bundle.length ? `${bundle.join("\n")}\n` : "")),
+    ...topFiles.flatMap((name) => { const bytes = input.files.get(name); return bytes ? [planned(snapshotKey(id, name), bytes)] : []; }),
     ...(input.manifest ? [planned(scanKey(id, "manifest.json"), input.manifest)] : []),
     ...(input.signature ? [planned(scanKey(id, "manifest.sigstore.json"), input.signature)] : []),
   ];
@@ -237,7 +283,7 @@ export function planScan(input: ScanInput): ScanPlan {
     if (keys.has(object.key)) throw new Error(`Two objects of the scan share the key ${object.key}.`);
     keys.add(object.key);
   }
-  return { id, record, objects, orphanLists };
+  return { id, record, objects, orphanLists, leftOutLists };
 }
 
 /** latest.json: the scan a reader should take, and every scan there is, newest first. */

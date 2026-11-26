@@ -8,9 +8,11 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { gunzipSync } from "node:zlib";
 import { radarMain } from "../src/radar-cli.ts";
-import { PrivateDataError, isLayoutKey, isPrivateRecord, listKey, nextPointer, planScan, publishedVendors, scanIdOf } from "../src/radar-layout.ts";
+import { PrivateDataError, evidenceKey, isLayoutKey, isPrivateRecord, listKey, nextPointer, planScan, scanIdOf } from "../src/radar-layout.ts";
 import { encodeKey, folderStore, publish, s3Store, scanInputFromFolder, signV4 } from "../src/radar-publish.ts";
 import type { Store } from "../src/radar-publish.ts";
+import { buildManifest, writeManifest } from "../src/manifest.ts";
+import { signedInServers } from "../src/signed-in.ts";
 import { endpointId } from "../src/tracker.ts";
 
 const sha = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
@@ -47,29 +49,31 @@ async function writeScan(dir: string, options: ScanOptions = {}): Promise<void> 
     "servers.json": `${JSON.stringify(options.servers ?? [{ id: idA, url: urlA, tools: 1 }])}\n`,
     "lookup.json": `${JSON.stringify({ version: 1, generatedAt: started, rows: [["com.example/a", urlA, 1]] })}\n`,
     "registry.json": `${JSON.stringify({ readAt: started })}\n`,
+    "hosts.json": `${JSON.stringify({ version: 1, hosts: { "a.example.com": { overBudgetRuns: 0 } } })}\n`,
     ...options.manifestExtra,
   };
   for (const [relative, text] of Object.entries(files)) {
     await mkdir(path.dirname(path.join(dir, relative)), { recursive: true });
     await writeFile(path.join(dir, relative), text);
   }
-  const manifest = {
-    version: 1, methodVersion: "1.0.0", scanStartedAt: started, generatedAt: started, scanner: { commit: "a".repeat(40) },
-    run: { id: "123", attempt: "1", repository: "Stackduke/mcp-scanner" }, registry: { readAt: started, attemptedAt: started, attemptOk: true },
-    files: Object.entries(files).map(([relative, text]) => ({ path: relative, sha256: sha(text), bytes: Buffer.byteLength(text) })).sort((a, b) => (a.path < b.path ? -1 : 1)),
-  };
-  await writeFile(path.join(dir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  // The manifest the scanner itself writes: a digest of the whole folder and the sha256 of each file written.
+  await writeManifest(dir, await buildManifest({
+    dataDir: dir, written: Object.keys(files), scanStartedAt: started, generatedAt: started,
+    registry: { readAt: started, attemptedAt: started, attemptOk: true }, previous: { verified: true },
+    environment: { GITHUB_SHA: "a".repeat(40), GITHUB_RUN_ID: "123", GITHUB_RUN_ATTEMPT: "1", GITHUB_REPOSITORY: "Stackduke/mcp-scanner" },
+  }));
 }
 
 /** A local stand-in for R2's S3 API: checks each request's signature, and keeps objects in memory. */
-async function fakeS3(options: { failPut?: string } = {}) {
+async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Promise<void>; locked?: boolean } = {}) {
   const objects = new Map<string, { body: Buffer; headers: Record<string, string> }>();
+  let pointerPuts = 0;
   const requests: Array<{ method: string; key: string }> = [];
   const credentials = { accessKeyId: "test-key-id", secretAccessKey: "test-secret" };
   const server = createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
-    request.on("end", () => {
+    request.on("end", async () => {
       const body = Buffer.concat(chunks);
       const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
       const key = decodeURIComponent(url.pathname.replace(/^\/radar\//, ""));
@@ -81,6 +85,8 @@ async function fakeS3(options: { failPut?: string } = {}) {
       const date = new Date(`${amzDate.slice(0, 4)}-${amzDate.slice(4, 6)}-${amzDate.slice(6, 8)}T${amzDate.slice(9, 11)}:${amzDate.slice(11, 13)}:${amzDate.slice(13, 15)}Z`);
       const expected = signV4({ method: request.method ?? "", url, headers: Object.fromEntries(names.map((name) => [name, String(request.headers[name])])), payloadHash: sha(body), credentials, region: "auto", service: "s3", date });
       if (!url.pathname.startsWith("/radar/") || request.headers["x-amz-content-sha256"] !== sha(body) || expected.authorization !== request.headers.authorization) { response.writeHead(403).end("SignatureDoesNotMatch"); return; }
+      // Another run's turn, between this run's last read of latest.json and its write (the first time only).
+      if (request.method === "PUT" && key === "latest.json" && (pointerPuts += 1) === 1) await options.beforePointerPut?.();
       const stored = objects.get(key);
       if (request.method === "HEAD" || request.method === "GET") {
         if (!stored) { response.writeHead(404).end(); return; }
@@ -89,8 +95,12 @@ async function fakeS3(options: { failPut?: string } = {}) {
       }
       if (request.method === "PUT") {
         if (options.failPut === key) { response.writeHead(500).end("InternalError"); return; }
+        // As R2 does under a bucket lock on every prefix but latest.json: the lock is checked before any condition.
+        if (options.locked && stored && key !== "latest.json") { response.writeHead(409).end("<Error><Code>ObjectLockedByBucketPolicy</Code></Error>"); return; }
+        // As R2 does: If-None-Match: * only if absent, If-Match only if the ETag is the one there now.
         if (request.headers["if-none-match"] === "*" && stored) { response.writeHead(412).end("PreconditionFailed"); return; }
-        const headers: Record<string, string> = {};
+        if (request.headers["if-match"] !== undefined && request.headers["if-match"] !== stored?.headers.etag) { response.writeHead(412).end("PreconditionFailed"); return; }
+        const headers: Record<string, string> = { etag: `"${createHash("md5").update(body).digest("hex")}"` };
         for (const name of ["content-type", "cache-control", "x-amz-meta-source-sha256"]) if (request.headers[name]) headers[name] = String(request.headers[name]);
         objects.set(key, { body, headers });
         response.writeHead(200).end();
@@ -119,8 +129,8 @@ test("keys follow the layout: scan ids from the start time, content-addressed li
   assert.equal(scanIdOf("2026-10-18T13:35:49+02:00"), "2026-10-18T113549Z");
   assert.throws(() => scanIdOf("yesterday"));
   assert.equal(listKey(idA, "f".repeat(64)), `lists/${idA}/${"f".repeat(64)}.json`);
-  for (const key of ["latest.json", `scans/${scanId}/scan.json`, `scans/${scanId}/endpoints.jsonl.gz`, `lists/${idA}/${"0".repeat(64)}.json`, `evidence/${idA}/${"0".repeat(64)}.json`]) assert.ok(isLayoutKey(key), key);
-  for (const key of ["latest.json.bak", `scans/${scanId}/other.json`, "scans/2026-11-25/scan.json", `lists/signed-in-stripe/${"0".repeat(64)}.json`, `lists/${idA}/../latest.json`, "watched/stripe.json"]) assert.ok(!isLayoutKey(key), key);
+  for (const key of ["latest.json", `scans/${scanId}/scan.json`, `scans/${scanId}/manifest.sigstore.json`, `snapshots/${scanId}/endpoints.jsonl.gz`, `lists/${idA}/${"0".repeat(64)}.json`, `evidence/${idA}/${"0".repeat(64)}.json`]) assert.ok(isLayoutKey(key), key);
+  for (const key of ["latest.json.bak", `scans/${scanId}/other.json`, `scans/${scanId}/feed.json`, `snapshots/${scanId}/scan.json`, "scans/2026-11-25/scan.json", `lists/signed-in-stripe/${"0".repeat(64)}.json`, `lists/${idA}/../latest.json`, "watched/stripe.json"]) assert.ok(!isLayoutKey(key), key);
 });
 
 test("a scan folder becomes exactly the layout's objects, with the right types and cache headers", async () => {
@@ -130,7 +140,8 @@ test("a scan folder becomes exactly the layout's objects, with the right types a
   const listBytes = await readFile(path.join(dir, listA));
   assert.deepEqual(plan.objects.map((object) => object.key).sort(), [
     listKey(idA, sha(listBytes)),
-    ...["endpoints.jsonl.gz", "feed.json", "lists.jsonl.gz", "lookup.json", "manifest.json", "registry.json", "scan.json", "servers.json"].map((name) => `scans/${scanId}/${name}`),
+    ...["manifest.json", "scan.json"].map((name) => `scans/${scanId}/${name}`),
+    ...["endpoints.jsonl.gz", "feed.json", "hosts.json", "lists.jsonl.gz", "lookup.json", "registry.json", "servers.json"].map((name) => `snapshots/${scanId}/${name}`),
   ].sort());
   for (const object of plan.objects) {
     assert.equal(object.contentType, object.key.endsWith(".gz") ? "application/gzip" : "application/json", object.key);
@@ -151,17 +162,39 @@ test("a scan folder becomes exactly the layout's objects, with the right types a
   assert.equal(again.record.lists.current, 1);
 });
 
-test("a file that does not match the manifest, or one the manifest leaves out, stops the plan", async () => {
+test("the folder must be the one its manifest describes, and a required signature must verify", async () => {
   const dir = await folder();
   await writeScan(dir);
   await writeFile(path.join(dir, "feed.json"), "{}\n");
-  await assert.rejects(scanInputFromFolder(dir), /feed\.json does not match its sha256/);
+  await assert.rejects(scanInputFromFolder(dir), /feed\.json: does not match its sha256/);
+  // A list the scan did not write is covered too, by the digest of the whole folder.
+  const unwritten = await folder();
+  await writeScan(unwritten);
+  await mkdir(path.join(unwritten, "lists", "00"), { recursive: true });
+  await writeFile(path.join(unwritten, "lists", "00", `other-${"0".repeat(12)}.json`), "{}\n");
+  await assert.rejects(scanInputFromFolder(unwritten), /does not match the manifest's digest/);
   const other = await folder();
   await writeScan(other, { manifestExtra: { "notes.json": "{}\n" } });
   await assert.rejects(scanInputFromFolder(other), /notes\.json has no place in the layout/);
   await rm(path.join(other, "manifest.json"));
   await assert.rejects(scanInputFromFolder(other), /no manifest\.json/);
-  await assert.rejects(scanInputFromFolder(dir, { requireSignature: true }), /signature was required/);
+
+  // The scanner's .gitattributes is in the folder and the manifest, and is not published.
+  const attributes = await folder();
+  await writeScan(attributes, { manifestExtra: { ".gitattributes": "* text eol=lf\n" } });
+  assert.ok(planScan(await scanInputFromFolder(attributes)).objects.every((object) => !object.key.includes("gitattributes")));
+
+  const signed = await folder();
+  await writeScan(signed);
+  await assert.rejects(scanInputFromFolder(signed, { requireSignature: true }), /no manifest\.sigstore\.json/);
+  await writeFile(path.join(signed, "manifest.sigstore.json"), "{\"bundle\":true}\n");
+  const asked: string[][] = [];
+  const input = await scanInputFromFolder(signed, { requireSignature: true, cosign: async (args) => { asked.push(args); return { code: 0, output: "Verified OK" }; } });
+  assert.ok(asked[0]?.includes("--certificate-identity"));
+  const plan = planScan(input);
+  assert.equal(plan.record.signed, true);
+  assert.ok(plan.objects.some((object) => object.key === `scans/${scanId}/manifest.sigstore.json`));
+  await assert.rejects(scanInputFromFolder(signed, { requireSignature: true, cosign: async () => ({ code: 1, output: "error: invalid signature" }) }), /signature did not verify/);
 });
 
 test("publishing writes every object, then latest.json last, with metadata a re-run can compare", async () => {
@@ -177,7 +210,7 @@ test("publishing writes every object, then latest.json last, with metadata a re-
   const pointer = JSON.parse(s3.objects.get("latest.json")?.body.toString("utf8") as string);
   assert.deepEqual(pointer, { layout: 1, scan: scanId, record: `scans/${scanId}/scan.json`, scans: [scanId], updatedAt: "2026-11-25T15:00:00.000Z" });
   assert.equal(s3.objects.get("latest.json")?.headers["cache-control"], "public, max-age=60");
-  const endpoints = s3.objects.get(`scans/${scanId}/endpoints.jsonl.gz`);
+  const endpoints = s3.objects.get(`snapshots/${scanId}/endpoints.jsonl.gz`);
   assert.equal(gunzipSync(endpoints?.body as Buffer).toString("utf8"), await readFile(path.join(dir, "endpoints.jsonl"), "utf8"));
   assert.equal(endpoints?.headers["content-type"], "application/gzip");
   assert.equal(endpoints?.headers["x-amz-meta-source-sha256"], sha(await readFile(path.join(dir, "endpoints.jsonl"))));
@@ -194,7 +227,7 @@ test("an immutable key already there with other content is never overwritten, an
   await writeScan(dir);
   const plan = planScan(await scanInputFromFolder(dir));
   const s3 = await fakeS3();
-  const feedKey = `scans/${scanId}/feed.json`;
+  const feedKey = `snapshots/${scanId}/feed.json`;
   s3.objects.set(feedKey, { body: Buffer.from("{\"other\":true}\n"), headers: { "x-amz-meta-source-sha256": sha("{\"other\":true}\n") } });
   await assert.rejects(publish(plan, s3.store, { concurrency: 1 }), new RegExp(`${feedKey} is already in the bucket with different content`));
   assert.equal(s3.objects.get(feedKey)?.body.toString("utf8"), "{\"other\":true}\n");
@@ -214,19 +247,38 @@ test("a key written by someone else between the look and the write is compared, 
   const racing = (sameContent: boolean): Store => ({
     async head(key) { const seen = (looks.get(key) ?? 0) + 1; looks.set(key, seen); return seen === 1 ? null : sameContent ? (plan.objects.find((object) => object.key === key)?.sourceSha256 ?? "") : "0".repeat(64); },
     async putNew() { return false; },
+    async getPointer() { return null; },
     async putPointer() { throw new Error("pointer written"); },
-    async get() { return null; },
   });
   await assert.rejects(publish(plan, racing(true)), /pointer written/);
   looks.clear();
   await assert.rejects(publish(plan, racing(false)), /different content/);
 });
 
+test("under a bucket lock, a key someone else wrote first is compared, not a failure", async () => {
+  const dir = await folder();
+  await writeScan(dir);
+  const plan = planScan(await scanInputFromFolder(dir));
+  const s3 = await fakeS3({ locked: true });
+  await publish(plan, s3.store);
+  // The first HEAD of each key says absent, as if the key were written between the look and the write: each PUT meets the lock.
+  const blind = (): Store => {
+    const seen = new Set<string>();
+    return { ...s3.store, head: async (key) => { if (seen.has(key)) return s3.store.head(key); seen.add(key); return null; } };
+  };
+  const report = await publish(plan, blind());
+  assert.deepEqual([report.written, report.present], [0, plan.objects.length]);
+  // Other content under the lock still stops the run.
+  const feedKey = `snapshots/${scanId}/feed.json`;
+  s3.objects.set(feedKey, { body: Buffer.from("{}"), headers: { "x-amz-meta-source-sha256": sha("{}") } });
+  await assert.rejects(publish(plan, blind()), /already in the bucket with different content/);
+});
+
 test("when any object fails to upload, latest.json is not written", async () => {
   const dir = await folder();
   await writeScan(dir);
-  const s3 = await fakeS3({ failPut: `scans/${scanId}/servers.json` });
-  await assert.rejects(publish(planScan(await scanInputFromFolder(dir)), s3.store), /PUT scans\/.*servers\.json answered 500/);
+  const s3 = await fakeS3({ failPut: `snapshots/${scanId}/servers.json` });
+  await assert.rejects(publish(planScan(await scanInputFromFolder(dir)), s3.store), /PUT snapshots\/.*servers\.json answered 500/);
   assert.ok(!s3.requests.some((request) => request.key === "latest.json" && request.method === "PUT"));
 });
 
@@ -238,7 +290,7 @@ test("the pointer never moves back to an older scan, and lists every scan", asyn
   const dir = await folder();
   await writeScan(dir);
   const s3 = await fakeS3();
-  s3.objects.set("latest.json", { body: Buffer.from("not json"), headers: {} });
+  s3.objects.set("latest.json", { body: Buffer.from("not json"), headers: { etag: "\"0\"" } });
   await assert.rejects(publish(planScan(await scanInputFromFolder(dir)), s3.store), /latest\.json in the bucket is not valid JSON/);
   assert.deepEqual(s3.requests.map((request) => request.method), ["GET"]);
 });
@@ -256,7 +308,7 @@ test("--dry-run prints the plan and makes no network call, even with a bucket's 
   });
   assert.equal(code, 0);
   assert.equal(calls, 0);
-  assert.match(lines.join("\n"), new RegExp(`scans/${scanId}/endpoints\\.jsonl\\.gz`));
+  assert.match(lines.join("\n"), new RegExp(`snapshots/${scanId}/endpoints\\.jsonl\\.gz`));
   assert.match(lines.join("\n"), /latest\.json {2}last/);
   // A target must be named, and only one.
   assert.equal(await radarMain(["publish", `--data=${dir}`], { log: () => undefined }), 2);
@@ -288,13 +340,13 @@ test("a local folder store keeps the same rules", async () => {
   const plan = planScan(await scanInputFromFolder(dir));
   assert.equal((await publish(plan, folderStore(out))).written, plan.objects.length);
   assert.equal((await publish(plan, folderStore(out))).present, plan.objects.length);
-  await writeFile(path.join(out, "scans", scanId, "lookup.json"), "{}\n");
+  await writeFile(path.join(out, "snapshots", scanId, "lookup.json"), "{}\n");
   await assert.rejects(publish(plan, folderStore(out)), /lookup\.json is already in the bucket with different content/);
 });
 
 test("nothing about a server tracked privately is ever planned", async () => {
-  // The catalog's own settings: every signed-in vendor is tracked privately today.
-  assert.equal(publishedVendors().has("github"), false);
+  // Layout 1 has no place for any server watched with a sign-in, whatever the catalog says.
+  assert.ok(Object.keys(signedInServers).length > 0);
   const privateEndpoint = { id: "signed-in-github", url: "https://api.githubcopilot.com/mcp/", names: [], signedIn: "github", firstSeen: started, inRegistry: false, checks: [], changes: [], file: "lists/si/api.githubcopilot.com-signed-in-github.json" };
   const cases: Array<[string, ScanOptions]> = [
     ["an endpoint record", { extraEndpoints: [privateEndpoint] }],
@@ -317,7 +369,116 @@ test("nothing about a server tracked privately is ever planned", async () => {
   const dir = await folder();
   await writeScan(dir, { listText: `${JSON.stringify({ source: urlA, takenAt: started, tools: [{ name: "signed-in-github", kind: "read" }] })}\n` });
   assert.ok(planScan(await scanInputFromFolder(dir)).objects.length > 0);
-  // A vendor the catalog publishes would be allowed.
-  assert.equal(isPrivateRecord({ id: "signed-in-github", signedIn: "github" }, new Set(["github"])), false);
-  assert.equal(isPrivateRecord({ id: "signed-in-github", signedIn: "github" }, new Set()), true);
+  // Even a vendor the catalog marked publish: true is refused: the layout has no place for it yet.
+  assert.equal(isPrivateRecord({ id: "signed-in-github", signedIn: "github" }), true);
+  assert.equal(isPrivateRecord({ id: idA }), false);
+});
+
+test("two publishes that overlap both end up in latest.json, and it never moves back", async () => {
+  const dir = await folder();
+  await writeScan(dir);
+  const older = planScan(await scanInputFromFolder(dir));
+  const newerId = "2026-11-26T041700Z";
+  const newer = planScan({ ...(await scanInputFromFolder(dir)), id: newerId });
+  // While the older scan's run is about to write latest.json, a run for a newer scan does all of its work.
+  let s3: Awaited<ReturnType<typeof fakeS3>> | undefined;
+  s3 = await fakeS3({ beforePointerPut: async () => { await publish(newer, s3?.store as Store, { now: () => new Date("2026-11-26T05:00:00Z") }); } });
+  const report = await publish(older, s3.store, { now: () => new Date("2026-11-26T05:01:00Z") });
+  const pointer = JSON.parse(s3.objects.get("latest.json")?.body.toString("utf8") as string);
+  assert.equal(pointer.scan, newerId, "the newer scan stays current");
+  assert.deepEqual(pointer.scans, [newerId, scanId], "neither scan is lost");
+  assert.deepEqual(report.pointer.scans, [newerId, scanId]);
+  // The losing write was refused by the store, then the run read latest.json again and wrote it on that.
+  const pointerRequests = s3.requests.filter((request) => request.key === "latest.json").map((request) => request.method);
+  assert.deepEqual(pointerRequests, ["GET", "GET", "PUT", "GET", "GET", "PUT", "GET", "PUT"]);
+});
+
+test("latest.json is left alone when it keeps changing under the run", async () => {
+  const dir = await folder();
+  await writeScan(dir);
+  const plan = planScan(await scanInputFromFolder(dir));
+  let writes = 0;
+  const busy: Store = {
+    async head() { return null; },
+    async putNew() { return true; },
+    async getPointer() { return null; },
+    async putPointer() { writes += 1; return false; },
+  };
+  await assert.rejects(publish(plan, busy), /latest\.json changed under this run 5 times/);
+  assert.equal(writes, 5);
+});
+
+test("each top file may hold only the fields the layout knows, about endpoints of the scan", async () => {
+  const cases: Array<[string, ScanOptions, RegExp]> = [
+    ["a new feed field", { feed: { version: 1, watched: [], changes: [], privateTotals: {} } }, /feed\.json has fields layout 1 does not know \(privateTotals\)/],
+    ["a servers row of no endpoint", { servers: [{ id: idA }, { id: "0123456789ab", url: "https://elsewhere.example.com" }] }, /servers\.json row 2 is not an endpoint of this scan/],
+    ["a lookup row of no endpoint", { manifestExtra: { "lookup.json": `${JSON.stringify({ version: 1, rows: [["x", "https://elsewhere.example.com/mcp", 1]] })}\n` } }, /lookup\.json row 1 is not an endpoint of this scan/],
+    ["a new registry field", { manifestExtra: { "registry.json": `${JSON.stringify({ readAt: started, token: "x" })}\n` } }, /registry\.json has fields layout 1 does not know \(token\)/],
+    ["a hosts entry with more than its counters", { manifestExtra: { "hosts.json": `${JSON.stringify({ version: 1, hosts: { "a.example.com": { overBudgetRuns: 1, tools: [] } } })}\n` } }, /hosts\.json has fields layout 1 does not know/],
+  ];
+  for (const [what, options, expected] of cases) {
+    const dir = await folder();
+    await writeScan(dir, options);
+    const input = await scanInputFromFolder(dir);
+    assert.throws(() => planScan(input), expected, what);
+  }
+});
+
+test("a list no endpoint names is kept under the id in its file name; one with no id is left out", async () => {
+  const orphanId = "cccccccccccc";
+  const orphan = `lists/cc/gone.example.com-${orphanId}.json`;
+  const orphanText = `${JSON.stringify({ source: "https://gone.example.com/mcp", tools: [] })}\n`;
+  const dir = await folder();
+  await writeScan(dir, { manifestExtra: { [orphan]: orphanText } });
+  // Not written by this scan: an older scan wrote it, so it is in the folder and its digest.
+  await writeFile(path.join(dir, "lists", "cc", "notes.json"), "{}\n");
+  const manifest = JSON.parse(await readFile(path.join(dir, "manifest.json"), "utf8"));
+  await rm(path.join(dir, "manifest.json"));
+  await writeManifest(dir, await buildManifest({
+    dataDir: dir, written: manifest.files.map((file: { path: string }) => file.path), scanStartedAt: started, generatedAt: started,
+    registry: { readAt: started, attemptedAt: started, attemptOk: true }, previous: { verified: true }, environment: {},
+  }));
+  const plan = planScan(await scanInputFromFolder(dir));
+  assert.deepEqual([plan.orphanLists, plan.leftOutLists], [1, 1]);
+  assert.ok(plan.objects.some((object) => object.key === listKey(orphanId, sha(orphanText))));
+  const lines = gunzipSync(plan.objects.find((object) => object.key.endsWith("lists.jsonl.gz"))?.body as Buffer).toString("utf8").trim().split("\n").map((line) => JSON.parse(line));
+  assert.deepEqual(lines.map((line) => [line.id, line.path]).sort(), [[idA, listA], [orphanId, orphan]].sort());
+});
+
+test("evidence is kept only for an endpoint of the scan", async () => {
+  const dir = await folder();
+  await writeScan(dir);
+  const input = await scanInputFromFolder(dir);
+  const response = Buffer.from("{\"status\":401}\n");
+  const plan = planScan({ ...input, evidence: new Map([[`evidence/${idA}/first.json`, response]]) });
+  assert.deepEqual(plan.record.evidence, [evidenceKey(idA, sha(response))]);
+  assert.ok(plan.objects.some((object) => object.key === evidenceKey(idA, sha(response))));
+  for (const evidencePath of [`evidence/${"0".repeat(12)}/first.json`, "evidence/signed-in-stripe/first.json", `evidence/${idA}/../first.json`]) {
+    assert.throws(() => planScan({ ...input, evidence: new Map([[evidencePath, response]]) }), /is not evidence for an endpoint of this scan/, evidencePath);
+  }
+});
+
+test("a top file put in the folder after its manifest was written is refused", async () => {
+  const dir = await folder();
+  await writeScan(dir, { manifestExtra: {} });
+  await rm(path.join(dir, "hosts.json"));
+  const manifest = JSON.parse(await readFile(path.join(dir, "manifest.json"), "utf8"));
+  await rm(path.join(dir, "manifest.json"));
+  await writeManifest(dir, await buildManifest({
+    dataDir: dir, written: manifest.files.map((file: { path: string }) => file.path).filter((name: string) => name !== "hosts.json"), scanStartedAt: started, generatedAt: started,
+    registry: { readAt: started, attemptedAt: started, attemptOk: true }, previous: { verified: true }, environment: {},
+  }));
+  assert.ok(planScan(await scanInputFromFolder(dir)).objects.every((object) => !object.key.endsWith("hosts.json")));
+  await writeFile(path.join(dir, "hosts.json"), `${JSON.stringify({ version: 1, hosts: {} })}\n`);
+  await assert.rejects(scanInputFromFolder(dir), /does not match the manifest's digest/);
+});
+
+test("an error from the store reaches the log without the secret key", async () => {
+  const credentials = { accessKeyId: "test-key-id", secretAccessKey: "s3cr3t-value-never-logged" };
+  // A store that answers with everything it was sent, headers included.
+  const echo = (async (input: URL | string, init?: RequestInit) => new Response(`${String(input)} ${JSON.stringify(init?.headers)}`, { status: 500 })) as typeof fetch;
+  const store = s3Store({ endpoint: "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com", bucket: "radar", credentials, fetchImpl: echo });
+  const error = await store.getPointer().then(() => null, (caught: unknown) => caught as Error);
+  assert.match(error?.message ?? "", /GET latest\.json answered 500/);
+  assert.doesNotMatch(error?.message ?? "", /s3cr3t/);
 });

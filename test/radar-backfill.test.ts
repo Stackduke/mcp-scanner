@@ -8,6 +8,7 @@ import { after, test } from "node:test";
 import { gunzipSync } from "node:zlib";
 import { radarMain } from "../src/radar-cli.ts";
 import { isLayoutKey, listKey } from "../src/radar-layout.ts";
+import { buildManifest, writeManifest } from "../src/manifest.ts";
 import { endpointId } from "../src/tracker.ts";
 
 const sha = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
@@ -23,10 +24,15 @@ const urlA = "https://a.example.com/mcp";
 const idA = endpointId(urlA);
 const listA = `lists/${idA.slice(0, 2)}/a.example.com-${idA}.json`;
 const privateList = "lists/si/mcp.stripe.com-signed-in-stripe.json";
+/** A list a private record names, at a path that does not say so: left out because the record names it. */
+const privateNamedList = "lists/77/mcp.stripe.com-777777777777.json";
+/** A list no endpoint names any more: still public, kept under the id in its name. */
+const orphanList = "lists/cc/gone.example.com-cccccccccccc.json";
+const orphanText = `${JSON.stringify({ source: "https://gone.example.com/mcp", tools: [] })}\n`;
 const listV1 = `${JSON.stringify({ source: urlA, takenAt: "2026-10-20T10:00:00.000Z", tools: [{ name: "one", kind: "read" }] })}\n`;
 const listV2 = `${JSON.stringify({ source: urlA, takenAt: "2026-10-25T10:00:00.000Z", tools: [{ name: "one", kind: "read" }, { name: "two", kind: "write" }] })}\n`;
 const endpointA = { id: idA, url: urlA, names: ["com.example/a"], firstSeen: "2026-10-20T10:00:00.000Z", inRegistry: true, checks: [], changes: [], file: listA };
-const privateEndpoint = { id: "signed-in-stripe", url: "https://mcp.stripe.com", names: [], signedIn: "stripe", firstSeen: "2026-10-20T10:00:00.000Z", inRegistry: false, checks: [], changes: [], file: privateList };
+const privateEndpoint = { id: "signed-in-stripe", url: "https://mcp.stripe.com", names: [], signedIn: "stripe", firstSeen: "2026-10-20T10:00:00.000Z", inRegistry: false, checks: [], changes: [], file: privateNamedList };
 
 /** A data branch like the real one: a first commit with a README, a scan that still held a private server, and a later one without. */
 async function dataBranch(): Promise<string> {
@@ -48,6 +54,8 @@ async function dataBranch(): Promise<string> {
     "endpoints.jsonl": `${JSON.stringify(endpointA)}\n${JSON.stringify(privateEndpoint)}\n`,
     [listA]: listV1,
     [privateList]: `${JSON.stringify({ source: "https://mcp.stripe.com", tools: [{ name: "create_refund", kind: "money" }] })}\n`,
+    [privateNamedList]: `${JSON.stringify({ source: "https://mcp.stripe.com", tools: [{ name: "create_refund", kind: "money" }] })}\n`,
+    [orphanList]: orphanText,
     "watched/stripe.json": "{\"tools\":[]}\n",
     "feed.json": `${JSON.stringify({ version: 1, watched: [{ id: "signed-in-stripe", vendor: "stripe" }, { id: idA, vendor: "example" }], changes: [] })}\n`,
     "servers.json": `${JSON.stringify([{ id: idA, url: urlA }])}\n`,
@@ -57,7 +65,9 @@ async function dataBranch(): Promise<string> {
   git(["commit", "-q", "-m", "Scan 2026-10-20"], "2026-10-20T10:05:00Z");
   await rm(path.join(repo, "watched"), { recursive: true });
   await rm(path.join(repo, privateList));
+  await rm(path.join(repo, privateNamedList));
   await put({
+    "hosts.json": `${JSON.stringify({ version: 1, hosts: { "a.example.com": { overBudgetRuns: 0 } } })}\n`,
     "endpoints.jsonl": `${JSON.stringify(endpointA)}\n`,
     [listA]: listV2,
     "feed.json": `${JSON.stringify({ version: 1, watched: [{ id: idA, vendor: "example" }], changes: [] })}\n`,
@@ -65,6 +75,18 @@ async function dataBranch(): Promise<string> {
   });
   git(["add", "-A"]);
   git(["commit", "-q", "-m", "Scan 2026-10-25"], "2026-10-25T10:05:00Z");
+  // Since manifests: a scan's commit, then the commit adding its signature. Then a scan whose signing failed.
+  const scanWithManifest = async (scanStartedAt: string, committedAt: string) => {
+    await put({ "registry.json": `${JSON.stringify({ readAt: scanStartedAt })}\n` });
+    await writeManifest(repo, await buildManifest({ dataDir: repo, written: ["registry.json"], scanStartedAt, generatedAt: scanStartedAt, registry: { readAt: scanStartedAt, attemptedAt: scanStartedAt, attemptOk: true }, previous: { verified: false, reason: "no manifest" }, environment: {} }));
+    git(["add", "-A"]);
+    git(["commit", "-q", "-m", "Scan"], committedAt);
+  };
+  await scanWithManifest("2026-11-26T04:17:00.000Z", "2026-11-26T05:00:00Z");
+  await put({ "manifest.sigstore.json": "{\"bundle\":true}\n" });
+  git(["add", "-A"]);
+  git(["commit", "-q", "-m", "Sign scan"], "2026-11-26T05:02:00Z");
+  await scanWithManifest("2026-11-27T04:17:00.000Z", "2026-11-27T05:00:00Z");
   return repo;
 }
 
@@ -86,21 +108,37 @@ test("backfill turns the data branch's history into the layout, leaving out priv
   assert.equal(await radarMain(["backfill", `--repo=${repo}`, "--ref=data", `--to-folder=${out}`], { log: (line) => lines.push(line), now: () => new Date("2026-11-26T00:00:00Z") }), 0);
 
   const first = "2026-10-20T100500Z", second = "2026-10-25T100500Z";
+  // Named by the manifest's start time, not the commit's: the scan and its signing commit are one scan.
+  const signed = "2026-11-26T041700Z", unsigned = "2026-11-27T041700Z";
   const scanFiles = (id: string, names: string[]) => names.map((name) => `scans/${id}/${name}`);
+  const snapshotFiles = (id: string, names: string[]) => names.map((name) => `snapshots/${id}/${name}`);
+  const bulk = ["endpoints.jsonl.gz", "feed.json", "lists.jsonl.gz", "registry.json", "servers.json"];
+  const later = [...bulk, "lookup.json", "hosts.json"];
   assert.deepEqual(await allFiles(out), [
     "latest.json",
     listKey(idA, sha(listV1)),
     listKey(idA, sha(listV2)),
-    ...scanFiles(first, ["endpoints.jsonl.gz", "feed.json", "lists.jsonl.gz", "registry.json", "scan.json", "servers.json"]),
-    ...scanFiles(second, ["endpoints.jsonl.gz", "feed.json", "lists.jsonl.gz", "lookup.json", "registry.json", "scan.json", "servers.json"]),
+    listKey("cccccccccccc", sha(orphanText)),
+    ...scanFiles(first, ["scan.json"]),
+    ...snapshotFiles(first, bulk),
+    ...scanFiles(second, ["scan.json"]),
+    ...snapshotFiles(second, later),
+    ...scanFiles(signed, ["manifest.json", "manifest.sigstore.json", "scan.json"]),
+    ...snapshotFiles(signed, later),
+    ...scanFiles(unsigned, ["manifest.json", "scan.json"]),
+    ...snapshotFiles(unsigned, later),
   ].sort());
   for (const key of await allFiles(out)) assert.ok(isLayoutKey(key), key);
 
   const pointer = JSON.parse(await readFile(path.join(out, "latest.json"), "utf8"));
-  assert.deepEqual([pointer.scan, pointer.scans], [second, [second, first]]);
+  assert.deepEqual([pointer.scan, pointer.scans], [unsigned, [unsigned, signed, second, first]]);
+  const signedRecord = JSON.parse(await readFile(path.join(out, "scans", signed, "scan.json"), "utf8"));
+  assert.equal(signedRecord.signed, true);
+  assert.equal(signedRecord.source.scanStartedAt, "2026-11-26T04:17:00.000Z");
+  assert.equal(JSON.parse(await readFile(path.join(out, "scans", unsigned, "scan.json"), "utf8")).signed, false);
   const record = JSON.parse(await readFile(path.join(out, "scans", second, "scan.json"), "utf8"));
   assert.equal(record.source.kind, "data-branch");
-  assert.deepEqual(record.lists, { current: 1, written: [listKey(idA, sha(listV2))] });
+  assert.deepEqual(record.lists, { current: 2, written: [listKey(idA, sha(listV2))] });
   // Every file's recorded sha256 is of what is there.
   for (const file of record.files as Array<{ key: string; sha256: string }>) {
     const bytes = await readFile(path.join(out, file.key));
@@ -128,7 +166,7 @@ test("backfill turns the data branch's history into the layout, leaving out priv
   const outBefore = await allFiles(out);
   lines.length = 0;
   assert.equal(await radarMain(["backfill", `--repo=${repo}`, "--ref=data", "--dry-run"], { log: (line) => lines.push(line) }), 0);
-  assert.match(lines.join("\n"), /2 scans planned/);
+  assert.match(lines.join("\n"), /4 scans planned/);
   assert.deepEqual(await allFiles(out), outBefore);
   assert.equal(execFileSync("git", ["-C", repo, "status", "--porcelain"]).toString(), "");
   // A ref that git would read as an option is refused before git runs.

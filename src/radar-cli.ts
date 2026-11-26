@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { backfillScans } from "./radar-backfill.ts";
 import { planScan } from "./radar-layout.ts";
 import type { ScanInput } from "./radar-layout.ts";
+import type { RunCosign } from "./manifest.ts";
 import { describePlan, folderStore, publish, s3Store, scanInputFromFolder } from "./radar-publish.ts";
 import type { Store } from "./radar-publish.ts";
 
@@ -12,7 +13,8 @@ import type { Store } from "./radar-publish.ts";
  */
 const usage = `Usage:
   node src/radar-cli.ts publish --data=<scan folder> [--require-signature] <target>
-      Publish one scan: the Track job's data folder, checked against its manifest.json.
+      Publish one scan: the Track job's data folder, checked against its manifest.json (the whole folder's
+      digest and each file's sha256). --require-signature also checks manifest.sigstore.json with cosign.
   node src/radar-cli.ts backfill --repo=<git folder> [--ref=origin/data] <target>
       Publish every scan in the data branch's history, oldest first. Reads the repository only.
 
@@ -23,16 +25,19 @@ const usage = `Usage:
                          with R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY. --endpoint=<https origin> overrides the address.
 
   Every key but latest.json is written only if absent; one already there with other content stops the run.
-  latest.json is written last. Nothing about a server tracked privately is ever published.`;
+  latest.json is written last, and only if no other run changed it since it was read (then it is read again).
+  Nothing about a server tracked privately is ever published.`;
 
 export interface RadarDeps {
   env?: Record<string, string | undefined>;
   fetchImpl?: typeof fetch;
   log?: (line: string) => void;
   now?: () => Date;
+  /** For tests: what runs cosign when a signature is required. */
+  cosign?: RunCosign;
 }
 
-export async function radarMain(argv: string[], { env = process.env, fetchImpl = fetch, log = console.log, now = () => new Date() }: RadarDeps = {}): Promise<number> {
+export async function radarMain(argv: string[], { env = process.env, fetchImpl = fetch, log = console.log, now = () => new Date(), cosign }: RadarDeps = {}): Promise<number> {
   const [command, ...flags] = argv;
   const given = new Map<string, string>();
   for (const flag of flags) {
@@ -65,7 +70,9 @@ export async function radarMain(argv: string[], { env = process.env, fetchImpl =
     log(`Scan ${plan.id}: ${report.written} objects written, ${report.present} already there${note ? `; ${note}` : ""}. latest.json points at ${report.pointer.scan} (${report.pointer.scans.length} scans).`);
   };
   if (command === "publish") {
-    const input = await scanInputFromFolder(given.get("data") as string, { requireSignature: given.has("require-signature") });
+    // The signature must be by this repository's Track workflow: in a workflow run, the repository it runs in.
+    const repository = /^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPOSITORY ?? "") ? env.GITHUB_REPOSITORY : undefined;
+    const input = await scanInputFromFolder(given.get("data") as string, { requireSignature: given.has("require-signature"), ...(repository ? { repository } : {}), ...(cosign ? { cosign } : {}) });
     // The pointer never moves back, so a scan dated in the future would hold it for good. A scan's folder is
     // kept for a week as an artifact; anything outside that is refused.
     const startedAt = input.source.kind === "track" ? Date.parse(input.source.scanStartedAt) : NaN;

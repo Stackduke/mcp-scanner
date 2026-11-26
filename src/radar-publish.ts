@@ -1,25 +1,32 @@
 import { createHmac } from "node:crypto";
 import { link, mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { manifestName, readManifest, signatureName, verifyManifest } from "./manifest.ts";
+import type { RunCosign } from "./manifest.ts";
 import { PrivateDataError, isLayoutKey, nextPointer, pointerKey, pointerObject, readPointer, scanIdOf, sha256, sourceSha256Of } from "./radar-layout.ts";
 import type { PlannedObject, Pointer, ScanInput, ScanPlan, ScanSource } from "./radar-layout.ts";
-import { signedInServers } from "./signed-in.ts";
 
 /**
  * Puts a planned scan where readers find it: an S3-compatible bucket (Cloudflare R2), or a local folder laid
  * out the same way. The rules are the same for both:
  * - an immutable key already there is left alone when its content has the same sha256, and stops the run
  *   when it differs, so history is never rewritten (R2 enforces this too: each write is create-only);
- * - latest.json is written last, once every other object is in, so a reader never sees a scan half there.
+ * - latest.json is written last, once every other object is in, so a reader never sees a scan half there;
+ * - latest.json is replaced only if it is still the version just read (its ETag), so two runs that overlap
+ *   cannot move it back or drop each other's scan: the one that loses reads it again and retries.
  */
 export interface Store {
   /** The content sha256 recorded for the object at the key; "" when it has none; null when there is no object. */
   head(key: string): Promise<string | null>;
   /** Writes the object only if the key is free. False when something was there already. */
   putNew(object: PlannedObject): Promise<boolean>;
-  /** Writes the pointer, replacing the one there. */
-  putPointer(object: PlannedObject): Promise<void>;
-  get(key: string): Promise<Buffer | null>;
+  /** latest.json and its version (ETag), or null when there is none. */
+  getPointer(): Promise<{ body: Buffer; etag: string } | null>;
+  /**
+   * Writes latest.json only if it is still the version read: the one with that ETag, or none at all when
+   * `expected` is null. False when it changed in between.
+   */
+  putPointer(object: PlannedObject, expected: string | null): Promise<boolean>;
 }
 
 export interface PublishReport {
@@ -42,9 +49,12 @@ async function eachLimited<T>(items: readonly T[], limit: number, work: (item: T
   if (failure) throw failure.error;
 }
 
+/** How many times latest.json is read again and rewritten when other runs keep changing it. */
+const pointerAttempts = 5;
+
 export async function publish(plan: ScanPlan, store: Store, { concurrency = 8, now = () => new Date() }: { concurrency?: number; now?: () => Date } = {}): Promise<PublishReport> {
   // Read first: a pointer that cannot be read stops the run before anything is written.
-  const previous = readPointer(await store.get(pointerKey));
+  readPointer((await store.getPointer())?.body ?? null);
   let written = 0, present = 0;
   const conflict = (key: string) => new Error(`${key} is already in the bucket with different content. Objects there are never overwritten, so this run stopped: latest.json was not moved.`);
   await eachLimited(plan.objects, concurrency, async (object) => {
@@ -57,9 +67,13 @@ export async function publish(plan: ScanPlan, store: Store, { concurrency = 8, n
     if (found !== object.sourceSha256) throw conflict(object.key);
     present += 1;
   });
-  const pointer = nextPointer(previous, plan.id, now().toISOString());
-  await store.putPointer(pointerObject(pointer));
-  return { written, present, pointer };
+  // Read again just before writing: another run may have moved it while the objects went up.
+  for (let attempt = 1; attempt <= pointerAttempts; attempt += 1) {
+    const current = await store.getPointer();
+    const pointer = nextPointer(readPointer(current?.body ?? null), plan.id, now().toISOString());
+    if (await store.putPointer(pointerObject(pointer), current?.etag ?? null)) return { written, present, pointer };
+  }
+  throw new Error(`${pointerKey} changed under this run ${pointerAttempts} times in a row, so it was left as the other runs wrote it. Every object of scan ${plan.id} is in place; run again to list it.`);
 }
 
 /** What a run would do, for --dry-run. It reads nothing and writes nothing. */
@@ -67,11 +81,11 @@ export function describePlan(plan: ScanPlan): string {
   const lines = [`Scan ${plan.id} (${plan.record.source.kind === "track" ? "a Track run" : `data branch commit ${plan.record.source.commit.slice(0, 12)}`}${plan.record.signed ? ", signed" : ", not signed"}):`];
   const lists = plan.objects.filter((object) => object.key.startsWith("lists/"));
   const evidence = plan.objects.filter((object) => object.key.startsWith("evidence/"));
-  for (const object of plan.objects.filter((each) => each.key.startsWith("scans/"))) {
+  for (const object of plan.objects.filter((each) => each.key.startsWith("scans/") || each.key.startsWith("snapshots/"))) {
     lines.push(`  ${object.key}  ${object.body.length} bytes, ${object.contentType}, ${object.cacheControl}`);
   }
   const total = (objects: PlannedObject[]) => objects.reduce((sum, object) => sum + object.body.length, 0);
-  lines.push(`  lists/<endpoint-id>/<sha256>.json  ${lists.length} new versions, ${total(lists)} bytes; ${plan.record.lists.current} lists in the bundle${plan.orphanLists ? `, ${plan.orphanLists} list files no endpoint names left out` : ""}`);
+  lines.push(`  lists/<endpoint-id>/<sha256>.json  ${lists.length} new versions, ${total(lists)} bytes; ${plan.record.lists.current} lists in the bundle${plan.orphanLists ? `, ${plan.orphanLists} of them named by no endpoint` : ""}${plan.leftOutLists ? `; ${plan.leftOutLists} list files with no endpoint id left out` : ""}`);
   if (evidence.length) lines.push(`  evidence/<endpoint-id>/<sha256>.json  ${evidence.length} objects, ${total(evidence)} bytes`);
   lines.push(`  ${pointerKey}  last, pointing at ${plan.id} unless the bucket already holds a newer scan`);
   lines.push(`  ${plan.objects.length + 1} objects, ${total(plan.objects)} bytes. Each immutable key is written only if absent; one present with other content stops the run.`);
@@ -139,8 +153,8 @@ export function s3Store({ endpoint, bucket, credentials, region = "auto", fetchI
   // The answer's text may be an error from the store; only its first line, cut short, reaches the log.
   const failed = async (what: string, response: Response) => new Error(`${what} answered ${response.status}: ${(await response.text().catch(() => "")).replace(/[^\x20-\x7e]+/g, " ").slice(0, 200)}`);
 
-  const put = (object: PlannedObject, onlyIfAbsent: boolean) => send("PUT", object.key, object.body, {
-    "content-type": object.contentType, "cache-control": object.cacheControl, [shaHeader]: object.sourceSha256, ...(onlyIfAbsent ? { "if-none-match": "*" } : {}),
+  const put = (object: PlannedObject, condition: Record<string, string>) => send("PUT", object.key, object.body, {
+    "content-type": object.contentType, "cache-control": object.cacheControl, [shaHeader]: object.sourceSha256, ...condition,
   });
   return {
     async head(key) {
@@ -150,20 +164,31 @@ export function s3Store({ endpoint, bucket, credentials, region = "auto", fetchI
       return response.headers.get(shaHeader) ?? "";
     },
     async putNew(object) {
-      const response = await put(object, true);
+      const response = await put(object, { "if-none-match": "*" });
       if (response.status === 412) return false;
+      // Under a bucket lock R2 checks the lock first, so a key already there answers 409 ObjectLockedByBucketPolicy.
+      if (response.status === 409) {
+        const text = await response.text().catch(() => "");
+        if (text.includes("ObjectLockedByBucketPolicy")) return false;
+        throw new Error(`PUT ${object.key} answered 409: ${text.replace(/[^\x20-\x7e]+/g, " ").slice(0, 200)}`);
+      }
       if (!response.ok) throw await failed(`PUT ${object.key}`, response);
       return true;
     },
-    async putPointer(object) {
-      const response = await put(object, false);
-      if (!response.ok) throw await failed(`PUT ${object.key}`, response);
-    },
-    async get(key) {
-      const response = await send("GET", key);
+    async getPointer() {
+      const response = await send("GET", pointerKey);
       if (response.status === 404) return null;
-      if (!response.ok) throw await failed(`GET ${key}`, response);
-      return Buffer.from(await response.arrayBuffer());
+      if (!response.ok) throw await failed(`GET ${pointerKey}`, response);
+      const etag = response.headers.get("etag");
+      if (!etag) throw new Error(`GET ${pointerKey} answered without an ETag, so it cannot be replaced safely.`);
+      return { body: Buffer.from(await response.arrayBuffer()), etag };
+    },
+    async putPointer(object, expected) {
+      // A conditional PUT is checked and applied in one step by the store: only one of two racing writes wins.
+      const response = await put(object, expected === null ? { "if-none-match": "*" } : { "if-match": expected });
+      if (response.status === 412) return false;
+      if (!response.ok) throw await failed(`PUT ${object.key}`, response);
+      return true;
     },
   };
 }
@@ -191,22 +216,32 @@ export function folderStore(folder: string): Store {
       catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") return false; throw error; }
       finally { await unlink(temporary).catch(() => undefined); }
     },
-    async putPointer(object) {
+    async getPointer() {
+      const body = await read(pointerKey);
+      return body === null ? null : { body, etag: sha256(body) };
+    },
+    // The same check as a bucket's, but not atomic: a folder is for one run at a time (tests, local builds).
+    async putPointer(object, expected) {
       const target = file(object.key);
+      const body = await read(pointerKey);
+      if ((body === null ? null : sha256(body)) !== expected) return false;
       await mkdir(path.dirname(target), { recursive: true });
       await writeFile(`${target}.partial`, object.body);
       await rename(`${target}.partial`, target);
+      return true;
     },
-    get: read,
   };
 }
 
 // --- A scan's data folder, checked against its manifest --------------------------------------------------------
 
 /** The data folder's own files that the layout publishes. */
-const topNames = new Set(["endpoints.jsonl", "feed.json", "servers.json", "lookup.json", "registry.json"]);
-const insideFolder = (relative: string) =>
-  relative !== "" && !relative.startsWith("/") && !relative.includes("\\") && relative.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+const topNames = new Set(["endpoints.jsonl", "feed.json", "servers.json", "lookup.json", "registry.json", "hosts.json"]);
+/**
+ * Files in a scan's folder that are not data: checked against the manifest like the rest, never published.
+ * .gitattributes is the scanner's own constant (track.ts, dataAttributes); README.md is the data branch's.
+ */
+const notPublished = new Set([".gitattributes", "README.md"]);
 
 async function filesUnder(folder: string, relative: string): Promise<string[]> {
   const entries = await readdir(path.join(folder, relative), { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return []; throw error; });
@@ -219,51 +254,68 @@ async function filesUnder(folder: string, relative: string): Promise<string[]> {
   return found;
 }
 
+export interface FolderOptions {
+  /** Check manifest.sigstore.json with cosign: signed by the repository's Track workflow, at the scanner commit the manifest names. */
+  requireSignature?: boolean;
+  /** The repository whose Track workflow must have signed it. Default Stackduke/mcp-scanner. */
+  repository?: string;
+  /** For tests: what runs cosign. */
+  cosign?: RunCosign;
+}
+
 /**
- * Reads a scan's data folder (the Track job's output) for publishing. manifest.json must be there, and every file it
- * lists must match its sha256: the manifest is what the sign job signed, so this ties the upload to the signed scan.
- * Every file published must be in the manifest, except the lists the scan did not rewrite, which earlier
- * manifests cover. A manifest naming a file the layout has no place for stops the run.
+ * Reads a scan's data folder (the Track job's output) for publishing, checked with the scanner's own manifest
+ * check (manifest.ts): the whole folder must match the manifest's digest of it and every file the manifest
+ * lists must match its sha256, so every file published, the lists the scan did not rewrite included, is the
+ * folder that scan left. With requireSignature, the signature must verify too. A manifest naming a file the
+ * layout has no place for stops the run, and one naming a file of a server tracked privately is refused
+ * before anything about it can reach a log.
  */
-export async function scanInputFromFolder(folder: string, { requireSignature = false } = {}): Promise<ScanInput> {
-  const manifestBytes = await readFile(path.join(folder, "manifest.json")).catch(() => { throw new Error(`There is no manifest.json in ${folder}: a scan is published only with its manifest.`); });
-  const manifest = (() => { try { return JSON.parse(manifestBytes.toString("utf8")) as Record<string, unknown>; } catch { throw new Error("manifest.json is not valid JSON."); } })();
-  const files = manifest.files;
-  if (manifest.version !== 1 || typeof manifest.scanStartedAt !== "string" || !Array.isArray(files)) throw new Error("manifest.json is not a version 1 scan manifest.");
-  const signature = await readFile(path.join(folder, "manifest.sigstore.json")).catch(() => undefined);
-  if (requireSignature && !signature) throw new Error("There is no manifest.sigstore.json, and a signature was required.");
+export async function scanInputFromFolder(folder: string, { requireSignature = false, repository, cosign }: FolderOptions = {}): Promise<ScanInput> {
+  const manifestBytes = await readFile(path.join(folder, manifestName)).catch(() => { throw new Error(`There is no ${manifestName} in ${folder}: a scan is published only with its manifest.`); });
+  let parsed: unknown;
+  try { parsed = JSON.parse(manifestBytes.toString("utf8")); } catch { throw new Error(`${manifestName} is not valid JSON.`); }
+  const manifest = readManifest(parsed);
+  if (typeof manifest === "string") throw new Error(`${manifestName} cannot be used: ${manifest}.`);
+  if (Number.isNaN(Date.parse(manifest.scanStartedAt))) throw new Error(`${manifestName} has no usable start time.`);
 
-  const top = new Map<string, Buffer>();
-  const newLists = new Set<string>();
-  const evidence = new Map<string, Buffer>();
-  for (const entry of files as unknown[]) {
-    const { path: relative, sha256: hash, bytes: size } = (entry ?? {}) as Record<string, unknown>;
-    if (typeof relative !== "string" || !insideFolder(relative) || typeof hash !== "string" || typeof size !== "number") throw new Error("manifest.json lists a file with no usable path, sha256 or size.");
-    const bytes = await readFile(path.join(folder, relative)).catch(() => { throw new Error(`${relative} is in manifest.json but not in the folder.`); });
-    if (sha256(bytes) !== hash || bytes.length !== size) throw new Error(`${relative} does not match its sha256 in manifest.json; nothing was planned.`);
-    if (topNames.has(relative)) top.set(relative, bytes);
+  // Where each file goes, decided before any check whose message could name a path.
+  const top = new Set<string>(), newLists = new Set<string>(), evidencePaths = new Set<string>();
+  for (const { path: relative } of manifest.files) {
+    if (topNames.has(relative)) top.add(relative);
     else if (relative.startsWith("lists/")) newLists.add(relative);
-    else if (relative.startsWith("evidence/")) evidence.set(relative, bytes);
-    else if (relative.startsWith("watched/")) {
-      const vendor = relative.slice("watched/".length).replace(/\.json$/, "");
-      if (signedInServers[vendor]?.publish !== true) throw new PrivateDataError("Refused: manifest.json lists a watched/ file of a server tracked privately. Nothing from such a server may reach the public bucket, so nothing was planned.");
-      throw new Error(`${relative} has no place in the layout.`);
-    } else throw new Error(`${relative} has no place in the layout; add one before publishing it.`);
+    else if (relative.startsWith("evidence/")) evidencePaths.add(relative);
+    else if (notPublished.has(relative)) continue;
+    // Layout 1 has no place for a server watched with a sign-in, so its definitions are treated as private.
+    else if (relative.startsWith("watched/")) throw new PrivateDataError("Refused: manifest.json lists a watched/ file of a server watched with a sign-in. Layout 1 publishes nothing about such a server, so nothing was planned.");
+    else throw new Error(`${relative} has no place in the layout; add one before publishing it.`);
   }
-  for (const name of topNames) {
-    const there = await readFile(path.join(folder, name)).then(() => true, () => false);
-    if (there && !top.has(name)) throw new Error(`${name} is in the folder but not in manifest.json, so it is not the file this scan wrote.`);
-  }
-  const lists = new Map<string, Buffer>();
-  for (const relative of await filesUnder(folder, "lists")) lists.set(relative, await readFile(path.join(folder, relative)));
 
-  const run = manifest.run as { id?: unknown; attempt?: unknown; repository?: unknown } | undefined;
+  const check = await verifyManifest(folder, { hashesOnly: !requireSignature, thisScanOnly: true, ...(repository ? { repository } : {}), ...(cosign ? { cosign } : {}) });
+  if (!check.ok) {
+    // A path outside the manifest (a file that is not a plain one) is counted, not named.
+    const shown = check.problems.filter((problem) => !/not a plain file$/.test(problem));
+    throw new Error(`The folder does not match its signed scan, so nothing was planned: ${[...shown, ...(shown.length < check.problems.length ? [`${check.problems.length - shown.length} entries that are not plain files`] : [])].join("; ")}`);
+  }
+  const signature = await readFile(path.join(folder, signatureName)).catch(() => undefined);
+
+  const read = async (relative: string) => readFile(path.join(folder, relative));
+  const files = new Map<string, Buffer>();
+  for (const name of topNames) {
+    const bytes = await read(name).catch(() => null);
+    if (bytes) files.set(name, bytes);
+  }
+  const evidence = new Map<string, Buffer>();
+  for (const relative of evidencePaths) evidence.set(relative, await read(relative));
+  const lists = new Map<string, Buffer>();
+  for (const relative of await filesUnder(folder, "lists")) lists.set(relative, await read(relative));
+
   const source: ScanSource = {
     kind: "track",
     scanStartedAt: manifest.scanStartedAt,
-    scannerCommit: typeof (manifest.scanner as { commit?: unknown } | undefined)?.commit === "string" ? (manifest.scanner as { commit: string }).commit : "unknown",
-    ...(typeof manifest.methodVersion === "string" ? { methodVersion: manifest.methodVersion } : {}),
-    ...(run && typeof run.id === "string" ? { run: { id: run.id, attempt: String(run.attempt ?? "1"), repository: String(run.repository ?? "") } } : {}),
+    scannerCommit: manifest.scanner.commit,
+    methodVersion: manifest.methodVersion,
+    ...(manifest.run ? { run: manifest.run } : {}),
   };
-  return { id: scanIdOf(manifest.scanStartedAt), source, files: top, lists, newLists, evidence, manifest: manifestBytes, ...(signature ? { signature } : {}) };
+  return { id: scanIdOf(manifest.scanStartedAt), source, files, lists, newLists, evidence, manifest: manifestBytes, ...(signature ? { signature } : {}) };
 }
