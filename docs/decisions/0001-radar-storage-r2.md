@@ -70,12 +70,19 @@ Changes from the first proposal, and why:
 
 ## Privacy
 
-The bucket is public, so nothing about a server tracked privately may reach it. This is enforced in code, not only here:
+The bucket is public, so nothing about a server tracked privately, or on the site of a vendor whose terms forbid publishing about it, may reach it. This is enforced in code, not only here:
 
 - Planning a scan refuses the whole scan if any endpoint record, feed entry, `servers.json` row, tool list or `watched/` file belongs to a server watched with a sign-in. It reads only fields the scanner writes itself (`signedIn`, and ids of the form `signed-in-<vendor>`), so no server can block uploads by giving a tool a vendor's name. The refusal names no server, because workflow logs are public.
 - Layout 1 has no place for any server watched with a sign-in, so all of them are refused, even a vendor the catalog marks `publish: true` (none is today). Publishing one would first need a key for its `watched/` file and for its list, whose id is not 12 hex characters.
-- Beyond those fields, each file may hold only what the layout knows. `feed.json`, `registry.json`, `lookup.json` and `hosts.json` may have only the top-level fields of the tracker's own types. Every `servers.json` row and every `lookup.json` row must be an endpoint of the same scan. A `hosts.json` entry may hold only its two counters. A field added to the tracker later stops the upload until the layout is told it holds only public data.
-- Before 24 October 2026 the `data` branch also held servers now tracked privately (12 commits, from 18 to 23 October). The backfill removes their records, lists and feed entries before planning, and planning checks again. It never reads `watched/`. The totals in those days' `feed.json` never counted those servers: the tracker added up public endpoints only.
+- **Kept-off sites.** The catalog marks some vendors `forbidden`: their terms forbid publishing about their service (Sentry, Intercom and Airtable today). The tracker keeps their sites off: it never checks an address on them. When a site becomes kept off, it now also deletes the endpoint's saved list and the site's `hosts.json` entries. The uploader does not rely on that. It refuses a whole scan with any endpoint record, feed entry, `hosts.json` host or tool list on such a site. A tool list is judged both by the host in its file name and by the address it was read from (`source`).
+- Beyond those fields, each file may hold only what the layout knows:
+  - `feed.json`, `registry.json`, `lookup.json` and `hosts.json` may have only the top-level fields of the tracker's own types;
+  - every `servers.json` row must be an endpoint of the same scan;
+  - `lookup.json` must be exactly the lookup the tracker makes from that `servers.json`;
+  - a `hosts.json` entry may hold only its two counters.
+
+  A field added to the tracker later stops the upload until the layout is told it holds only public data.
+- Before 24 October 2026 the `data` branch also held servers now tracked privately (12 commits, from 18 to 23 October), and from 16 to 23 October public endpoint records for Airtable and Sentry addresses. The backfill removes both, with their lists, feed entries and servers rows, rebuilds the lookup from the rows it keeps, and planning checks again. It never reads `watched/`. The totals in those days' `feed.json` never counted the servers tracked privately: the tracker added up public endpoints only.
 - Tests cover each case.
 
 ## Security of the upload
@@ -88,7 +95,7 @@ The R2 key is a credential that can write to a public bucket, so only one small 
   - the whole folder's digest (`tree`), which covers the lists the scan did not rewrite;
   - every file the manifest lists, against its sha256.
 
-  It then refuses any file the layout has no place for. It also refuses a scan whose start time is in the future or more than 8 days ago, since the pointer never moves back and a scan dated ahead would hold it.
+  It then refuses any file the layout has no place for. Each file is checked against the manifest again as it is read for upload, so a write to the folder after the check is caught. It also refuses a scan whose start time is in the future or more than 8 days ago, since the pointer never moves back and a scan dated ahead would hold it. `publish` to a bucket refuses to run without `--require-signature`; only `--unsigned`, given on purpose, skips it, and that is for the scratch-bucket check alone.
 - **History cannot be overwritten, at two layers.** The uploader writes every key create-only and compares hashes when a key is already there. That protects against mistakes, not against a leaked key: an R2 token with Object Read & Write can also overwrite and delete. The bucket lock (setup step 7) closes that gap. Under it, no key under `scans/`, `snapshots/`, `lists/` or `evidence/` can be overwritten or deleted by anyone, an account admin included, until the lock rule itself is removed. A compromised `upload` job or a leaked key could then at worst add a wrong new scan under new keys, or point `latest.json` at a wrong scan.
 - **Overlapping runs cannot move the pointer back.** `latest.json` is read again just before it is written, and written only if it is still the version just read (`If-Match` with its ETag, or `If-None-Match: *` when there is none). The run that loses a race reads it again and retries, so neither scan is dropped. The backfill job also shares the Track workflow's concurrency group, so the two do not run at once.
 - **A GitHub Environment holds the key.** Environment `r2-upload`, with deployment branches limited to `main`: only a job that names the environment and runs from `main` gets the secrets, so a workflow dispatched from another branch cannot use them. Repository-level secrets would reach every job.
@@ -115,7 +122,13 @@ Reads by the public go through Cloudflare's cache, so most never reach R2. Even 
 - **Phase 1** changes nothing that runs: the new commands are not called by any workflow. Reverting this change removes them.
 - **Phase 2, the workflow.** Revert the workflow change and the tracker commits to the `data` branch again. The branch resumes from its frozen state; the scans made in between stay in R2 and can be restored into it with the `restore` command. The 100 MB limit then applies again, so the fallback below would be needed too.
 - **Phase 2, the site.** Keep the site's archive reader behind a switch for the first week, so the site can go back to the `data` branch by changing one setting.
-- **A bad scan was published.** Its objects stay (the lock keeps them), but readers follow `latest.json`, which the lock does not cover. Put back a pointer naming the previous scan with an account admin's credentials, for example with `npx wrangler r2 object put radar/latest.json --file=latest.json --content-type=application/json --cache-control="public, max-age=60" --remote`, then purge `https://data.stackduke.com/latest.json` from Cloudflare's cache. Removing a scan's objects (a takedown, or something that should never have been published) means removing the lock rule first. That is a deliberate, manual step for an account admin, and the rule goes back straight after.
+- **A bad scan was published.** Its objects stay (the lock keeps them), but readers follow `latest.json`, which the lock does not cover. Withdraw the scan in `latest.json`, with an account admin's credentials:
+  1. Download `latest.json`.
+  2. Move the bad id from `scans` to `withdrawn`, and set `scan` and `record` to the newest scan left.
+  3. Upload it, for example with `npx wrangler r2 object put radar/latest.json --file=latest.json --content-type=application/json --cache-control="public, max-age=60" --remote`.
+  4. Purge `https://data.stackduke.com/latest.json` from Cloudflare's cache.
+
+  Every upload keeps `withdrawn` as it found it. A withdrawn scan is never listed or made current again, and a re-run of its upload is refused before anything is sent. Removing a scan's objects (a takedown, or something that should never have been published) means removing the lock rule first. That is a deliberate, manual step for an account admin, and the rule goes back straight after.
 
 ## Fallback if phase 2 slips past 5 December
 
@@ -128,7 +141,7 @@ Have this ready to apply by about 8 December, so it can ship before the push fai
 The `track` job needs the previous scan's folder to start from. A `restore` command rebuilds it from the bucket, with no key: it reads `latest.json`, then that scan's files.
 
 - `endpoints.jsonl`, `feed.json`, `servers.json`, `lookup.json`, `registry.json` and `hosts.json` come from `snapshots/<scan>/`.
-- Each line of `lists.jsonl.gz` becomes the file at its `path`: its `list` followed by a newline, checked against its `sha256`. Lists no endpoint names are in the bundle too, so every list comes back.
+- Each line of `lists.jsonl.gz` becomes the file at its `path`: the raw text of its `list`, as it stands in the line, followed by a newline, checked against its `sha256`. `list` is always the line's last field, so its text is everything after `"list":` but the closing `}`. It is taken as it is, not parsed and written out again, which could change the bytes. Lists no endpoint names are in the bundle too, so every list comes back.
 - `manifest.json` and `manifest.sigstore.json` come from `scans/<scan>/`.
 - `.gitattributes` is written from the scanner's own constant (`dataAttributes` in `track.ts`). It is the same in every scan, so it needs no copy in the bucket.
 
@@ -254,7 +267,7 @@ The uploader relies on four things that Cloudflare's S3 compatibility page does 
 3. A `PUT` of `latest.json` with `If-Match` and a stale ETag answers 412. With the current ETag (as `GET` returns it, quotes included), it succeeds.
 4. With a lock rule on the scratch bucket, a create-only `PUT` to a locked key answers 409 `ObjectLockedByBucketPolicy`. The uploader treats that like a 412.
 
-`node src/radar-cli.ts publish --data=<a scan folder> --bucket=<scratch bucket>`, run twice, covers 1 and 2 (the second run must report every object "already there"). Then delete the scratch bucket and its token.
+`node src/radar-cli.ts publish --data=<a scan folder> --bucket=<scratch bucket> --unsigned`, run twice, covers 1 and 2 (the second run must report every object "already there"). Then remove the scratch bucket's lock rule (a bucket cannot be emptied while one is set), empty and delete the bucket, and delete its token.
 
 ## Setup (done by a person, in Cloudflare and GitHub)
 

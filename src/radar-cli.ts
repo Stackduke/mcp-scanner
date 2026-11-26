@@ -15,6 +15,7 @@ const usage = `Usage:
   node src/radar-cli.ts publish --data=<scan folder> [--require-signature] <target>
       Publish one scan: the Track job's data folder, checked against its manifest.json (the whole folder's
       digest and each file's sha256). --require-signature also checks manifest.sigstore.json with cosign.
+      With --bucket it is required; only --unsigned (for a scratch bucket) publishes without it.
   node src/radar-cli.ts backfill --repo=<git folder> [--ref=origin/data] <target>
       Publish every scan in the data branch's history, oldest first. Reads the repository only.
 
@@ -41,17 +42,24 @@ export async function radarMain(argv: string[], { env = process.env, fetchImpl =
   const [command, ...flags] = argv;
   const given = new Map<string, string>();
   for (const flag of flags) {
-    const match = /^--(data|repo|ref|to-folder|bucket|endpoint)=(.+)$|^--(dry-run|require-signature)$/.exec(flag);
+    const match = /^--(data|repo|ref|to-folder|bucket|endpoint)=(.+)$|^--(dry-run|require-signature|unsigned)$/.exec(flag);
     const name = match?.[1] ?? match?.[3];
     if (!name || given.has(name)) { log(usage); return 2; }
     given.set(name, match?.[2] ?? "");
   }
   const targets = ["dry-run", "to-folder", "bucket"].filter((name) => given.has(name));
-  const allowed = command === "publish" ? ["data", "require-signature"] : command === "backfill" ? ["repo", "ref"] : null;
+  const allowed = command === "publish" ? ["data", "require-signature", "unsigned"] : command === "backfill" ? ["repo", "ref"] : null;
   const needed = command === "publish" ? "data" : "repo";
   if (!allowed || targets.length !== 1 || !given.has(needed) || (given.has("endpoint") && !given.has("bucket"))
     || [...given.keys()].some((name) => !allowed.includes(name) && !["dry-run", "to-folder", "bucket", "endpoint"].includes(name))) { log(usage); return 2; }
 
+  // A scan uploaded to a bucket stays there for good, so it must be the Track workflow's, signed; --unsigned says
+  // otherwise out loud, for a scratch bucket. The backfill publishes the data branch's history, which is already public.
+  if (command === "publish" && given.has("unsigned") && (given.has("require-signature") || !given.has("bucket"))) { log(usage); return 2; }
+  if (command === "publish" && given.has("bucket") && !given.has("require-signature") && !given.has("unsigned")) {
+    log("Uploading to a bucket needs --require-signature (or, for a scratch bucket only, --unsigned).");
+    return 2;
+  }
   let store: Store | null = null;
   if (given.has("to-folder")) store = folderStore(given.get("to-folder") as string);
   if (given.has("bucket")) {
@@ -85,7 +93,7 @@ export async function radarMain(argv: string[], { env = process.env, fetchImpl =
     let scans = 0;
     for await (const { input, leftOut } of backfillScans(given.get("repo") as string, given.get("ref") ?? "origin/data")) {
       // Counted, never named: a server tracked privately is not named in a log.
-      await run(input, leftOut ? `${leftOut} records about servers tracked privately left out` : "");
+      await run(input, leftOut ? `${leftOut} records about servers tracked privately or kept off left out` : "");
       scans += 1;
     }
     log(`${scans} scans ${store ? "published" : "planned"}.`);

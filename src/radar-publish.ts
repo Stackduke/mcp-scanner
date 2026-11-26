@@ -53,8 +53,8 @@ async function eachLimited<T>(items: readonly T[], limit: number, work: (item: T
 const pointerAttempts = 5;
 
 export async function publish(plan: ScanPlan, store: Store, { concurrency = 8, now = () => new Date() }: { concurrency?: number; now?: () => Date } = {}): Promise<PublishReport> {
-  // Read first: a pointer that cannot be read stops the run before anything is written.
-  readPointer((await store.getPointer())?.body ?? null);
+  // Read first: a pointer that cannot be read, or that withdrew this scan, stops the run before anything is written.
+  if (readPointer((await store.getPointer())?.body ?? null)?.withdrawn.includes(plan.id)) throw new Error(`Scan ${plan.id} was withdrawn from ${pointerKey}, so it is not published again.`);
   let written = 0, present = 0;
   const conflict = (key: string) => new Error(`${key} is already in the bucket with different content. Objects there are never overwritten, so this run stopped: latest.json was not moved.`);
   await eachLimited(plan.objects, concurrency, async (object) => {
@@ -299,10 +299,19 @@ export async function scanInputFromFolder(folder: string, { requireSignature = f
   }
   const signature = await readFile(path.join(folder, signatureName)).catch(() => undefined);
 
-  const read = async (relative: string) => readFile(path.join(folder, relative));
+  // Read again for planning, and held to the manifest once more: what is uploaded is what was checked, even if
+  // something wrote to the folder after the check.
+  const expected = new Map(manifest.files.map((file) => [file.path, file.sha256]));
+  const read = async (relative: string) => {
+    const bytes = await readFile(path.join(folder, relative));
+    const want = relative === manifestName ? sha256(manifestBytes) : expected.get(relative);
+    if (want !== undefined && sha256(bytes) !== want) throw new Error(`${relative} changed after the folder was checked, so nothing was planned.`);
+    return bytes;
+  };
+  await read(manifestName);
   const files = new Map<string, Buffer>();
   for (const name of topNames) {
-    const bytes = await read(name).catch(() => null);
+    const bytes = await read(name).catch((error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return null; throw error; });
     if (bytes) files.set(name, bytes);
   }
   const evidence = new Map<string, Buffer>();

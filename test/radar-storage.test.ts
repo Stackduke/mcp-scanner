@@ -13,7 +13,8 @@ import { encodeKey, folderStore, publish, s3Store, scanInputFromFolder, signV4 }
 import type { Store } from "../src/radar-publish.ts";
 import { buildManifest, writeManifest } from "../src/manifest.ts";
 import { signedInServers } from "../src/signed-in.ts";
-import { endpointId } from "../src/tracker.ts";
+import { endpointId, lookupOf } from "../src/tracker.ts";
+import type { FeedServer } from "../src/tracker.ts";
 
 const sha = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 const temporary: string[] = [];
@@ -40,14 +41,18 @@ interface ScanOptions {
   listText?: string;
 }
 
+/** A servers.json row as the tracker writes it. */
+const serverRow = (id: string, url: string): FeedServer => ({ id, url, names: ["com.example/a"], firstSeen: started, tools: 1, kinds: { read: 1 }, lastChecked: started, lastListed: started, outcome: "listed", changesIn30Days: 0, watchIn30Days: 0 } as unknown as FeedServer);
+
 /** A scan's data folder as the Track job leaves it: its files, and a manifest of those it wrote. */
 async function writeScan(dir: string, options: ScanOptions = {}): Promise<void> {
+  const servers = options.servers ?? [serverRow(idA, urlA)];
   const files: Record<string, string> = {
     "endpoints.jsonl": [{ id: idA, url: urlA, names: ["com.example/a"], firstSeen: started, inRegistry: true, checks: [`${started} L`], changes: [], file: listA }, { id: endpointId("https://b.example.com/mcp"), url: "https://b.example.com/mcp", names: [], firstSeen: started, inRegistry: true, checks: [], changes: [] }, ...(options.extraEndpoints ?? [])].map((record) => JSON.stringify(record)).join("\n") + "\n",
     [listA]: options.listText ?? `${JSON.stringify({ source: urlA, takenAt: started, tools: [{ name: "read_thing", kind: "read" }] })}\n`,
     "feed.json": `${JSON.stringify(options.feed ?? { version: 1, generatedAt: started, watched: [{ id: idA, vendor: "example" }], changes: [] })}\n`,
-    "servers.json": `${JSON.stringify(options.servers ?? [{ id: idA, url: urlA, tools: 1 }])}\n`,
-    "lookup.json": `${JSON.stringify({ version: 1, generatedAt: started, rows: [["com.example/a", urlA, 1]] })}\n`,
+    "servers.json": `${JSON.stringify(servers)}\n`,
+    "lookup.json": `${JSON.stringify({ version: 1, generatedAt: started, rows: (() => { try { return lookupOf(servers as FeedServer[]); } catch { return []; } })() })}\n`,
     "registry.json": `${JSON.stringify({ readAt: started })}\n`,
     "hosts.json": `${JSON.stringify({ version: 1, hosts: { "a.example.com": { overBudgetRuns: 0 } } })}\n`,
     ...options.manifestExtra,
@@ -208,7 +213,7 @@ test("publishing writes every object, then latest.json last, with metadata a re-
   assert.equal(puts.length, plan.objects.length + 1);
   assert.equal(puts.at(-1)?.key, "latest.json");
   const pointer = JSON.parse(s3.objects.get("latest.json")?.body.toString("utf8") as string);
-  assert.deepEqual(pointer, { layout: 1, scan: scanId, record: `scans/${scanId}/scan.json`, scans: [scanId], updatedAt: "2026-11-25T15:00:00.000Z" });
+  assert.deepEqual(pointer, { layout: 1, scan: scanId, record: `scans/${scanId}/scan.json`, scans: [scanId], withdrawn: [], updatedAt: "2026-11-25T15:00:00.000Z" });
   assert.equal(s3.objects.get("latest.json")?.headers["cache-control"], "public, max-age=60");
   const endpoints = s3.objects.get(`snapshots/${scanId}/endpoints.jsonl.gz`);
   assert.equal(gunzipSync(endpoints?.body as Buffer).toString("utf8"), await readFile(path.join(dir, "endpoints.jsonl"), "utf8"));
@@ -283,7 +288,7 @@ test("when any object fails to upload, latest.json is not written", async () => 
 });
 
 test("the pointer never moves back to an older scan, and lists every scan", async () => {
-  const newer = { layout: 1, scan: "2026-11-26T040000Z", record: "scans/2026-11-26T040000Z/scan.json", scans: ["2026-11-26T040000Z"], updatedAt: "x" };
+  const newer = { layout: 1, scan: "2026-11-26T040000Z", record: "scans/2026-11-26T040000Z/scan.json", scans: ["2026-11-26T040000Z"], withdrawn: [], updatedAt: "x" };
   const pointer = nextPointer(newer, scanId, "now");
   assert.equal(pointer.scan, "2026-11-26T040000Z");
   assert.deepEqual(pointer.scans, ["2026-11-26T040000Z", scanId]);
@@ -319,16 +324,16 @@ test("the CLI uploads to a bucket with the keys from the environment", async () 
   const dir = await folder();
   await writeScan(dir);
   const s3 = await fakeS3();
-  const code = await radarMain(["publish", `--data=${dir}`, "--bucket=radar", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: soon });
+  const code = await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: soon });
   assert.equal(code, 0);
   assert.ok(s3.objects.has(`scans/${scanId}/scan.json`));
-  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar"], { env: {}, log: () => undefined }), 2);
+  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned"], { env: {}, log: () => undefined }), 2);
   // The stand-in checks signatures for real: a wrong secret is turned away.
-  await assert.rejects(radarMain(["publish", `--data=${dir}`, "--bucket=radar", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "wrong" }, log: () => undefined, now: soon }), /answered 403/);
+  await assert.rejects(radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "wrong" }, log: () => undefined, now: soon }), /answered 403/);
   // A scan dated in the future (or long ago) is refused before anything is sent: the pointer never moves back, so it would stick.
   const before = s3.requests.length;
   for (const clock of ["2026-11-20T00:00:00Z", "2026-12-10T00:00:00Z"]) {
-    assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: () => new Date(clock) }), 1, clock);
+    assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: () => undefined, now: () => new Date(clock) }), 1, clock);
   }
   assert.equal(s3.requests.length, before);
 });
@@ -356,6 +361,12 @@ test("nothing about a server tracked privately is ever planned", async () => {
     ["a servers row", { servers: [{ id: "signed-in-supabase" }] }],
     ["a list file", { manifestExtra: { "lists/si/mcp.stripe.com-signed-in-stripe.json": "{}\n" } }],
     ["a watched file", { manifestExtra: { "watched/linear.json": "{}\n" } }],
+    // Sites whose terms forbid publishing about them (catalog `forbidden`, the tracker's keptOffSites).
+    ["an endpoint on a kept-off site", { extraEndpoints: [{ id: endpointId("https://mcp.sentry.dev/mcp"), url: "https://mcp.sentry.dev/mcp", names: [], firstSeen: started, inRegistry: true, checks: [], changes: [] }] }],
+    ["a list named for a kept-off host", { manifestExtra: { "lists/ab/mcp.sentry.dev-abcdefabcdef.json": `${JSON.stringify({ source: "https://elsewhere.example.com/mcp", tools: [] })}\n` } }],
+    ["a list read from a kept-off address", { manifestExtra: { "lists/ab/other.example.com-abcdefabcdef.json": `${JSON.stringify({ source: "https://mcp.airtable.com/mcp", tools: [] })}\n` } }],
+    ["a feed change on a kept-off site", { feed: { version: 1, watched: [], changes: [{ id: "abcdefabcdef", url: "https://eu.sentry.io/mcp" }] } }],
+    ["a kept-off host in hosts.json", { manifestExtra: { "hosts.json": `${JSON.stringify({ version: 1, hosts: { "api.intercom.com": { overBudgetRuns: 1 } } })}\n` } }],
   ];
   for (const [what, options] of cases) {
     const dir = await folder();
@@ -363,7 +374,7 @@ test("nothing about a server tracked privately is ever planned", async () => {
     const error = await (async () => { try { planScan(await scanInputFromFolder(dir)); } catch (caught) { return caught; } return null; })();
     assert.ok(error instanceof PrivateDataError, `${what} was not refused`);
     // The refusal names no vendor: the log it lands in is public.
-    assert.doesNotMatch((error as Error).message, /github|stripe|linear|supabase/i, what);
+    assert.doesNotMatch((error as Error).message, /github|stripe|linear|supabase|sentry|airtable|intercom/i, what);
   }
   // Only the scanner's own fields decide: a public server naming a tool after a vendor is published as usual.
   const dir = await folder();
@@ -412,7 +423,9 @@ test("each top file may hold only the fields the layout knows, about endpoints o
   const cases: Array<[string, ScanOptions, RegExp]> = [
     ["a new feed field", { feed: { version: 1, watched: [], changes: [], privateTotals: {} } }, /feed\.json has fields layout 1 does not know \(privateTotals\)/],
     ["a servers row of no endpoint", { servers: [{ id: idA }, { id: "0123456789ab", url: "https://elsewhere.example.com" }] }, /servers\.json row 2 is not an endpoint of this scan/],
-    ["a lookup row of no endpoint", { manifestExtra: { "lookup.json": `${JSON.stringify({ version: 1, rows: [["x", "https://elsewhere.example.com/mcp", 1]] })}\n` } }, /lookup\.json row 1 is not an endpoint of this scan/],
+    ["a lookup row of no endpoint", { manifestExtra: { "lookup.json": `${JSON.stringify({ version: 1, rows: [["x", "https://elsewhere.example.com/mcp", 1]] })}\n` } }, /lookup\.json is not the lookup of this scan's servers\.json/],
+    // The address of an endpoint of the scan, but not a row of its servers table: what a private record's row would look like.
+    ["a lookup row the servers table does not have", { manifestExtra: { "lookup.json": `${JSON.stringify({ version: 1, generatedAt: started, rows: [...lookupOf([serverRow(idA, urlA)]), ["", "https://b.example.com/mcp", 9, "2026-11-25", 0, { write: 9 }]] })}\n` } }, /lookup\.json is not the lookup of this scan's servers\.json/],
     ["a new registry field", { manifestExtra: { "registry.json": `${JSON.stringify({ readAt: started, token: "x" })}\n` } }, /registry\.json has fields layout 1 does not know \(token\)/],
     ["a hosts entry with more than its counters", { manifestExtra: { "hosts.json": `${JSON.stringify({ version: 1, hosts: { "a.example.com": { overBudgetRuns: 1, tools: [] } } })}\n` } }, /hosts\.json has fields layout 1 does not know/],
   ];
@@ -481,4 +494,81 @@ test("an error from the store reaches the log without the secret key", async () 
   const error = await store.getPointer().then(() => null, (caught: unknown) => caught as Error);
   assert.match(error?.message ?? "", /GET latest\.json answered 500/);
   assert.doesNotMatch(error?.message ?? "", /s3cr3t/);
+});
+
+test("a withdrawn scan stays withdrawn: it is never current or listed again, and uploads keep the list", async () => {
+  const good = "2026-11-24T041700Z", bad = scanId, later = "2026-11-26T041700Z";
+  // As an admin leaves latest.json after taking back a bad scan.
+  const rolledBack = { layout: 1, scan: good, record: `scans/${good}/scan.json`, scans: [good], withdrawn: [bad], updatedAt: "x" };
+  assert.throws(() => nextPointer(rolledBack, bad, "now"), /was withdrawn/);
+  const older = nextPointer(rolledBack, "2026-11-20T041700Z", "now");
+  assert.deepEqual([older.scan, older.scans, older.withdrawn], [good, [good, "2026-11-20T041700Z"], [bad]]);
+  const next = nextPointer(older, later, "now");
+  assert.deepEqual([next.scan, next.scans, next.withdrawn], [later, [later, good, "2026-11-20T041700Z"], [bad]]);
+  // Even a bad id left in `scans` by mistake is not made current again.
+  assert.equal(nextPointer({ ...rolledBack, scans: [bad, good] }, "2026-11-20T041700Z", "now").scan, good);
+
+  // Re-running the bad scan's upload is refused before anything is sent.
+  const dir = await folder();
+  await writeScan(dir);
+  const s3 = await fakeS3();
+  s3.objects.set("latest.json", { body: Buffer.from(JSON.stringify(rolledBack)), headers: { etag: "\"1\"" } });
+  await assert.rejects(publish(planScan(await scanInputFromFolder(dir)), s3.store), /was withdrawn from latest\.json/);
+  assert.deepEqual(s3.requests.map((request) => request.method), ["GET"]);
+  // A pointer from before withdrawn existed reads as none withdrawn.
+  assert.deepEqual(nextPointer({ layout: 1, scan: good, record: "", scans: [good], updatedAt: "x" } as never, later, "now").withdrawn, []);
+});
+
+test("an upload to a bucket needs a verified signature, unless --unsigned says otherwise", async () => {
+  const dir = await folder();
+  await writeScan(dir);
+  const s3 = await fakeS3();
+  const env = { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" };
+  const lines: string[] = [];
+  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", `--endpoint=${s3.endpoint}`], { env, log: (line) => lines.push(line), now: soon }), 2);
+  assert.match(lines.join("\n"), /needs --require-signature/);
+  assert.equal(s3.requests.length, 0);
+  // --unsigned only with a bucket, and never with --require-signature.
+  assert.equal(await radarMain(["publish", `--data=${dir}`, "--dry-run", "--unsigned"], { log: () => undefined, now: soon }), 2);
+  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--unsigned", "--require-signature", `--endpoint=${s3.endpoint}`], { env, log: () => undefined, now: soon }), 2);
+  assert.equal(s3.requests.length, 0);
+  // Signed and verified (cosign stubbed), it goes up.
+  await writeFile(path.join(dir, "manifest.sigstore.json"), "{\"bundle\":true}\n");
+  assert.equal(await radarMain(["publish", `--data=${dir}`, "--bucket=radar", "--require-signature", `--endpoint=${s3.endpoint}`], { env, log: () => undefined, now: soon, cosign: async () => ({ code: 0, output: "Verified OK" }) }), 0);
+  assert.ok(s3.objects.has(`scans/${scanId}/manifest.sigstore.json`));
+});
+
+test("a file changed after the folder was checked is not uploaded", async () => {
+  const dir = await folder();
+  await writeScan(dir);
+  await writeFile(path.join(dir, "manifest.sigstore.json"), "{\"bundle\":true}\n");
+  // cosign runs after the hashes are checked: a write to the folder at that moment comes after the check.
+  const cosign = async () => { await writeFile(path.join(dir, "feed.json"), "{\"version\":1,\"watched\":[],\"changes\":[]}\n"); return { code: 0, output: "Verified OK" }; };
+  await assert.rejects(scanInputFromFolder(dir, { requireSignature: true, cosign }), /feed\.json changed after the folder was checked/);
+});
+
+test("the store's other answers are not taken for success", async () => {
+  // A 409 that is not a bucket lock stops the run.
+  const answer = (status: number, body: string, headers: Record<string, string> = {}) => s3Store({ endpoint: "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com", bucket: "radar", credentials: { accessKeyId: "id", secretAccessKey: "secret" }, fetchImpl: (async () => new Response(body, { status, headers })) as unknown as typeof fetch });
+  const dir = await folder();
+  await writeScan(dir);
+  const object = planScan(await scanInputFromFolder(dir)).objects[0] as Parameters<Store["putNew"]>[0];
+  await assert.rejects(answer(409, "<Code>OperationAborted</Code>").putNew(object), /answered 409: <Code>OperationAborted/);
+  assert.equal(await answer(409, "<Code>ObjectLockedByBucketPolicy</Code>").putNew(object), false);
+  // latest.json without an ETag cannot be replaced safely.
+  await assert.rejects(answer(200, "{}").getPointer(), /without an ETag/);
+  assert.deepEqual(await answer(200, "{}", { etag: "\"e\"" }).getPointer(), { body: Buffer.from("{}"), etag: "\"e\"" });
+});
+
+test("a folder store replaces latest.json only if it is the version read", async () => {
+  const out = await folder();
+  const store = folderStore(out);
+  const pointer = (scan: string) => ({ key: "latest.json", body: Buffer.from(`${scan}\n`), contentType: "application/json", cacheControl: "", sourceSha256: "", sourceBytes: 0 });
+  assert.equal(await store.putPointer(pointer("a"), "stale"), false, "there is none, so no version matches");
+  assert.equal(await store.putPointer(pointer("a"), null), true);
+  assert.equal(await store.putPointer(pointer("b"), null), false, "there is one now");
+  const current = await store.getPointer();
+  assert.equal(await store.putPointer(pointer("b"), "0".repeat(64)), false);
+  assert.equal(await store.putPointer(pointer("b"), current?.etag ?? null), true);
+  assert.equal(await readFile(path.join(out, "latest.json"), "utf8"), "b\n");
 });

@@ -247,7 +247,12 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
     }
   }
 
-  for (const [url, endpoint] of byUrl) if (keptOff(endpoint.url, sites)) byUrl.delete(url);
+  // Its saved list goes with it: nothing about a kept-off site stays in the public folder.
+  for (const [url, endpoint] of byUrl) {
+    if (!keptOff(endpoint.url, sites)) continue;
+    byUrl.delete(url);
+    if (endpoint.file) await rm(file(endpoint.file), { force: true });
+  }
 
   let changed = 0, failed = 0, unstable = 0;
   /**
@@ -415,6 +420,7 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
 
   const hostsFile = await readJson<HostsFile>(file("hosts.json"));
   const hosts: HostsFile["hosts"] = hostsFile?.version === 1 && typeof hostsFile.hosts === "object" && hostsFile.hosts !== null ? { ...hostsFile.hosts } : {};
+  for (const host of Object.keys(hosts)) if (keptOff(`https://${host}/`, sites)) delete hosts[host];
   for (const host of crawledHosts) {
     const known = Object.hasOwn(hosts, host) ? hosts[host] : undefined;
     if (overBudget.has(host)) hosts[host] = { overBudgetRuns: (known?.overBudgetRuns ?? 0) + 1, lastOverBudget: startedAt };

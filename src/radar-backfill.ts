@@ -1,6 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { manifestName, readManifest, signatureName } from "./manifest.ts";
-import { isPrivateRecord, scanIdOf } from "./radar-layout.ts";
+import { isKeptOff, isPrivateRecord, listFileUrl, scanIdOf } from "./radar-layout.ts";
+import { lookupOf } from "./tracker.ts";
+import type { FeedServer } from "./tracker.ts";
 import type { ScanInput } from "./radar-layout.ts";
 
 /**
@@ -10,14 +12,16 @@ import type { ScanInput } from "./radar-layout.ts";
  * Before 24 October 2026 the branch also held servers that are now tracked privately (their endpoint records,
  * feed entries, watched/ files and tool lists). Those are left out here: a scan is filtered, then planned like any
  * other, and planning refuses a scan that still holds any. The feed's totals never counted them: the tracker
- * added up public endpoints only.
+ * added up public endpoints only. Servers on the sites of vendors whose terms forbid publishing about them (the
+ * catalog's kept-off sites; Airtable and Sentry endpoints were on the branch from 16 to 23 October) are left
+ * out the same way.
  *
  * Since scans carry a manifest, each one is two commits: the scan's, then the one adding its signature. They
  * are one scan here, named by the manifest's start time, with the signature when there is one.
  */
 export interface BackfillScan {
   input: ScanInput;
-  /** Endpoint records, feed entries and list files left out because they are about servers tracked privately. */
+  /** Endpoint records, feed entries, servers rows and list files left out: about servers tracked privately, or kept off. */
   leftOut: number;
 }
 
@@ -91,14 +95,15 @@ export async function* backfillScans(repo: string, ref: string): AsyncGenerator<
     const blob = (id: string) => (cache.get(id) ?? blobs.get(id)) as Buffer;
     let leftOut = 0;
 
-    // Endpoint records about servers tracked privately go, and with them the lists they name.
+    // Endpoint records about servers tracked privately or kept off go, and with them the lists they name.
+    const withheld = (record: unknown) => isPrivateRecord(record) || isKeptOff((record as { url?: unknown } | null)?.url);
     const privateLists = new Set<string>();
     const endpointLines: string[] = [];
     let endpointsChanged = false;
     for (const text of blob(tree.get("endpoints.jsonl") as string).toString("utf8").split("\n")) {
       if (!text.trim()) continue;
       const record = JSON.parse(text) as { file?: unknown };
-      if (isPrivateRecord(record)) {
+      if (withheld(record)) {
         if (typeof record.file === "string") privateLists.add(record.file);
         leftOut += 1;
         endpointsChanged = true;
@@ -119,7 +124,7 @@ export async function* backfillScans(repo: string, ref: string): AsyncGenerator<
       for (const field of ["watched", "changes"]) {
         const entries = parsed[field];
         if (!Array.isArray(entries)) continue;
-        const kept = entries.filter((entry) => !isPrivateRecord(entry));
+        const kept = entries.filter((entry) => !withheld(entry));
         if (kept.length !== entries.length) { leftOut += entries.length - kept.length; parsed[field] = kept; changed = true; }
       }
       // Written the way the tracker writes it, so an unfiltered feed keeps its bytes and a filtered one reads the same.
@@ -129,15 +134,21 @@ export async function* backfillScans(repo: string, ref: string): AsyncGenerator<
     if (servers) {
       const rows = JSON.parse(servers.toString("utf8")) as unknown;
       if (Array.isArray(rows)) {
-        const kept = rows.filter((row) => !isPrivateRecord(row));
-        if (kept.length !== rows.length) { leftOut += rows.length - kept.length; files.set("servers.json", Buffer.from(`${JSON.stringify(kept)}\n`)); }
+        const kept = rows.filter((row) => !withheld(row));
+        if (kept.length !== rows.length) {
+          leftOut += rows.length - kept.length;
+          files.set("servers.json", Buffer.from(`${JSON.stringify(kept)}\n`));
+          // The lookup is made from the servers table, so it is made again from what is kept.
+          const lookup = files.get("lookup.json");
+          if (lookup) files.set("lookup.json", Buffer.from(`${JSON.stringify({ ...(JSON.parse(lookup.toString("utf8")) as object), rows: lookupOf(kept as FeedServer[]) })}\n`));
+        }
       }
     }
 
     const lists = new Map<string, Buffer>();
     const newLists = new Set<string>();
     for (const name of listPaths) {
-      if (privateLists.has(name) || name.includes("signed-in-")) { leftOut += 1; continue; }
+      if (privateLists.has(name) || name.includes("signed-in-") || isKeptOff(listFileUrl(name))) { leftOut += 1; continue; }
       const id = tree.get(name) as string;
       lists.set(name, blob(id));
       if (previous.get(name) !== id) newLists.add(name);

@@ -36,11 +36,14 @@ The code that writes this layout is `src/radar-layout.ts`. Its tests check every
   "scan": "2026-11-25T142908Z",
   "record": "scans/2026-11-25T142908Z/scan.json",
   "scans": ["2026-11-25T142908Z", "2026-11-24T041702Z"],
+  "withdrawn": [],
   "updatedAt": "2026-11-25T15:01:12.345Z"
 }
 ```
 
 `scan` is the newest scan, and `scans` lists every scan in the bucket, newest first. The pointer never moves back to an older scan: publishing an old scan (the backfill does this) adds it to `scans` and leaves `scan` alone. Two uploads that overlap both end up listed: each one replaces `latest.json` only if it has not changed since that upload read it, and reads it again otherwise.
+
+`withdrawn` lists scans taken back by hand, for example one published by mistake. Their files stay, but they are not in `scans` and are never made current again. Skip them.
 
 ### scan.json
 
@@ -68,7 +71,7 @@ One line per list file in the scan's folder:
 {"id":"0a1b2c3d4e5f","path":"lists/0a/mcp.example.com-0a1b2c3d4e5f.json","sha256":"…","list":{"source":"https://mcp.example.com/mcp","takenAt":"…","tools":[…]}}
 ```
 
-`list` is the list file's JSON, unchanged. `path` is where the file sits in the tracker's folder; the file there is that JSON followed by a newline, and `sha256` is the sha256 of that file. The same version is at `lists/<id>/<sha256>.json`. `id` is the endpoint whose record names the file. A few lists belong to endpoints no record names any more (they left the registry, or are no longer checked); they are kept too, with `id` taken from the end of the file's name.
+`list` is the list file's JSON, unchanged, and always the line's last field. `path` is where the file sits in the tracker's folder; the file there is that JSON followed by a newline, and `sha256` is the sha256 of that file. The same version is at `lists/<id>/<sha256>.json`. `id` is the endpoint whose record names the file. A few lists belong to endpoints no record names any more (they left the registry, or are no longer checked); they are kept too, with `id` taken from the end of the file's name.
 
 ## How to read the latest scan
 
@@ -112,6 +115,15 @@ A local build can use a folder written by `node src/radar-cli.ts publish --to-fo
 
 ## Privacy
 
-Only public data is published. Servers that need a sign-in are tracked privately, and nothing about them is ever uploaded. The uploader refuses a whole scan that holds any endpoint record, feed entry, `servers.json` row, tool list or `watched/` file of such a server. It also refuses a file with fields this layout does not know, and `servers.json` or `lookup.json` rows that are not endpoints of the same scan. The tests check each case. Layout 1 publishes no server watched with a sign-in at all.
+Only public data is published:
+- **Servers that need a sign-in are tracked privately,** and nothing about them is ever uploaded. Layout 1 publishes no server watched with a sign-in at all.
+- **Sites whose terms forbid publishing about them are kept off:** no address on them is checked, kept or published.
 
-Scans taken from the data branch's history have those servers' records removed first: before 24 October 2026 the branch also held servers now tracked privately. The totals in those days' `feed.json` never counted them.
+The uploader refuses a whole scan that holds any endpoint record, feed entry, `servers.json` row, tool list or `watched/` file of such a server, or a `hosts.json` host on a kept-off site. It also refuses:
+- a file with fields this layout does not know;
+- `servers.json` rows that are not endpoints of the same scan;
+- a `lookup.json` that is not the lookup of its `servers.json`.
+
+The tests check each case.
+
+Scans taken from the data branch's history have those records removed first. Before 24 October 2026 the branch also held servers now tracked privately, and from 16 to 23 October endpoints on kept-off sites. The totals in those days' `feed.json` never counted the servers tracked privately.

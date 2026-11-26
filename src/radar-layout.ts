@@ -1,5 +1,9 @@
+import { isDeepStrictEqual } from "node:util";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { sha256 } from "./manifest.ts";
+import { keptOffSites } from "./track.ts";
+import { lookupOf, siteOf } from "./tracker.ts";
+import type { FeedServer } from "./tracker.ts";
 
 /**
  * Where Radar's history lives in object storage (the `radar` bucket, served at https://data.stackduke.com), and
@@ -96,6 +100,22 @@ export function isPrivateRecord(record: unknown): boolean {
   return signedIn !== undefined || (typeof id === "string" && id.startsWith("signed-in-"));
 }
 
+const keptOff = keptOffSites();
+/**
+ * Whether an address is on the site of a vendor whose terms forbid publishing about it (`forbidden` in the
+ * catalog, the tracker's keptOffSites). The tracker never checks or keeps such an address; this is the uploader's
+ * own check, so a slip in the tracker still cannot publish one.
+ */
+export function isKeptOff(url: unknown, sites: ReadonlySet<string> = keptOff): boolean {
+  if (typeof url !== "string") return false;
+  try { return sites.has(siteOf(url)); } catch { return false; }
+}
+/** The host in a list file's name (lists/ab/<host>-<id>.json), as an address. */
+export const listFileUrl = (listPath: string) => {
+  const host = /^lists\/[^/]+\/(.+)-[^-/]+\.json$/.exec(listPath)?.[1];
+  return host ? `https://${host}/` : undefined;
+};
+
 export type ScanSource =
   | { kind: "track"; scanStartedAt: string; scannerCommit: string; methodVersion?: string; run?: { id: string; attempt: string; repository: string } }
   | { kind: "data-branch"; commit: string; committedAt: string; scanStartedAt?: string };
@@ -162,6 +182,7 @@ function parseJson(name: string, bytes: Buffer): unknown {
 }
 
 const refused = (where: string) => new PrivateDataError(`Refused: ${where} holds data about a server tracked privately. Nothing from such a server may reach the public bucket, so nothing was planned.`);
+const keptOffRefused = (where: string) => new PrivateDataError(`Refused: ${where} holds data about a site whose terms forbid publishing about it. Nothing about such a site may reach the public bucket, so nothing was planned.`);
 
 /** Builds everything one scan becomes in the bucket, or throws before anything is written. */
 export function planScan(input: ScanInput): ScanPlan {
@@ -172,7 +193,7 @@ export function planScan(input: ScanInput): ScanPlan {
   if (!endpointsText) throw new Error("The scan has no endpoints.jsonl.");
   /** Each public endpoint's list file, to the endpoint's id. */
   const listOwner = new Map<string, string>();
-  const endpointIds = new Set<string>(), endpointUrls = new Set<string>();
+  const endpointIds = new Set<string>();
   endpointsText.toString("utf8").split("\n").forEach((line, index) => {
     if (!line.trim()) return;
     const record = parseJson(`endpoints.jsonl line ${index + 1}`, Buffer.from(line));
@@ -180,7 +201,7 @@ export function planScan(input: ScanInput): ScanPlan {
     const { id: endpointId, url, file } = (record ?? {}) as { id?: unknown; url?: unknown; file?: unknown };
     if (typeof endpointId !== "string") throw new Error(`endpoints.jsonl line ${index + 1} has no id.`);
     endpointIds.add(endpointId);
-    if (typeof url === "string") endpointUrls.add(url);
+    if (isKeptOff(url)) throw keptOffRefused(`endpoints.jsonl line ${index + 1}`);
     if (typeof file === "string") listOwner.set(file, endpointId);
   });
 
@@ -199,28 +220,27 @@ export function planScan(input: ScanInput): ScanPlan {
   for (const field of ["watched", "changes"] as const) {
     const entries = feed?.[field];
     if (Array.isArray(entries) && entries.some((entry) => isPrivateRecord(entry))) throw refused(`feed.json (${field})`);
+    if (Array.isArray(entries) && entries.some((entry) => isKeptOff((entry as { url?: unknown })?.url))) throw keptOffRefused(`feed.json (${field})`);
   }
   const servers = input.files.get("servers.json");
-  if (servers) {
-    const rows = parseJson("servers.json", servers);
-    if (!Array.isArray(rows)) throw new Error("servers.json is not a list.");
-    rows.forEach((row, index) => {
-      if (isPrivateRecord(row)) throw refused("servers.json");
-      if (!endpointIds.has((row as { id?: unknown })?.id as string)) throw new Error(`servers.json row ${index + 1} is not an endpoint of this scan.`);
-    });
-  }
-  const lookupRows = (parsedTop.get("lookup.json") as { rows?: unknown } | undefined)?.rows;
-  if (lookupRows !== undefined) {
-    if (!Array.isArray(lookupRows)) throw new Error("lookup.json rows is not a list.");
-    lookupRows.forEach((row, index) => {
-      if (!Array.isArray(row) || !endpointUrls.has(row[1] as string)) throw new Error(`lookup.json row ${index + 1} is not an endpoint of this scan.`);
-    });
+  const serverRows = servers ? parseJson("servers.json", servers) : [];
+  if (!Array.isArray(serverRows)) throw new Error("servers.json is not a list.");
+  serverRows.forEach((row, index) => {
+    if (isPrivateRecord(row)) throw refused("servers.json");
+    if (!endpointIds.has((row as { id?: unknown })?.id as string)) throw new Error(`servers.json row ${index + 1} is not an endpoint of this scan.`);
+  });
+  // lookup.json is made from servers.json alone (tracker.ts, lookupOf), so it must be exactly that.
+  const lookup = parsedTop.get("lookup.json") as { rows?: unknown } | undefined;
+  if (lookup) {
+    const expected = (() => { try { return lookupOf(serverRows as FeedServer[]); } catch { return null; } })();
+    if (!servers || !isDeepStrictEqual(lookup.rows, expected)) throw new Error("lookup.json is not the lookup of this scan's servers.json, so nothing was planned.");
   }
   // hosts.json names hosts the public crawl spent its time on; each entry holds two counters and nothing else.
   const hosts = (parsedTop.get("hosts.json") as { hosts?: unknown } | undefined)?.hosts;
   if (parsedTop.has("hosts.json") && (!isObject(hosts) || Object.values(hosts).some((entry) => !isObject(entry) || Object.keys(entry).some((field) => field !== "overBudgetRuns" && field !== "lastOverBudget")))) {
     throw new Error(`hosts.json has fields layout ${layoutVersion} does not know, so nothing was planned.`);
   }
+  if (isObject(hosts) && Object.keys(hosts).some((host) => isKeptOff(`https://${host}/`))) throw keptOffRefused("hosts.json");
 
   // Every current list, in one file a reader can take whole, and each version first seen here on its own.
   const bundle: string[] = [];
@@ -228,6 +248,8 @@ export function planScan(input: ScanInput): ScanPlan {
   const written: string[] = [];
   let orphanLists = 0, leftOutLists = 0;
   for (const [listPath, bytes] of [...input.lists].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    // By the host in its name, and by the address it says it was read from.
+    if (isKeptOff(listFileUrl(listPath)) || isKeptOff((() => { try { return (JSON.parse(bytes.toString("utf8")) as { source?: unknown })?.source; } catch { return undefined; } })())) throw keptOffRefused("a tool list");
     if (listPath.includes("signed-in-") && !listOwner.has(listPath)) throw refused(listPath.slice(0, listPath.lastIndexOf("/") + 1));
     // A list no endpoint names (its endpoint left the registry, or was kept off) is still public: it is kept
     // under the id in its file name, which the tracker derives from the endpoint's address.
@@ -294,6 +316,11 @@ export interface Pointer {
   /** The newest scan's scan.json. */
   record: string;
   scans: string[];
+  /**
+   * Scans taken back by hand (a bad scan): never current again and not in `scans`, though their files stay.
+   * Every upload keeps this list as it found it.
+   */
+  withdrawn: string[];
   updatedAt: string;
 }
 
@@ -303,17 +330,23 @@ export function readPointer(bytes: Buffer | null): Pointer | null {
   let value: unknown;
   try { value = JSON.parse(bytes.toString("utf8")); } catch { throw new Error(`${pointerKey} in the bucket is not valid JSON; it was left alone and nothing was uploaded.`); }
   const pointer = value as Partial<Pointer>;
-  if (pointer?.layout !== layoutVersion || typeof pointer.scan !== "string" || !Array.isArray(pointer.scans) || !pointer.scans.every((id) => typeof id === "string" && scanIdPattern.test(id))) {
+  const ids = (list: unknown) => Array.isArray(list) && list.every((id) => typeof id === "string" && scanIdPattern.test(id));
+  if (pointer?.layout !== layoutVersion || typeof pointer.scan !== "string" || !ids(pointer.scans) || !(pointer.withdrawn === undefined || ids(pointer.withdrawn))) {
     throw new Error(`${pointerKey} in the bucket is not a layout ${layoutVersion} pointer; it was left alone and nothing was uploaded.`);
   }
-  return pointer as Pointer;
+  return { ...pointer, withdrawn: pointer.withdrawn ?? [] } as Pointer;
 }
 
-/** The pointer once this scan is in: it moves to the scan only if no newer scan is there already, and the scan is listed either way. */
+/**
+ * The pointer once this scan is in: it moves to the scan only if no newer scan is there already, and the scan is
+ * listed either way. A withdrawn scan is never listed or made current again.
+ */
 export function nextPointer(previous: Pointer | null, id: string, updatedAt: string): Pointer {
-  const scans = [...new Set([id, ...(previous?.scans ?? [])])].sort().reverse();
+  const withdrawn = previous?.withdrawn ?? [];
+  if (withdrawn.includes(id)) throw new Error(`Scan ${id} was withdrawn from ${pointerKey}, so it is not published again.`);
+  const scans = [...new Set([id, ...(previous?.scans ?? [])])].filter((scan) => !withdrawn.includes(scan)).sort().reverse();
   const scan = scans[0] as string;
-  return { layout: layoutVersion, scan, record: scanKey(scan, "scan.json"), scans, updatedAt };
+  return { layout: layoutVersion, scan, record: scanKey(scan, "scan.json"), scans, withdrawn, updatedAt };
 }
 
 export const pointerObject = (pointer: Pointer) => planned(pointerKey, Buffer.from(`${JSON.stringify(pointer, null, 2)}\n`));
