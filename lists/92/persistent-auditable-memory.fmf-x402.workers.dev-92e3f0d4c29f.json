@@ -1,0 +1,1 @@
+{"source":"https://persistent-auditable-memory.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:46.026Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-persistent-auditable-memory","version":"1.0.0"},"tools":[{"name":"persistent-auditable-memory","kind":"destructive","fields":{"title":"f39d34f288f98d7f","description":"0ee34b0217baa172","inputSchema":"b04a7fa25907ed50"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://internal-gateway.isgw-ops.workers.dev/mcp","takenAt":"2026-11-26T14:22:31.070Z","methodVersion":"1.1.0","server":{"name":"internal-systems-gateway","version":"1.4.2"},"tools":[{"name":"request_access","kind":"write","fields":{"description":"f78c6015a39f9a98","inputSchema":"c3506e51f4b7a154"}}]}

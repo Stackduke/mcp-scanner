@@ -1,0 +1,1 @@
+{"source":"https://source-freshness-checker.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:48.471Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-source-freshness-checker","version":"1.0.0"},"tools":[{"name":"source-freshness-checker","kind":"unclear","fields":{"title":"76eb231776d33edc","description":"d8a5684c193989d7","inputSchema":"ace5fba6af0b3cd8"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://agent-honeypot.honeytesting.workers.dev/mcp","takenAt":"2026-11-26T14:22:07.960Z","methodVersion":"1.1.0","server":{"name":"agent-honeypot","version":"1.0.0"},"tools":[{"name":"server_time","kind":"unclear","fields":{"description":"51c1fa2cd61ce1a5","inputSchema":"efddc7bd8bbcef73"}}]}

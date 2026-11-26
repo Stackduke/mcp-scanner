@@ -1,0 +1,1 @@
+{"source":"https://retry-budget-guard.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:47.131Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-retry-budget-guard","version":"1.0.0"},"tools":[{"name":"retry-budget-guard","kind":"destructive","fields":{"title":"944beb4c5d147c22","description":"db3696e09f9808a5","inputSchema":"ace8a7faff2e53e2"}}]}

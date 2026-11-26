@@ -1,0 +1,1 @@
+{"source":"https://claim-quote-checker.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:20.949Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-claim-quote-checker","version":"1.0.0"},"tools":[{"name":"claim-quote-checker","kind":"write","fields":{"title":"b6ca83e412ca9324","description":"661d5c2cf36157b8","inputSchema":"d98ec659226c1efa"}}]}

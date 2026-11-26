@@ -1,0 +1,1 @@
+{"source":"https://must-fail-fixture-replay.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:43.522Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-must-fail-fixture-replay","version":"1.0.0"},"tools":[{"name":"must-fail-fixture-replay","kind":"write","fields":{"title":"acca5e27fca11d33","description":"5c9e3ccb4014716d","inputSchema":"013cc75e8c2ecc23"}}]}

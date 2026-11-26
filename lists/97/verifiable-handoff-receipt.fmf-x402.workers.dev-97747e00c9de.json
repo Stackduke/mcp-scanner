@@ -1,0 +1,1 @@
+{"source":"https://verifiable-handoff-receipt.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:52.468Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-verifiable-handoff-receipt","version":"1.0.0"},"tools":[{"name":"verifiable-handoff-receipt","kind":"unclear","fields":{"title":"c552768884e8fcfa","description":"1f6c6909722eaa63","inputSchema":"e924e82a017e1d44"}}]}

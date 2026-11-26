@@ -1,0 +1,1 @@
+{"source":"https://http-failure-classifier.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:30.374Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-http-failure-classifier","version":"1.0.0"},"tools":[{"name":"http-failure-classifier","kind":"write","fields":{"title":"45221a0eab3928b9","description":"c444d0c1a228b0f4","inputSchema":"1a60dd99544c4455"}}]}

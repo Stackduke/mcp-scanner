@@ -1,0 +1,1 @@
+{"source":"https://webhook-delivery-receipt.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:53.472Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-webhook-delivery-receipt","version":"1.0.0"},"tools":[{"name":"webhook-delivery-receipt","kind":"unclear","fields":{"title":"752b2e8edd017992","description":"e0542233e0fb8fe2","inputSchema":"49d174f975412b68"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://api.kapshur.co/mcp/public","takenAt":"2026-11-26T14:28:22.688Z","methodVersion":"1.1.0","server":{"name":"kapshur-public","version":"1.0.0"},"tools":[{"name":"check_link_in_bio","kind":"read","fields":{"title":"b6bf45c6b80febef","description":"21f55505bd8a0490","inputSchema":"2da13173bfe4e378","annotations":"85e049cc8219e29b"}}]}

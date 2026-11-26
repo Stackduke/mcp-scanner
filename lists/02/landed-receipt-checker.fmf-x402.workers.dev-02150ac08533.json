@@ -1,0 +1,1 @@
+{"source":"https://landed-receipt-checker.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:32.784Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-landed-receipt-checker","version":"1.0.0"},"tools":[{"name":"landed-receipt-checker","kind":"write","fields":{"title":"c5ea99ff929b2433","description":"a6f506eee4919d1b","inputSchema":"fe74aa824cddb6eb"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://consent-revocation-checker.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:22.139Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-consent-revocation-checker","version":"1.0.0"},"tools":[{"name":"consent-revocation-checker","kind":"destructive","fields":{"title":"4d24507d12446488","description":"d95b49039ddafe56","inputSchema":"45e1911632151427"}}]}

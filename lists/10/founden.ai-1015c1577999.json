@@ -1,0 +1,1 @@
+{"source":"https://founden.ai/v1/founden/mcp","takenAt":"2026-11-26T14:22:27.889Z","methodVersion":"1.1.0","server":{"name":"founden","version":"1.0.0"},"tools":[{"name":"sketch_company","kind":"read","fields":{"title":"23a2bb1bd5a3392c","description":"6948c0016c2fc20e","inputSchema":"6403152486ae52da","outputSchema":"80d4be22d79366e7","annotations":"a9b77c5d8a0419c6"}}]}

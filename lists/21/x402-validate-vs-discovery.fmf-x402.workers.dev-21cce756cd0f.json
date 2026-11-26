@@ -1,0 +1,1 @@
+{"source":"https://x402-validate-vs-discovery.fmf-x402.workers.dev/mcp","takenAt":"2026-11-26T14:22:56.944Z","methodVersion":"1.1.0","server":{"name":"fmf-mpp-x402-validate-vs-discovery","version":"1.0.0"},"tools":[{"name":"x402-validate-vs-discovery","kind":"read","fields":{"title":"4b3896d48f4cbdc9","description":"7a9c9f884313f91c","inputSchema":"972cbb2eab25d0b6"}}]}
