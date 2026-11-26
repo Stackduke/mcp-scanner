@@ -28,7 +28,7 @@ import { describeReview, review } from "./review.ts";
 import { notice } from "./notice.ts";
 import { takeSnapshot } from "./snapshot.ts";
 import { track } from "./track.ts";
-import { describeVerification, verifyManifest } from "./manifest.ts";
+import { checkBeforeSigning, describeVerification, verifyManifest } from "./manifest.ts";
 import { describeWatch, describeWatchfileProblem, exitCode, readWatchfile, runWatch, serverAddress, tokenVariablePattern, updateWatch, watchfileName, writeWatchfile } from "./watch.ts";
 import type { WatchedServer, Watchfile } from "./watch.ts";
 import { snapshotFromRepository } from "./sources/github-snapshots.ts";
@@ -62,11 +62,16 @@ const usage = `Usage:
                                                     due, and write the data folder and the feed. Options, each at most once:
                                                     --data=tracker-data --budget-minutes=45 --max-checks=30000 --per-host=30 --per-site=150
                                                     --concurrency=48 --host-gap-ms=1000 --skip-registry
-  npm run scan -- verify-manifest [--data=tracker-data] [--repo=owner/name] [--hashes-only]
+  npm run scan -- verify-manifest [--data=tracker-data] [--repo=owner/name] [--hashes-only] [--this-scan-only]
                                                     Check a checkout of the tracker's data branch against its manifest.json:
-                                                    every file the scan wrote has the sha256 listed, and manifest.sigstore.json
-                                                    is a valid signature by the repository's Track workflow on main (needs
-                                                    cosign). Default repository: Stackduke/mcp-scanner. See docs/verify-a-scan.md.
+                                                    every file in it is as the scan left it, the scan started from the previous
+                                                    signed scan, and manifest.sigstore.json is a valid signature by the
+                                                    repository's Track workflow on main (needs cosign). --this-scan-only leaves
+                                                    out the start check. Default repository: Stackduke/mcp-scanner.
+                                                    See docs/verify-a-scan.md for what a pass does and does not show.
+  npm run scan -- check-before-signing --data=<folder> --run-id=<id>
+                                                    The workflow's check before it signs a scan: the manifest is from this run,
+                                                    the folder matches it, and the data commit changed only what it lists.
   npm run scan -- review [--data=tracker-data] [--days=2]
                                                     Look again, live, at servers the tracker found new or changed, and print
                                                     what the text checks find. For a person; it writes nothing.
@@ -486,15 +491,25 @@ async function main(argv: string[]): Promise<number> {
   if (command === "verify-manifest" && !args.length) {
     const given = new Map<string, string>();
     for (const flag of flags) {
-      const match = /^--(data|repo)=(.+)$|^--(hashes-only)$/.exec(flag);
+      const match = /^--(data|repo)=(.+)$|^--(hashes-only|this-scan-only)$/.exec(flag);
       const name = match?.[1] ?? match?.[3];
-      if (!name || given.has(name) || (name === "repo" && !/^[\w.-]+\/[\w.-]+$/.test(match?.[2] ?? ""))) { console.error("verify-manifest takes --data=<folder>, --repo=owner/name and --hashes-only, each at most once."); return 2; }
+      if (!name || given.has(name) || (name === "repo" && !/^[\w.-]+\/[\w.-]+$/.test(match?.[2] ?? ""))) { console.error("verify-manifest takes --data=<folder>, --repo=owner/name, --hashes-only and --this-scan-only, each at most once."); return 2; }
       given.set(name, match?.[2] ?? "");
     }
-    const result = await verifyManifest(given.get("data") ?? "tracker-data", { ...(given.has("repo") ? { repository: given.get("repo") as string } : {}), hashesOnly: given.has("hashes-only") });
+    const result = await verifyManifest(given.get("data") ?? "tracker-data", { ...(given.has("repo") ? { repository: given.get("repo") as string } : {}), hashesOnly: given.has("hashes-only"), thisScanOnly: given.has("this-scan-only") });
     // Paths and cosign's output may come from a checkout someone else made: printed with control characters made visible.
     console.log(describeVerification(result).split("\n").map((line) => printable(line, 1000)).join("\n"));
     return result.ok ? 0 : 1;
+  }
+
+  if (command === "check-before-signing" && !args.length) {
+    const given = new Map([...flags].map((flag) => { const match = /^--(data|run-id)=(.+)$/.exec(flag); return [match?.[1] ?? flag, match?.[2] ?? ""] as const; }));
+    const data = given.get("data"), runId = given.get("run-id");
+    if (given.size !== flags.size || given.size !== 2 || !data || !runId) { console.error("check-before-signing takes --data=<folder> and --run-id=<id>, once each."); return 2; }
+    const problems = await checkBeforeSigning(data, runId);
+    for (const problem of problems) console.log(printable(`- ${problem}`, 1000));
+    console.log(problems.length ? "Not signing: the commit is not exactly what this scan wrote." : "The commit is exactly what this scan wrote.");
+    return problems.length ? 1 : 0;
   }
 
   if (command === "review" && !args.length) {

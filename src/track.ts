@@ -5,7 +5,8 @@ import type { AuthorityReport } from "./authority.ts";
 import { listTools, userAgent } from "./client.ts";
 import { crawl } from "./crawl.ts";
 import { readSnapshot, snapshotText, writeWhole } from "./files.ts";
-import { buildManifest, writeManifest } from "./manifest.ts";
+import { buildManifest, checkPrevious, writeManifest } from "./manifest.ts";
+import type { RunCosign } from "./manifest.ts";
 import { readRegistry } from "./registry.ts";
 import type { RegistryRead } from "./registry.ts";
 import { catalog, publicList } from "./catalog.ts";
@@ -56,6 +57,8 @@ export interface TrackOptions {
   privateDataDir?: string;
   /** The servers the page shows that answer with no sign-in. Default: catalog/tracker-public.json. */
   publicServers?: readonly PublicServer[];
+  /** For tests: what runs cosign when the folder the run starts from is checked against its signed manifest. */
+  cosign?: RunCosign;
 }
 
 export interface TrackSummary {
@@ -139,6 +142,9 @@ interface Store {
 
 const plainUrl = (url: string) => url.replace(/\/$/, "");
 
+/** The data folder's .gitattributes: every file is text with LF line endings, in the repository and in every checkout. */
+export const dataAttributes = "* text eol=lf\n";
+
 export async function track(options: TrackOptions): Promise<TrackSummary> {
   const { dataDir, environment, fetchImpl, log = () => undefined, privateDataDir } = options;
   const clock = options.now ?? (() => new Date());
@@ -148,6 +154,11 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   const written = new Set<string>();
   const writePublic = async (relative: string, text: string) => { await writeWhole(file(relative), text); written.add(relative); };
   const privateFile = (relative: string) => path.join(privateDataDir ?? "", relative);
+
+  // Before anything changes: is the folder exactly the previous scan's, as signed? The answer is signed with
+  // this scan's manifest, so a file changed between scans cannot quietly become part of this one.
+  const previous = await checkPrevious(dataDir, { ...(environment.GITHUB_REPOSITORY ? { repository: environment.GITHUB_REPOSITORY } : {}), ...(options.cosign ? { cosign: options.cosign } : {}) });
+  log(previous.verified ? "the data folder is exactly the previous scan's, as signed" : `the data folder is not exactly a signed scan's: ${previous.reason}`);
 
   const published = (vendor: string | undefined) => vendor !== undefined && signedInServers[vendor]?.publish === true;
   const all = await readEndpoints(file("endpoints.jsonl"));
@@ -325,8 +336,11 @@ export async function track(options: TrackOptions): Promise<TrackSummary> {
   await writePublic("feed.json", `${JSON.stringify(feed)}\n`);
   await writePublic("servers.json", `${JSON.stringify(servers)}\n`);
   await writePublic("lookup.json", `${JSON.stringify({ version: 1, generatedAt: feed.generatedAt, rows: lookupOf(servers) })}\n`);
+  // Every checkout keeps the files' line endings as committed (Git for Windows would otherwise turn them to
+  // CRLF), so their hashes match the manifest on every system. Written once, and again only if it changed.
+  if ((await readFile(file(".gitattributes"), "utf8").catch(() => null)) !== dataAttributes) await writePublic(".gitattributes", dataAttributes);
   // Last, so it covers everything above. The private folder has no manifest: its files are never published.
-  await writeManifest(dataDir, await buildManifest({ dataDir, written, scanStartedAt: startedAt, generatedAt: clock().toISOString(), registry, environment }));
+  await writeManifest(dataDir, await buildManifest({ dataDir, written, previous, scanStartedAt: startedAt, generatedAt: clock().toISOString(), registry, environment }));
 
   if (privateDataDir !== undefined) {
     const privateEndpoints = [...privateStore.watched.values()].sort(byId);

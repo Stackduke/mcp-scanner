@@ -4,11 +4,13 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { describeVerification, githubIssuer, readManifest, signerIdentity, verifyManifest } from "../src/manifest.ts";
+import { execFileSync } from "node:child_process";
+import { rm } from "node:fs/promises";
+import { checkBeforeSigning, describeVerification, folderDigest, githubIssuer, readManifest, readNameStatus, signerIdentity, unaccountedChanges, verifyManifest } from "../src/manifest.ts";
 import type { Manifest, RunCosign } from "../src/manifest.ts";
 import { methodVersion } from "../src/method.ts";
 import { takeSnapshot } from "../src/snapshot.ts";
-import { track } from "../src/track.ts";
+import { dataAttributes, track } from "../src/track.ts";
 import { changeBetween, printOf, readPrint } from "../src/tracker.ts";
 import type { Endpoint, Feed, ListPrint } from "../src/tracker.ts";
 import type { ToolDefinition } from "../src/types.ts";
@@ -31,9 +33,14 @@ function fakeNetwork(tools: () => ToolDefinition[]): typeof fetch {
   }) as typeof fetch;
 }
 
-async function run(dataDir: string, tools: () => ToolDefinition[], at: number) {
-  return track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], environment, fetchImpl: fakeNetwork(tools), now: () => new Date(at) });
+async function run(dataDir: string, tools: () => ToolDefinition[], at: number, cosign?: RunCosign) {
+  return track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], environment, fetchImpl: fakeNetwork(tools), now: () => new Date(at), ...(cosign ? { cosign } : {}) });
 }
+
+/** cosign as it answers a signature that verifies. */
+const verifies: RunCosign = async () => ({ code: 0, output: "Verified OK" });
+/** What the sign job does, as far as these tests need: a signature next to the manifest. */
+const sign = (dataDir: string) => writeFile(path.join(dataDir, "manifest.sigstore.json"), "{}");
 
 const readJson = async <T>(file: string) => JSON.parse(await readFile(file, "utf8")) as T;
 const day = 24 * 3_600_000;
@@ -51,16 +58,23 @@ test("each run writes a manifest with the full sha256 of every file it wrote, th
   assert.equal(manifest.scanStartedAt, now);
   assert.equal(manifest.registry.readAt, now, "the registry read time");
   assert.equal(manifest.registry.attemptOk, true);
+  assert.deepEqual(manifest.previous, { verified: false, reason: "no manifest" }, "the first scan had nothing signed to start from");
 
   // One endpoint, so endpoints.jsonl is one line of JSON.
   const listFile = (await readJson<Endpoint>(path.join(dataDir, "endpoints.jsonl"))).file as string;
-  assert.deepEqual(manifest.files.map((file) => file.path), ["endpoints.jsonl", "feed.json", listFile, "lookup.json", "registry.json", "servers.json"].sort());
+  assert.deepEqual(manifest.files.map((file) => file.path), [".gitattributes", "endpoints.jsonl", "feed.json", listFile, "lookup.json", "registry.json", "servers.json"].sort());
+  assert.equal(await readFile(path.join(dataDir, ".gitattributes"), "utf8"), "* text eol=lf\n");
+  assert.equal(dataAttributes, "* text eol=lf\n");
   for (const file of manifest.files) {
     const text = await readFile(path.join(dataDir, file.path), "utf8");
     assert.equal(file.sha256, sha256(text), `${file.path}: the full sha256 of what is on disk`);
     assert.equal(file.bytes, Buffer.byteLength(text));
   }
   assert.ok(!manifest.files.some((file) => file.path.startsWith("manifest")), "the manifest does not list itself or its signature");
+
+  // The folder's digest is what sha256sum gives, as docs/verify-a-scan.md says, so it can be checked by hand.
+  const byHand = execFileSync("bash", ["-c", "find . -path ./.git -prune -o -type f -print | sed 's|^\\./||' | grep -vxE 'manifest\\.json|manifest\\.sigstore\\.json' | LC_ALL=C sort | xargs -d '\\n' sha256sum | sha256sum | cut -d' ' -f1"], { cwd: dataDir, encoding: "utf8" }).trim();
+  assert.deepEqual(manifest.tree, { files: 7, sha256: byHand });
 });
 
 test("a run lists only the files it wrote: an unchanged tool list is not rewritten, so not listed", async () => {
@@ -110,9 +124,12 @@ test("files from before the method version keep working: an old list is read, an
   assert.deepEqual(endpoint?.changes[1], oldChange, "the old record is left as it was, with no method version");
 });
 
+/** A folder as the daily workflow leaves it: a signed scan, then the next scan, started from it. */
 async function scanned(): Promise<string> {
   const dataDir = await mkdtemp(path.join(tmpdir(), "manifest-"));
-  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now));
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now) - day);
+  await sign(dataDir);
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now), verifies);
   return dataDir;
 }
 
@@ -120,9 +137,9 @@ test("verify passes on the folder a scan wrote, and finds a file changed afterwa
   const dataDir = await scanned();
   const good = await verifyManifest(dataDir, { hashesOnly: true });
   assert.equal(good.ok, true, good.problems.join("; "));
-  assert.equal(good.matched, 6);
+  assert.equal(good.matched, 5);
   assert.equal(good.signature, "not checked");
-  assert.match(describeVerification(good), /Hashes OK\. The signature was not checked/);
+  assert.match(describeVerification(good), /Hashes OK: all 7 files match the manifest\. The signature was not checked/);
 
   const feedFile = path.join(dataDir, "feed.json");
   const feed = await readJson<Feed>(feedFile);
@@ -130,8 +147,8 @@ test("verify passes on the folder a scan wrote, and finds a file changed afterwa
   await writeFile(feedFile, `${JSON.stringify(feed)}\n`);
   const tampered = await verifyManifest(dataDir, { hashesOnly: true });
   assert.equal(tampered.ok, false);
-  assert.deepEqual(tampered.problems, ["feed.json: does not match its sha256 in the manifest"]);
-  assert.equal(tampered.matched, 5);
+  assert.deepEqual(tampered.problems, ["feed.json: does not match its sha256 in the manifest", "The folder does not match the manifest's digest of it (7 files here, 7 when the scan ended): a file was changed, added or removed since."]);
+  assert.equal(tampered.matched, 4);
   assert.match(describeVerification(tampered), /NOT VERIFIED/);
 });
 
@@ -193,8 +210,11 @@ test("a new manifest drops the previous scan's signature, which belonged to the 
 });
 
 test("a manifest is read with nothing taken on trust: no path may leave the data folder", () => {
-  const base = { version: 1, methodVersion: "1.0.0", scanner: { commit }, files: [] as unknown[] };
+  const base = { version: 1, methodVersion: "1.0.0", scanner: { commit }, previous: { verified: true }, tree: { files: 0, sha256: "b".repeat(64) }, files: [] as unknown[] };
   assert.equal(typeof readManifest(base), "object");
+  assert.equal(typeof readManifest({ ...base, tree: undefined }), "string", "a manifest must cover the whole folder");
+  assert.equal(typeof readManifest({ ...base, previous: undefined }), "string", "and say whether it started from a signed one");
+  assert.equal(typeof readManifest({ ...base, previous: { verified: false, reason: "lists/xx/a-vendor.json: missing" } }), "string", "in fixed words only");
   for (const bad of ["../outside.json", "/etc/passwd", "lists/../../x", "lists\\x", "lists//x", ""]) {
     assert.equal(typeof readManifest({ ...base, files: [{ path: bad, sha256: "a".repeat(64), bytes: 1 }] }), "string", bad);
   }
@@ -205,4 +225,116 @@ test("a manifest is read with nothing taken on trust: no path may leave the data
 test("docs/METHOD.md has an entry for the current method version", async () => {
   const method = await readFile(new URL("../docs/METHOD.md", import.meta.url), "utf8");
   assert.match(method, new RegExp(`^## ${methodVersion.replaceAll(".", "\\.")} `, "m"));
+});
+
+test("a file the latest scan did not write is still checked: changing, adding or removing any file fails, at HEAD", async () => {
+  const dataDir = await scanned();
+  const listFile = path.join(dataDir, (await readJson<Endpoint>(path.join(dataDir, "endpoints.jsonl"))).file as string);
+  const manifest = await readJson<Manifest>(path.join(dataDir, "manifest.json"));
+  assert.ok(!manifest.files.some((file) => listFile.endsWith(file.path)), "the latest scan did not write the list");
+  assert.equal((await verifyManifest(dataDir, { hashesOnly: true })).ok, true);
+
+  const list = await readFile(listFile, "utf8");
+  await writeFile(listFile, list.replace(/"takenAt":"[^"]+"/, '"takenAt":"2026-01-01T00:00:00.000Z"'));
+  const edited = await verifyManifest(dataDir, { hashesOnly: true });
+  assert.equal(edited.ok, false, "an edit to a file this scan did not write is caught");
+  assert.match(edited.problems.join(" "), /does not match the manifest's digest/);
+  await writeFile(listFile, list);
+  assert.equal((await verifyManifest(dataDir, { hashesOnly: true })).ok, true, "put back as it was, it passes again");
+
+  await writeFile(path.join(dataDir, "lists", "extra.json"), "{}\n");
+  assert.equal((await verifyManifest(dataDir, { hashesOnly: true })).ok, false, "an added file is caught");
+  await rm(path.join(dataDir, "lists", "extra.json"));
+  await rm(listFile);
+  assert.equal((await verifyManifest(dataDir, { hashesOnly: true })).ok, false, "a removed file is caught");
+});
+
+test("a file changed between two scans does not become part of what the next scan signs: that scan records it, signed", async () => {
+  const dataDir = await scanned();
+  await sign(dataDir);
+  const listFile = path.join(dataDir, (await readJson<Endpoint>(path.join(dataDir, "endpoints.jsonl"))).file as string);
+  const list = await readJson<ListPrint>(listFile);
+  // Someone with push access edits a list the next scan will not rewrite (its server's tools have not changed).
+  await writeFile(listFile, `${JSON.stringify({ ...list, takenAt: "2026-01-01T00:00:00.000Z", server: { name: "Someone else" } })}\n`);
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now) + day, verifies);
+  const manifest = await readJson<Manifest>(path.join(dataDir, "manifest.json"));
+  assert.equal(manifest.previous.verified, false);
+  assert.equal(manifest.previous.reason, "folder changed since that scan");
+  assert.equal(manifest.previous.run, "9876543210");
+
+  await sign(dataDir);
+  const atHead = await verifyManifest(dataDir, { cosign: verifies, now: new Date(Date.parse(now) + day) });
+  assert.equal(atHead.ok, false, "verify at HEAD does not say OK");
+  assert.equal(atHead.signature, "verified");
+  assert.match(describeVerification(atHead), /The scan started from a folder that was not exactly a signed scan's \(folder changed since that scan\)/);
+  // The workflow still publishes this scan's signature: its folder and signature are sound, and the next scan needs a signed start.
+  assert.equal((await verifyManifest(dataDir, { cosign: verifies, thisScanOnly: true })).ok, true);
+
+  // The next scan starts from that signed folder, unchanged, so it is clean again; the record above stays in history.
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now) + 2 * day, verifies);
+  assert.equal((await readJson<Manifest>(path.join(dataDir, "manifest.json"))).previous.verified, true);
+});
+
+test("the start check says why the folder was not a signed scan's, in fixed words", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "manifest-"));
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now) - day);
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now), verifies);
+  assert.equal((await readJson<Manifest>(path.join(dataDir, "manifest.json"))).previous.reason, "not signed");
+  await sign(dataDir);
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now) + day, async () => ({ code: 1, output: "Error: invalid signature" }));
+  assert.equal((await readJson<Manifest>(path.join(dataDir, "manifest.json"))).previous.reason, "signature did not verify");
+});
+
+test("the digest leaves out the manifest, its signature and .git, and refuses a link", async () => {
+  const dataDir = await scanned();
+  const before = await folderDigest(dataDir);
+  await mkdir(path.join(dataDir, ".git"));
+  await writeFile(path.join(dataDir, ".git", "HEAD"), "ref: refs/heads/data\n");
+  await writeFile(path.join(dataDir, "manifest.sigstore.json"), "{}");
+  assert.deepEqual(await folderDigest(dataDir), before);
+  execFileSync("ln", ["-s", "/etc/hostname", path.join(dataDir, "lists", "link.json")]);
+  const linked = await verifyManifest(dataDir, { hashesOnly: true });
+  assert.ok(linked.problems.includes("lists/link.json: not a plain file"));
+});
+
+test("a signed result says exactly what it shows and what it does not, and an old scan is pointed out", async () => {
+  const dataDir = await scanned();
+  await writeFile(path.join(dataDir, "manifest.sigstore.json"), "{}");
+  const fresh = await verifyManifest(dataDir, { cosign: async () => ({ code: 0, output: "Verified OK" }), now: new Date(Date.parse(now) + 3_600_000) });
+  const text = describeVerification(fresh);
+  assert.match(text, /OK: all 7 files in this folder are exactly as run 9876543210 of Stackduke\/mcp-scanner's Track workflow left them, at scanner commit 0123456789abcdef0123456789abcdef01234567, in the scan started 2026-11-26T04:17:00\.000Z\./);
+  assert.match(text, /Not shown: that this is the latest scan, that the code at that commit was reviewed, or that the scanner read each server correctly\./);
+  assert.doesNotMatch(text, /Note:/);
+
+  const old = await verifyManifest(dataDir, { cosign: async () => ({ code: 0, output: "Verified OK" }), now: new Date(Date.parse(now) + 5 * day) });
+  assert.equal(old.ok, true, "an old scan is still validly signed");
+  assert.match(describeVerification(old), /Note: This scan is 5 days old\. An older scan stays validly signed, so check that its date and run ID are the scan you expect/);
+});
+
+test("before signing, a scan's commit may change only what its manifest accounts for", () => {
+  const manifest = { files: [{ path: "feed.json" }, { path: "lists/ab/x.json" }] } as Manifest;
+  const changes = readNameStatus("M\0feed.json\0A\0lists/ab/x.json\0M\0manifest.json\0D\0manifest.sigstore.json\0D\0lists/cd/moved.json\0D\0watched/vendor.json\0");
+  assert.deepEqual(unaccountedChanges(manifest, changes), []);
+  const extra = readNameStatus("M\0lists/ef/other.json\0A\0notes.txt\0D\0README.md\0T\0feed.json\0");
+  assert.deepEqual(unaccountedChanges(manifest, extra), ["M lists/ef/other.json", "A notes.txt", "D README.md", "T feed.json"]);
+});
+
+test("the check before signing refuses another run's manifest and a commit with an unlisted change, using git itself", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "manifest-"));
+  const git = (...args: string[]) => execFileSync("git", ["-C", dataDir, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { encoding: "utf8" });
+  git("init", "-q");
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }], Date.parse(now) - day);
+  git("add", "-A"); git("commit", "-q", "-m", "first");
+  await run(dataDir, () => [{ name: "get_page", ...readOnly }, { name: "send_invoice" }], Date.parse(now));
+  git("add", "-A"); git("commit", "-q", "-m", "scan");
+  assert.deepEqual(await checkBeforeSigning(dataDir, "9876543210"), []);
+  assert.deepEqual(await checkBeforeSigning(dataDir, "1"), ["The manifest is from run 9876543210, not this run (1)."]);
+
+  // Something else rides along in the scan's commit: a file the scan never wrote, and the manifest edited to cover it.
+  await writeFile(path.join(dataDir, "README.md"), "changed\n");
+  const manifest = await readJson<Manifest>(path.join(dataDir, "manifest.json"));
+  manifest.tree = { files: (await folderDigest(dataDir)).files, sha256: (await folderDigest(dataDir)).sha256 };
+  await writeFile(path.join(dataDir, "manifest.json"), JSON.stringify(manifest));
+  git("add", "-A"); git("commit", "-q", "--amend", "-m", "scan");
+  assert.deepEqual(await checkBeforeSigning(dataDir, "9876543210"), ["The commit has a change the manifest does not account for: A README.md"]);
 });
