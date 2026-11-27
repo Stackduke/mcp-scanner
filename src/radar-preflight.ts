@@ -66,10 +66,11 @@ export async function preflight({ endpoint, bucket, credentials, expectLock = fa
   const current = await store.getPointer();
   const pointer = (at: Date) => pointerObject(nextPointer(readPointer(current?.body ?? null), id, at.toISOString()));
   check(await store.putPointer(pointer(now()), current?.etag ?? null), `latest.json is written ${current ? "with If-Match and its current ETag" : "with If-None-Match: * while there is none"}`);
-  const written = await store.getPointer();
+  // A weak ETag makes getPointer throw; the checks below still report what GET answered.
+  const written = await store.getPointer().catch((error: Error) => { if (error.message.includes("weak ETag")) return null; throw error; });
   const get = answer("GET", pointerKey);
   check(get?.headers.get("content-type") === "application/json" && get.headers.get("cache-control") === "public, max-age=60", `GET latest.json answers Content-Type application/json and Cache-Control "public, max-age=60" (got ${get?.headers.get("content-type") ?? "none"}; ${get?.headers.get("cache-control") ?? "none"})`);
-  check(/^"[^"]+"$/.test(written?.etag ?? ""), `GET latest.json answers a quoted ETag (got ${written?.etag ?? "none"})`);
+  check(/^"[^"]+"$/.test(written?.etag ?? ""), `GET latest.json answers a quoted ETag (got ${get?.headers.get("etag") ?? "none"}; Content-Encoding ${get?.headers.get("content-encoding") ?? "none"})`);
   check(!(await store.putPointer(pointer(new Date(now().getTime() + 1000)), null)) && answer("PUT", pointerKey)?.status === 412, "If-None-Match: * on latest.json, which is there now, answers 412");
   const stale = current?.etag ?? `"${"0".repeat(32)}"`;
   check(!(await store.putPointer(pointer(new Date(now().getTime() + 2000)), stale)) && answer("PUT", pointerKey)?.status === 412, "If-Match with a stale ETag answers 412");

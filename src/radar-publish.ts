@@ -176,11 +176,14 @@ export function s3Store({ endpoint, bucket, credentials, region = "auto", fetchI
       return true;
     },
     async getPointer() {
-      const response = await send("GET", pointerKey);
+      // fetch asks for gzip unless told otherwise, and Cloudflare makes the ETag of a compressed answer weak (W/"…").
+      // If-Match compares ETags strongly, so a weak one never matches: ask for the bytes as stored.
+      const response = await send("GET", pointerKey, undefined, { "accept-encoding": "identity" });
       if (response.status === 404) return null;
       if (!response.ok) throw await failed(`GET ${pointerKey}`, response);
       const etag = response.headers.get("etag");
       if (!etag) throw new Error(`GET ${pointerKey} answered without an ETag, so it cannot be replaced safely.`);
+      if (etag.startsWith("W/")) throw new Error(`GET ${pointerKey} answered a weak ETag (${etag.slice(0, 100)}), so it cannot be replaced safely.`);
       return { body: Buffer.from(await response.arrayBuffer()), etag };
     },
     async putPointer(object, expected) {
