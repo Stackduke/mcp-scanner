@@ -1,5 +1,5 @@
 import { nextPointer, planned, pointerKey, pointerObject, readPointer, scanIdOf, scanKey } from "./radar-layout.ts";
-import { encodeKey, s3Store } from "./radar-publish.ts";
+import { WeakEtagError, encodeKey, s3Store } from "./radar-publish.ts";
 import type { Credentials } from "./radar-publish.ts";
 
 /**
@@ -62,14 +62,24 @@ export async function preflight({ endpoint, bucket, credentials, expectLock = fa
   check(after?.headers.get("x-amz-meta-source-sha256") === first.sourceSha256 && after.headers.get("etag") === head?.headers.get("etag") && after.headers.get("content-length") === String(first.body.length),
     "the object is left as it was (same sha256 metadata, ETag and size)");
 
-  // 3. latest.json: replaced only while the version read is current.
-  const current = await store.getPointer();
+  // 3. latest.json: replaced only while the version read is current. A weak ETag makes getPointer throw; the
+  // checks still report what GET answered.
+  const readLatest = () => store.getPointer().catch((error: unknown) => { if (error instanceof WeakEtagError) return "weak" as const; throw error; });
+  const etagCheck = (passed: boolean) => {
+    const get = answer("GET", pointerKey);
+    check(passed, `GET latest.json answers a quoted ETag (got ${get?.headers.get("etag") ?? "none"}; Content-Encoding ${get?.headers.get("content-encoding") ?? "none"})`);
+  };
+  const read = await readLatest();
+  // latest.json is there from an earlier run, and cannot be read with an ETag that If-Match takes.
+  if (read === "weak") { etagCheck(false); return { ok, lines }; }
+  const current = read;
   const pointer = (at: Date) => pointerObject(nextPointer(readPointer(current?.body ?? null), id, at.toISOString()));
   check(await store.putPointer(pointer(now()), current?.etag ?? null), `latest.json is written ${current ? "with If-Match and its current ETag" : "with If-None-Match: * while there is none"}`);
-  const written = await store.getPointer();
+  const again = await readLatest();
+  const written = again === "weak" ? null : again;
   const get = answer("GET", pointerKey);
   check(get?.headers.get("content-type") === "application/json" && get.headers.get("cache-control") === "public, max-age=60", `GET latest.json answers Content-Type application/json and Cache-Control "public, max-age=60" (got ${get?.headers.get("content-type") ?? "none"}; ${get?.headers.get("cache-control") ?? "none"})`);
-  check(/^"[^"]+"$/.test(written?.etag ?? ""), `GET latest.json answers a quoted ETag (got ${written?.etag ?? "none"})`);
+  etagCheck(/^"[^"]+"$/.test(written?.etag ?? ""));
   check(!(await store.putPointer(pointer(new Date(now().getTime() + 1000)), null)) && answer("PUT", pointerKey)?.status === 412, "If-None-Match: * on latest.json, which is there now, answers 412");
   const stale = current?.etag ?? `"${"0".repeat(32)}"`;
   check(!(await store.putPointer(pointer(new Date(now().getTime() + 2000)), stale)) && answer("PUT", pointerKey)?.status === 412, "If-Match with a stale ETag answers 412");

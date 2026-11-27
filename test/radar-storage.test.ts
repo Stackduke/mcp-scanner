@@ -73,11 +73,11 @@ async function writeScan(dir: string, options: ScanOptions = {}): Promise<void> 
 }
 
 /** A local stand-in for R2's S3 API: checks each request's signature, and keeps objects in memory. */
-async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Promise<void>; locked?: boolean; bucket?: string; dropMetadata?: boolean; ignoreIfMatch?: boolean } = {}) {
+async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Promise<void>; locked?: boolean; bucket?: string; dropMetadata?: boolean; ignoreIfMatch?: boolean; weakEtag?: "when-compressed" | "always" } = {}) {
   const bucket = options.bucket ?? "radar";
   const objects = new Map<string, { body: Buffer; headers: Record<string, string> }>();
   let pointerPuts = 0;
-  const requests: Array<{ method: string; key: string }> = [];
+  const requests: Array<{ method: string; key: string; acceptEncoding?: string; signedHeaders?: string }> = [];
   const credentials = { accessKeyId: "test-key-id", secretAccessKey: "test-secret" };
   const server = createServer((request, response) => {
     const chunks: Buffer[] = [];
@@ -86,9 +86,9 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
       const body = Buffer.concat(chunks);
       const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
       const key = decodeURIComponent(url.pathname.slice(`/${bucket}/`.length));
-      requests.push({ method: request.method ?? "", key });
       // The signature is recomputed from what arrived: a header changed on the way, or the wrong body, fails it.
       const auth = /SignedHeaders=([^,]+), Signature=([0-9a-f]+)$/.exec(String(request.headers.authorization));
+      requests.push({ method: request.method ?? "", key, acceptEncoding: request.headers["accept-encoding"], signedHeaders: auth?.[1] });
       const names = (auth?.[1] ?? "").split(";").filter((name) => !["host", "x-amz-date", "x-amz-content-sha256"].includes(name));
       const amzDate = String(request.headers["x-amz-date"]);
       const date = new Date(`${amzDate.slice(0, 4)}-${amzDate.slice(4, 6)}-${amzDate.slice(6, 8)}T${amzDate.slice(9, 11)}:${amzDate.slice(11, 13)}:${amzDate.slice(13, 15)}Z`);
@@ -99,7 +99,11 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
       const stored = objects.get(key);
       if (request.method === "HEAD" || request.method === "GET") {
         if (!stored) { response.writeHead(404).end(); return; }
-        response.writeHead(200, { ...stored.headers, "content-length": String(stored.body.length) }).end(request.method === "GET" ? stored.body : undefined);
+        // As Cloudflare does in front of R2: a GET that accepts gzip gets the body compressed and its ETag made weak.
+        const gzip = request.method === "GET" && options.weakEtag !== undefined && /\bgzip\b/.test(String(request.headers["accept-encoding"] ?? ""));
+        const weak = gzip || (request.method === "GET" && options.weakEtag === "always");
+        const sent = gzip ? gzipSync(stored.body) : stored.body;
+        response.writeHead(200, { ...stored.headers, ...(weak ? { etag: `W/${stored.headers.etag}` } : {}), ...(gzip ? { "content-encoding": "gzip" } : {}), "content-length": String(sent.length) }).end(request.method === "GET" ? sent : undefined);
         return;
       }
       if (request.method === "PUT") {
@@ -622,6 +626,27 @@ test("the store's other answers are not taken for success", async () => {
   assert.deepEqual(await answer(200, "{}", { etag: "\"e\"" }).getPointer(), { body: Buffer.from("{}"), etag: "\"e\"" });
 });
 
+test("latest.json is read uncompressed, so its ETag stays strong and it can be replaced", async () => {
+  const s3 = await fakeS3({ weakEtag: "when-compressed" });
+  const pointer = (scan: string) => ({ key: "latest.json", body: Buffer.from(`${scan}\n`), contentType: "application/json", cacheControl: "public, max-age=60", sourceSha256: "", sourceBytes: 0 });
+  assert.equal(await s3.store.putPointer(pointer("a"), null), true);
+  const current = await s3.store.getPointer();
+  assert.deepEqual(current, { body: Buffer.from("a\n"), etag: s3.objects.get("latest.json")?.headers.etag });
+  assert.match(current?.etag ?? "", /^"[^"]+"$/);
+  const gets = s3.requests.filter((request) => request.method === "GET");
+  assert.deepEqual(gets.map((request) => request.acceptEncoding), ["identity"]);
+  // Sent but not signed: a proxy that rewrites Accept-Encoding cannot break the signature.
+  assert.ok(gets.every((request) => request.signedHeaders && !request.signedHeaders.split(";").includes("accept-encoding")), String(gets[0]?.signedHeaders));
+  assert.equal(await s3.store.putPointer(pointer("b"), current?.etag ?? null), true);
+  assert.equal(s3.objects.get("latest.json")?.body.toString(), "b\n");
+});
+
+test("a weak ETag on latest.json is refused, not passed on to If-Match", async () => {
+  const s3 = await fakeS3({ weakEtag: "always" });
+  s3.objects.set("latest.json", { body: Buffer.from("{}\n"), headers: { etag: "\"0\"" } });
+  await assert.rejects(s3.store.getPointer(), /answered a weak ETag \(W\/"0"\), so it cannot be replaced safely/);
+});
+
 test("a folder store replaces latest.json only if it is the version read", async () => {
   const out = await folder();
   const store = folderStore(out);
@@ -761,6 +786,24 @@ test("the pre-flight check passes against a store that behaves as the uploader n
   // Metadata dropped by the store, or If-Match ignored: each is caught.
   assert.match((await run({ dropMetadata: true })).lines.join("\n"), /FAILED: HEAD answers x-amz-meta-source-sha256/);
   assert.match((await run({ ignoreIfMatch: true })).lines.join("\n"), /FAILED: If-Match with a stale ETag answers 412/);
+  // The uploader reads latest.json uncompressed, so its ETag stays strong; a weak one is reported, not a crash.
+  const compressing = await run({ weakEtag: "when-compressed" });
+  assert.ok(compressing.ok, compressing.lines.join("\n"));
+  const weak = (await run({ weakEtag: "always" })).lines.join("\n");
+  assert.match(weak, /FAILED: GET latest\.json answers a quoted ETag \(got W\/"[0-9a-f]+"; Content-Encoding none\)/);
+  assert.match(weak, /FAILED: If-Match with the current ETag, as GET answered it, succeeds/);
+  // A bucket that already holds latest.json, from an earlier run: a weak ETag on the first read is reported too.
+  const holding: Parameters<typeof fakeS3>[0] = { bucket: "radar-preflight" };
+  const again = await fakeS3(holding);
+  const options = (hours: number) => ({ endpoint: again.endpoint, bucket: "radar-preflight", credentials: again.credentials, now: () => new Date(soon().getTime() + hours * 3_600_000) });
+  assert.ok((await preflight(options(0))).ok);
+  holding.weakEtag = "when-compressed";
+  const second = await preflight(options(1));
+  assert.ok(second.ok, second.lines.join("\n"));
+  holding.weakEtag = "always";
+  const third = await preflight(options(2));
+  assert.ok(!third.ok);
+  assert.match(third.lines.at(-1) as string, /^FAILED: GET latest\.json answers a quoted ETag \(got W\/"[0-9a-f]+"; Content-Encoding none\)$/);
   // It never runs against the real bucket.
   await assert.rejects(preflight({ endpoint: "https://example.com", bucket: "radar", credentials: { accessKeyId: "a", secretAccessKey: "b" } }), /never runs against the bucket radar/);
   let calls = 0;

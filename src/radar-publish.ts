@@ -101,6 +101,16 @@ export const encodeKey = (key: string) => key.split("/").map(encodeSegment).join
 
 export interface Credentials { accessKeyId: string; secretAccessKey: string }
 
+/** latest.json came with a weak ETag (W/"…"), which If-Match never matches, so it cannot be replaced safely. */
+export class WeakEtagError extends Error {
+  readonly etag: string;
+  constructor(etag: string) {
+    super(`GET ${pointerKey} answered a weak ETag (${etag.slice(0, 100)}), so it cannot be replaced safely.`);
+    this.name = "WeakEtagError";
+    this.etag = etag;
+  }
+}
+
 /**
  * Signs a request with AWS Signature Version 4, the scheme R2's S3 API takes. The URL's path must already be
  * encoded (encodeKey). Returns the headers to send: those given, x-amz-date, x-amz-content-sha256 and
@@ -143,12 +153,13 @@ export function s3Store({ endpoint, bucket, credentials, region = "auto", fetchI
   if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket)) throw new Error(`Not a bucket name: ${bucket}`);
   if (!credentials.accessKeyId || !credentials.secretAccessKey) throw new Error("No credentials for the bucket.");
 
-  async function send(method: string, key: string, body?: Buffer, headers: Record<string, string> = {}): Promise<Response> {
+  // unsigned: headers sent but left out of the signature, so a proxy that rewrites them cannot break it.
+  async function send(method: string, key: string, body?: Buffer, headers: Record<string, string> = {}, unsigned: Record<string, string> = {}): Promise<Response> {
     if (!isLayoutKey(key)) throw new Error(`Not a key of the layout: ${key}`);
     const url = new URL(`/${bucket}/${encodeKey(key)}`, base);
     const payload = body ?? Buffer.alloc(0);
     const signedHeaders = signV4({ method, url, headers, payloadHash: sha256(payload), credentials, region, service: "s3", date: now() });
-    return fetchImpl(url, { method, headers: signedHeaders, ...(body ? { body: new Uint8Array(body) } : {}), signal: AbortSignal.timeout(120_000) });
+    return fetchImpl(url, { method, headers: { ...unsigned, ...signedHeaders }, ...(body ? { body: new Uint8Array(body) } : {}), signal: AbortSignal.timeout(120_000) });
   }
   // The answer's text may be an error from the store; only its first line, cut short, reaches the log.
   const failed = async (what: string, response: Response) => new Error(`${what} answered ${response.status}: ${(await response.text().catch(() => "")).replace(/[^\x20-\x7e]+/g, " ").slice(0, 200)}`);
@@ -176,11 +187,14 @@ export function s3Store({ endpoint, bucket, credentials, region = "auto", fetchI
       return true;
     },
     async getPointer() {
-      const response = await send("GET", pointerKey);
+      // fetch asks for gzip unless told otherwise, and Cloudflare makes the ETag of a compressed answer weak (W/"…").
+      // If-Match compares ETags strongly, so a weak one never matches: ask for the bytes as stored.
+      const response = await send("GET", pointerKey, undefined, {}, { "accept-encoding": "identity" });
       if (response.status === 404) return null;
       if (!response.ok) throw await failed(`GET ${pointerKey}`, response);
       const etag = response.headers.get("etag");
       if (!etag) throw new Error(`GET ${pointerKey} answered without an ETag, so it cannot be replaced safely.`);
+      if (etag.startsWith("W/")) throw new WeakEtagError(etag);
       return { body: Buffer.from(await response.arrayBuffer()), etag };
     },
     async putPointer(object, expected) {
