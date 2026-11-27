@@ -145,24 +145,92 @@ export interface S3Options {
   region?: string;
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  retry?: RetryOptions;
 }
 
-export function s3Store({ endpoint, bucket, credentials, region = "auto", fetchImpl = fetch, now = () => new Date() }: S3Options): Store {
+/**
+ * How a request is asked again when the store is busy or briefly failing. Defaults: 8 attempts, waits drawn at
+ * random between 0 and 1 s, 2 s, 4 s ... (full jitter), never over 60 s; a Retry-After header, in seconds or as
+ * a date, is used instead when present, also capped at 60 s.
+ */
+export interface RetryOptions {
+  attempts?: number;
+  baseMs?: number;
+  capMs?: number;
+  /** For tests: the wait itself, and the random draw in [0, 1). */
+  sleep?: (ms: number) => Promise<void>;
+  random?: () => number;
+  /** One line per retry. Default: standard error. */
+  log?: (line: string) => void;
+}
+
+/** Answers worth asking again: rate limited (429), or the store failing for now (5xx). Any other 4xx is final. */
+const retryStatuses = new Set([429, 500, 502, 503, 504]);
+/** fetch throws a TypeError when the connection fails, and a TimeoutError when AbortSignal.timeout fires. */
+const isTransient = (error: unknown) => error instanceof TypeError || (error instanceof Error && error.name === "TimeoutError");
+/** The store's answer, cut to its first 200 printable characters: it may be an error, and it reaches the log. */
+const excerpt = async (response: Response) => (await response.text().catch(() => "")).replace(/[^\x20-\x7e]+/g, " ").slice(0, 200);
+
+/** How long to wait before the next attempt: the store's Retry-After if it gave one, otherwise full jitter. */
+function retryWait(retryAfter: string | null, attempt: number, now: Date, { baseMs, capMs, random }: { baseMs: number; capMs: number; random: () => number }): number {
+  const given = retryAfter?.trim();
+  if (given) {
+    const ms = /^\d+$/.test(given) ? Number(given) * 1000 : Date.parse(given) - now.getTime();
+    if (Number.isFinite(ms)) return Math.min(capMs, Math.max(0, ms));
+  }
+  return Math.floor(random() * Math.min(capMs, baseMs * 2 ** (attempt - 1)));
+}
+
+export function s3Store({ endpoint, bucket, credentials, region = "auto", fetchImpl = fetch, now = () => new Date(), retry = {} }: S3Options): Store {
+  const { attempts = 8, baseMs = 1000, capMs = 60_000, sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)), random = Math.random, log = (line: string) => console.error(line) } = retry;
   const base = new URL(endpoint);
   if (!(base.protocol === "https:" || (base.protocol === "http:" && base.hostname === "127.0.0.1")) || base.pathname !== "/" || base.search) throw new Error("The endpoint must be an https origin, such as https://<account id>.r2.cloudflarestorage.com.");
   if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket)) throw new Error(`Not a bucket name: ${bucket}`);
   if (!credentials.accessKeyId || !credentials.secretAccessKey) throw new Error("No credentials for the bucket.");
 
+  /**
+   * Sends one request, and sends it again (re-signed) while the store answers 429 or 5xx or the connection fails,
+   * up to `attempts` times. Every request this store makes is safe to repeat:
+   * - HEAD and GET change nothing.
+   * - putNew is create-only (If-None-Match: *). If an attempt that seemed to fail had in fact landed, the next
+   *   answers 412 (409 ObjectLockedByBucketPolicy under the bucket lock), putNew returns false, and publish()
+   *   HEADs the key and goes on only if the sha256 there is this object's; any other content stops the run.
+   * - putPointer is conditional too (If-Match with the ETag read, or If-None-Match: *). If our write landed but
+   *   its answer was lost, the next attempt answers 412 and putPointer returns false; publish() then reads
+   *   latest.json again, finds our own write there, and replaces it, under its new ETag, with the same scan list.
+   * No other PUT is made, and no other 4xx is retried: those are answers about the request, not the store's load.
+   * The last answer is turned into an error here, so callers see only final answers.
+   */
   // unsigned: headers sent but left out of the signature, so a proxy that rewrites them cannot break it.
   async function send(method: string, key: string, body?: Buffer, headers: Record<string, string> = {}, unsigned: Record<string, string> = {}): Promise<Response> {
     if (!isLayoutKey(key)) throw new Error(`Not a key of the layout: ${key}`);
     const url = new URL(`/${bucket}/${encodeKey(key)}`, base);
-    const payload = body ?? Buffer.alloc(0);
-    const signedHeaders = signV4({ method, url, headers, payloadHash: sha256(payload), credentials, region, service: "s3", date: now() });
-    return fetchImpl(url, { method, headers: { ...unsigned, ...signedHeaders }, ...(body ? { body: new Uint8Array(body) } : {}), signal: AbortSignal.timeout(120_000) });
+    const payloadHash = sha256(body ?? Buffer.alloc(0));
+    for (let attempt = 1; ; attempt += 1) {
+      const signedHeaders = signV4({ method, url, headers, payloadHash, credentials, region, service: "s3", date: now() });
+      let response: Response | undefined, error: unknown;
+      try {
+        response = await fetchImpl(url, { method, headers: { ...unsigned, ...signedHeaders }, ...(body ? { body: new Uint8Array(body) } : {}), signal: AbortSignal.timeout(120_000) });
+      } catch (caught) {
+        if (!isTransient(caught)) throw caught;
+        error = caught;
+      }
+      if (response && !retryStatuses.has(response.status)) return response;
+      const cause = error instanceof Error ? `${error.name}: ${error.message}${typeof (error.cause as { code?: unknown } | undefined)?.code === "string" ? ` (${(error.cause as { code: string }).code})` : ""}` : "";
+      if (attempt >= attempts) {
+        if (response) {
+          const text = await excerpt(response);
+          throw new Error(`${method} ${key} answered ${response.status} on each of ${attempts} attempts, so the run stopped${text ? `: ${text}` : "."}`);
+        }
+        throw new Error(`${method} ${key} failed on each of ${attempts} attempts (${cause}), so the run stopped.`, { cause: error });
+      }
+      const wait = retryWait(response?.headers.get("retry-after") ?? null, attempt, now(), { baseMs, capMs, random });
+      await response?.body?.cancel().catch(() => undefined);
+      log(`${method} ${key} ${response ? `answered ${response.status}` : `failed (${cause})`}; attempt ${attempt} of ${attempts}, trying again in ${(wait / 1000).toFixed(1)} s.`);
+      await sleep(wait);
+    }
   }
-  // The answer's text may be an error from the store; only its first line, cut short, reaches the log.
-  const failed = async (what: string, response: Response) => new Error(`${what} answered ${response.status}: ${(await response.text().catch(() => "")).replace(/[^\x20-\x7e]+/g, " ").slice(0, 200)}`);
+  const failed = async (what: string, response: Response) => new Error(`${what} answered ${response.status}: ${await excerpt(response)}`);
 
   const put = (object: PlannedObject, condition: Record<string, string>) => send("PUT", object.key, object.body, {
     "content-type": object.contentType, "cache-control": object.cacheControl, [shaHeader]: object.sourceSha256, ...condition,

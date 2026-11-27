@@ -72,8 +72,14 @@ async function writeScan(dir: string, options: ScanOptions = {}): Promise<void> 
   }));
 }
 
+/**
+ * A trouble the fake store makes for one request: answer `status` instead of handling it, or, with `landed`,
+ * handle a PUT (store the object) and then answer `status` as if it had failed.
+ */
+interface Fault { status: number; headers?: Record<string, string>; landed?: boolean }
+
 /** A local stand-in for R2's S3 API: checks each request's signature, and keeps objects in memory. */
-async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Promise<void>; locked?: boolean; bucket?: string; dropMetadata?: boolean; ignoreIfMatch?: boolean; weakEtag?: "when-compressed" | "always" } = {}) {
+async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Promise<void>; locked?: boolean; bucket?: string; dropMetadata?: boolean; ignoreIfMatch?: boolean; weakEtag?: "when-compressed" | "always"; fault?: (method: string, key: string) => Fault | undefined } = {}) {
   const bucket = options.bucket ?? "radar";
   const objects = new Map<string, { body: Buffer; headers: Record<string, string> }>();
   let pointerPuts = 0;
@@ -96,6 +102,8 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
       if (!url.pathname.startsWith(`/${bucket}/`) || request.headers["x-amz-content-sha256"] !== sha(body) || expected.authorization !== request.headers.authorization) { response.writeHead(403).end("SignatureDoesNotMatch"); return; }
       // Another run's turn, between this run's last read of latest.json and its write (the first time only).
       if (request.method === "PUT" && key === "latest.json" && (pointerPuts += 1) === 1) await options.beforePointerPut?.();
+      const fault = options.fault?.(request.method ?? "", key);
+      if (fault && !fault.landed) { response.writeHead(fault.status, fault.headers).end("<Error><Code>SlowDown</Code></Error>"); return; }
       const stored = objects.get(key);
       if (request.method === "HEAD" || request.method === "GET") {
         if (!stored) { response.writeHead(404).end(); return; }
@@ -116,7 +124,7 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
         const headers: Record<string, string> = { etag: `"${createHash("md5").update(body).digest("hex")}"` };
         for (const name of ["content-type", "cache-control", ...(options.dropMetadata ? [] : ["x-amz-meta-source-sha256"])]) if (request.headers[name]) headers[name] = String(request.headers[name]);
         objects.set(key, { body, headers });
-        response.writeHead(200).end();
+        response.writeHead(fault?.status ?? 200).end();
         return;
       }
       response.writeHead(405).end();
@@ -125,7 +133,10 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   after(() => server.close());
   const endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { objects, requests, endpoint, credentials, store: s3Store({ endpoint, bucket, credentials }) };
+  // Retries wait for nothing here; the waits and the log lines are kept for the tests to look at.
+  const waits: number[] = [], logs: string[] = [];
+  const retry = { sleep: async (ms: number) => { waits.push(ms); }, random: () => 0.5, log: (line: string) => logs.push(line) };
+  return { objects, requests, endpoint, credentials, waits, logs, retry, store: s3Store({ endpoint, bucket, credentials, retry }) };
 }
 
 test("SigV4 signs as AWS's published examples do", () => {
@@ -552,7 +563,7 @@ test("an error from the store reaches the log without the secret key", async () 
   const credentials = { accessKeyId: "test-key-id", secretAccessKey: "s3cr3t-value-never-logged" };
   // A store that answers with everything it was sent, headers included.
   const echo = (async (input: URL | string, init?: RequestInit) => new Response(`${String(input)} ${JSON.stringify(init?.headers)}`, { status: 500 })) as typeof fetch;
-  const store = s3Store({ endpoint: "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com", bucket: "radar", credentials, fetchImpl: echo });
+  const store = s3Store({ endpoint: "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com", bucket: "radar", credentials, fetchImpl: echo, retry: { sleep: async () => undefined, log: () => undefined } });
   const error = await store.getPointer().then(() => null, (caught: unknown) => caught as Error);
   assert.match(error?.message ?? "", /GET latest\.json answered 500/);
   assert.doesNotMatch(error?.message ?? "", /s3cr3t/);
@@ -815,4 +826,121 @@ test("the pre-flight check passes against a store that behaves as the uploader n
   const lines: string[] = [];
   assert.equal(await radarMain(["preflight", "--bucket=radar-preflight", `--endpoint=${s3.endpoint}`], { env: { R2_ACCESS_KEY_ID: "test-key-id", R2_SECRET_ACCESS_KEY: "test-secret" }, log: (line) => lines.push(line), now: soon }), 0);
   assert.match(lines.at(-1) as string, /Every check passed/);
+});
+
+// --- Retries: R2 answering 429 or 5xx, or the connection failing ---------------------------------------------
+
+/** Counts the requests per method and key, so a fault can pick the first, second ... of them. */
+function counter() {
+  const seen = new Map<string, number>();
+  return (method: string, key: string) => { const n = (seen.get(`${method} ${key}`) ?? 0) + 1; seen.set(`${method} ${key}`, n); return n; };
+}
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+async function retryPlan() {
+  const dir = await folder();
+  await writeScan(dir);
+  const plan = planScan(await scanInputFromFolder(dir));
+  return { plan, feedKey: `snapshots/${scanId}/feed.json`, listed: (plan.objects.find((object) => object.key.startsWith("lists/")) as { key: string }).key };
+}
+
+test("a 429 or 5xx is asked again after a wait: full jitter, or what Retry-After says, capped at 60 s", async () => {
+  const { plan, feedKey, listed } = await retryPlan();
+  const nth = counter();
+  const s3 = await fakeS3({ fault: (method, key) => {
+    const n = nth(method, key);
+    if (method === "HEAD" && key === listed && n <= 2) return { status: 429 };
+    if (method === "PUT" && key === feedKey && n === 1) return { status: 429, headers: { "retry-after": "3" } };
+    if (method === "PUT" && key === feedKey && n === 2) return { status: 503, headers: { "retry-after": "3600" } };
+    return undefined;
+  } });
+  const report = await publish(plan, s3.store);
+  assert.deepEqual([report.written, report.present], [plan.objects.length, 0]);
+  assert.equal(s3.requests.filter((request) => request.method === "HEAD" && request.key === listed).length, 3);
+  assert.equal(s3.requests.filter((request) => request.method === "PUT" && request.key === feedKey).length, 3);
+  // Jitter (drawn as 0.5 here) of 1 s then 2 s; then Retry-After: 3 s, and 3600 s cut to 60 s.
+  assert.deepEqual([...s3.waits].sort((a, b) => a - b), [500, 1000, 3000, 60_000]);
+  assert.ok(s3.logs.includes(`HEAD ${listed} answered 429; attempt 1 of 8, trying again in 0.5 s.`), s3.logs.join("\n"));
+  assert.ok(s3.logs.includes(`PUT ${feedKey} answered 503; attempt 2 of 8, trying again in 60.0 s.`), s3.logs.join("\n"));
+  // One short line each: no body from the store, no header, no key material.
+  assert.equal(s3.logs.length, 4);
+  assert.ok(s3.logs.every((line) => !/SlowDown|test-secret|test-key-id|authorization/i.test(line)), s3.logs.join("\n"));
+
+  // Retry-After as an HTTP date: the wait is the time until then, by the store's clock.
+  const dated = await fakeS3({ fault: (method, key) => method === "GET" && key === "latest.json" && nth(method, `dated ${key}`) === 1 ? { status: 429, headers: { "retry-after": "Fri, 27 Nov 2026 10:00:05 GMT" } } : undefined });
+  const store = s3Store({ endpoint: dated.endpoint, bucket: "radar", credentials: dated.credentials, retry: dated.retry, now: () => new Date("2026-11-27T10:00:00Z") });
+  assert.equal(await store.getPointer(), null);
+  assert.deepEqual(dated.waits, [5000]);
+});
+
+test("a PUT that landed but answered 503 is asked again, meets 412 (or the bucket lock), and is counted once", async () => {
+  for (const locked of [false, true]) {
+    const { plan, feedKey } = await retryPlan();
+    const nth = counter();
+    const s3 = await fakeS3({ locked, fault: (method, key) => method === "PUT" && key === feedKey && nth(method, key) === 1 ? { status: 503, landed: true } : undefined });
+    const report = await publish(plan, s3.store);
+    // Its own write is found by HEAD with the same sha256: there with this content, so counted as present.
+    assert.deepEqual([report.written, report.present], [plan.objects.length - 1, 1], `locked: ${locked}`);
+    assert.deepEqual(s3.requests.filter((request) => request.key === feedKey).map((request) => request.method), ["HEAD", "PUT", "PUT", "HEAD"]);
+    assert.deepEqual(s3.objects.get(feedKey)?.body, plan.objects.find((object) => object.key === feedKey)?.body);
+    assert.equal(JSON.parse(s3.objects.get("latest.json")?.body.toString("utf8") as string).scan, scanId);
+  }
+});
+
+test("a latest.json PUT that landed but answered 503 ends with latest.json right, not a false conflict", async () => {
+  const { plan } = await retryPlan();
+  const nth = counter();
+  const s3 = await fakeS3({ fault: (method, key) => method === "PUT" && key === "latest.json" && nth(method, key) === 1 ? { status: 503, landed: true } : undefined });
+  const report = await publish(plan, s3.store, { now: () => new Date("2026-11-25T15:00:00Z") });
+  const pointer = JSON.parse(s3.objects.get("latest.json")?.body.toString("utf8") as string);
+  assert.deepEqual(pointer, { layout: 1, scan: scanId, record: `scans/${scanId}/scan.json`, scans: [scanId], withdrawn: [], updatedAt: "2026-11-25T15:00:00.000Z" });
+  assert.deepEqual(report.pointer, pointer);
+  // The write landed, its retry met 412, latest.json was read again (our own write) and replaced under its ETag.
+  assert.deepEqual(s3.requests.filter((request) => request.key === "latest.json").map((request) => request.method), ["GET", "GET", "PUT", "PUT", "GET", "PUT"]);
+});
+
+test("a 429 that never clears stops the run after 8 attempts, with a clear error and latest.json not moved", async () => {
+  const { plan, listed } = await retryPlan();
+  const s3 = await fakeS3({ fault: (method, key) => method === "HEAD" && key === listed ? { status: 429 } : undefined });
+  await assert.rejects(publish(plan, s3.store, { concurrency: 1 }), { message: new RegExp(`^HEAD ${escaped(listed)} answered 429 on each of 8 attempts, so the run stopped\\.$`) });
+  // A GET's answer keeps its first 200 printable characters, as any other error from the store does.
+  const pointerS3 = await fakeS3({ fault: (method, key) => method === "GET" && key === "latest.json" ? { status: 503 } : undefined });
+  await assert.rejects(pointerS3.store.getPointer(), { message: "GET latest.json answered 503 on each of 8 attempts, so the run stopped: <Error><Code>SlowDown</Code></Error>" });
+  assert.equal(s3.requests.filter((request) => request.method === "HEAD" && request.key === listed).length, 8);
+  assert.deepEqual(s3.waits, [500, 1000, 2000, 4000, 8000, 16_000, 30_000]);
+  assert.ok(!s3.objects.has("latest.json"));
+});
+
+test("a 400 or 403 is final: only 429 and 5xx are asked again", async () => {
+  for (const [method, status] of [["HEAD", 403], ["PUT", 400]] as const) {
+    const { plan, feedKey } = await retryPlan();
+    const nth = counter();
+    // A 5xx first, which is retried; then the 4xx, which must stop the run at once.
+    const s3 = await fakeS3({ fault: (m, key) => m === method && key === feedKey ? { status: nth(m, key) === 1 ? 503 : status } : undefined });
+    await assert.rejects(publish(plan, s3.store), { message: new RegExp(`^${method} ${escaped(feedKey)} answered ${status}: `) });
+    assert.equal(s3.requests.filter((request) => request.method === method && request.key === feedKey).length, 2);
+    assert.equal(s3.waits.length, 1);
+  }
+});
+
+test("a connection that fails or times out is tried again; other errors are not", async () => {
+  const { plan, feedKey, listed } = await retryPlan();
+  const s3 = await fakeS3();
+  const nth = counter();
+  const flaky = (async (input: URL | string, init?: RequestInit) => {
+    const key = decodeURIComponent(new URL(String(input)).pathname.slice("/radar/".length));
+    const n = nth(init?.method ?? "GET", key);
+    if (init?.method === "HEAD" && key === listed && n === 1) throw new TypeError("fetch failed", { cause: { code: "ECONNRESET" } });
+    if (init?.method === "PUT" && key === feedKey && n === 1) throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    return fetch(input, init);
+  }) as typeof fetch;
+  const store = s3Store({ endpoint: s3.endpoint, bucket: "radar", credentials: s3.credentials, retry: s3.retry, fetchImpl: flaky });
+  const report = await publish(plan, store);
+  assert.equal(report.written, plan.objects.length);
+  assert.ok(s3.logs.includes(`HEAD ${listed} failed (TypeError: fetch failed (ECONNRESET)); attempt 1 of 8, trying again in 0.5 s.`), s3.logs.join("\n"));
+  assert.ok(s3.logs.includes(`PUT ${feedKey} failed (TimeoutError: The operation was aborted due to timeout); attempt 1 of 8, trying again in 0.5 s.`), s3.logs.join("\n"));
+  // A mistake in the request itself is not the network: it is thrown at once.
+  let calls = 0;
+  const broken = s3Store({ endpoint: s3.endpoint, bucket: "radar", credentials: s3.credentials, retry: s3.retry, fetchImpl: (async () => { calls += 1; throw new RangeError("bad request"); }) as typeof fetch });
+  await assert.rejects(broken.head(listed), /bad request/);
+  assert.equal(calls, 1);
 });

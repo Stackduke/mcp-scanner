@@ -105,7 +105,7 @@ export async function radarMain(argv: string[], { env = process.env, fetchImpl =
   if (given.has("bucket")) {
     const access = bucketAccess();
     if (!access) return 2;
-    store = s3Store({ ...access, bucket: given.get("bucket") as string, fetchImpl, now });
+    store = s3Store({ ...access, bucket: given.get("bucket") as string, fetchImpl, now, retry: { log } });
   }
 
   const run = async (input: ScanInput, note = "") => {
