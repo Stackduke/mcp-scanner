@@ -1,0 +1,1 @@
+{"source":"https://fmcsa.undtec.com/mcp","takenAt":"2026-11-27T14:19:10.018Z","methodVersion":"1.1.0","server":{"name":"undtec-fmcsa","version":"1.0.0"},"tools":[{"name":"lookup_fmcsa_carrier","kind":"read","fields":{"title":"4efc0fc757a010ab","description":"221c71e9aa9fe2a6","inputSchema":"eb6bc0eea69cac1d","annotations":"906651103920016b"}}]}

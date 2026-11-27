@@ -1,0 +1,1 @@
+{"source":"https://vin.undtec.com/mcp","takenAt":"2026-11-27T14:19:29.930Z","methodVersion":"1.1.0","server":{"name":"undtec-vin","version":"1.0.0"},"tools":[{"name":"decode_vin","kind":"read","fields":{"title":"874cc188f24a56ac","description":"75f17329955fb594","inputSchema":"6c8dc3b6c1b5221c","annotations":"24787aca38a69581"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://ai.ziptool.app/mcp","takenAt":"2026-11-27T14:18:58.200Z","methodVersion":"1.1.0","server":{"name":"Cloudflare AI Search","version":"1.0.0"},"tools":[{"name":"search","kind":"read","fields":{"description":"e207b3fbfb814589","inputSchema":"5cb98b8f115f43e7"}}]}

@@ -1,0 +1,1 @@
+{"source":"https://api.apijobs.dev/mcp","takenAt":"2026-11-27T14:18:58.253Z","methodVersion":"1.1.0","server":{"name":"apijobs","version":"1.0.0"},"tools":[{"name":"jobs_search","kind":"read","fields":{"title":"2be0f57bf593c79c","description":"1051fc3051098fe2","inputSchema":"538e1d8bca668e9d","annotations":"dc58e55a8287733e"}}]}

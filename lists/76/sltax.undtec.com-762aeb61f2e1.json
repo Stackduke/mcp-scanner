@@ -1,0 +1,1 @@
+{"source":"https://sltax.undtec.com/mcp","takenAt":"2026-11-27T14:19:26.297Z","methodVersion":"1.1.0","server":{"name":"undtec-sltax","version":"1.0.0"},"tools":[{"name":"get_surplus_lines_tax_rates","kind":"read","fields":{"title":"c3f55a0a51e20ec3","description":"640946eb7cf9ac2d","inputSchema":"a8989957c1b89c98","annotations":"8bc4229289d9afbf"}}]}

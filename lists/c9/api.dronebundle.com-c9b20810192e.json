@@ -1,0 +1,1 @@
+{"source":"https://api.dronebundle.com/v1/airspace/mcp","takenAt":"2026-11-27T14:18:58.303Z","methodVersion":"1.1.0","server":{"name":"dronebundle-airspace","version":"1.0.0"},"tools":[{"name":"check_airspace","kind":"read","fields":{"title":"4460bb5cf10091b4","description":"a03b5d35fad72fa0","inputSchema":"bdffad5295a91982","annotations":"41cc8d73c8590947"}}]}
