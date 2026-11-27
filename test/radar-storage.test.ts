@@ -83,7 +83,7 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
   const bucket = options.bucket ?? "radar";
   const objects = new Map<string, { body: Buffer; headers: Record<string, string> }>();
   let pointerPuts = 0;
-  const requests: Array<{ method: string; key: string; acceptEncoding?: string; signedHeaders?: string }> = [];
+  const requests: Array<{ method: string; key: string; acceptEncoding?: string; signedHeaders?: string; ifMatch?: string; amzDate?: string }> = [];
   const credentials = { accessKeyId: "test-key-id", secretAccessKey: "test-secret" };
   const server = createServer((request, response) => {
     const chunks: Buffer[] = [];
@@ -94,7 +94,7 @@ async function fakeS3(options: { failPut?: string; beforePointerPut?: () => Prom
       const key = decodeURIComponent(url.pathname.slice(`/${bucket}/`.length));
       // The signature is recomputed from what arrived: a header changed on the way, or the wrong body, fails it.
       const auth = /SignedHeaders=([^,]+), Signature=([0-9a-f]+)$/.exec(String(request.headers.authorization));
-      requests.push({ method: request.method ?? "", key, acceptEncoding: request.headers["accept-encoding"], signedHeaders: auth?.[1] });
+      requests.push({ method: request.method ?? "", key, acceptEncoding: request.headers["accept-encoding"], signedHeaders: auth?.[1], ifMatch: request.headers["if-match"], amzDate: String(request.headers["x-amz-date"]) });
       const names = (auth?.[1] ?? "").split(";").filter((name) => !["host", "x-amz-date", "x-amz-content-sha256"].includes(name));
       const amzDate = String(request.headers["x-amz-date"]);
       const date = new Date(`${amzDate.slice(0, 4)}-${amzDate.slice(4, 6)}-${amzDate.slice(6, 8)}T${amzDate.slice(9, 11)}:${amzDate.slice(11, 13)}:${amzDate.slice(13, 15)}Z`);
@@ -840,7 +840,7 @@ async function retryPlan() {
   const dir = await folder();
   await writeScan(dir);
   const plan = planScan(await scanInputFromFolder(dir));
-  return { plan, feedKey: `snapshots/${scanId}/feed.json`, listed: (plan.objects.find((object) => object.key.startsWith("lists/")) as { key: string }).key };
+  return { dir, plan, feedKey: `snapshots/${scanId}/feed.json`, listed: (plan.objects.find((object) => object.key.startsWith("lists/")) as { key: string }).key };
 }
 
 test("a 429 or 5xx is asked again after a wait: full jitter, or what Retry-After says, capped at 60 s", async () => {
@@ -922,7 +922,7 @@ test("a 400 or 403 is final: only 429 and 5xx are asked again", async () => {
   }
 });
 
-test("a connection that fails or times out is tried again; other errors are not", async () => {
+test("a connection that fails, breaks while the body arrives, or times out is tried again; other errors are not", async () => {
   const { plan, feedKey, listed } = await retryPlan();
   const s3 = await fakeS3();
   const nth = counter();
@@ -930,17 +930,89 @@ test("a connection that fails or times out is tried again; other errors are not"
     const key = decodeURIComponent(new URL(String(input)).pathname.slice("/radar/".length));
     const n = nth(init?.method ?? "GET", key);
     if (init?.method === "HEAD" && key === listed && n === 1) throw new TypeError("fetch failed", { cause: { code: "ECONNRESET" } });
-    if (init?.method === "PUT" && key === feedKey && n === 1) throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
-    return fetch(input, init);
+    // The store never answers: the attempt's own timeout fires, as AbortSignal.timeout does.
+    if (init?.method === "PUT" && key === feedKey && n === 1) return new Promise<Response>((_, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
+    const response = await fetch(input, init);
+    // latest.json's headers arrive, then the connection breaks while its body does (undici: TypeError "terminated").
+    if (init?.method === "GET" && key === "latest.json" && response.status === 200 && nth("broken GET", key) === 1) {
+      const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode("{")); controller.error(new TypeError("terminated", { cause: { code: "UND_ERR_SOCKET" } })); } });
+      return new Response(stream, { status: 200, headers: response.headers });
+    }
+    return response;
   }) as typeof fetch;
-  const store = s3Store({ endpoint: s3.endpoint, bucket: "radar", credentials: s3.credentials, retry: s3.retry, fetchImpl: flaky });
+  const store = s3Store({ endpoint: s3.endpoint, bucket: "radar", credentials: s3.credentials, retry: { ...s3.retry, timeoutMs: 50 }, fetchImpl: flaky });
   const report = await publish(plan, store);
   assert.equal(report.written, plan.objects.length);
   assert.ok(s3.logs.includes(`HEAD ${listed} failed (TypeError: fetch failed (ECONNRESET)); attempt 1 of 8, trying again in 0.5 s.`), s3.logs.join("\n"));
   assert.ok(s3.logs.includes(`PUT ${feedKey} failed (TimeoutError: The operation was aborted due to timeout); attempt 1 of 8, trying again in 0.5 s.`), s3.logs.join("\n"));
-  // A mistake in the request itself is not the network: it is thrown at once.
-  let calls = 0;
-  const broken = s3Store({ endpoint: s3.endpoint, bucket: "radar", credentials: s3.credentials, retry: s3.retry, fetchImpl: (async () => { calls += 1; throw new RangeError("bad request"); }) as typeof fetch });
-  await assert.rejects(broken.head(listed), /bad request/);
-  assert.equal(calls, 1);
+  // The body that broke half way is asked for again, not passed on.
+  assert.deepEqual(await store.getPointer(), { body: s3.objects.get("latest.json")?.body, etag: s3.objects.get("latest.json")?.headers.etag });
+  assert.ok(s3.logs.includes("GET latest.json failed (TypeError: terminated (UND_ERR_SOCKET)); attempt 1 of 8, trying again in 0.5 s."), s3.logs.join("\n"));
+  // publish's two reads (none there yet), then the one that broke and the one asked again.
+  assert.equal(s3.requests.filter((request) => request.method === "GET" && request.key === "latest.json").length, 4);
+
+  // A mistake in the request itself is not the network: it is thrown at once. fetch throws a TypeError for a bad
+  // header, and "fetch failed" with an undici code for an argument it refuses; neither is retried.
+  for (const thrown of [new RangeError("bad request"), new TypeError("Headers.append: \"a\\nb\" is an invalid header value."), new TypeError("fetch failed", { cause: { code: "UND_ERR_INVALID_ARG" } }), new TypeError("fetch failed")]) {
+    let calls = 0;
+    const broken = s3Store({ endpoint: s3.endpoint, bucket: "radar", credentials: s3.credentials, retry: s3.retry, fetchImpl: (async () => { calls += 1; throw thrown; }) as typeof fetch });
+    await assert.rejects(broken.head(listed), thrown);
+    assert.equal(calls, 1, thrown.message);
+  }
+});
+
+test("a Retry-After of 0, in the past, or not an HTTP date never shortens the backoff", async () => {
+  const { plan, listed } = await retryPlan();
+  const nth = counter();
+  const given = ["0", "-5", "1.5", "Thu, 01 Jan 1970 00:00:00 GMT", "2099-01-01T00:00:00Z", "Thursday, 01-Jan-2099 00:00:00 GMT"];
+  const s3 = await fakeS3({ fault: (method, key) => {
+    if (method !== "HEAD" || key !== listed) return undefined;
+    const value = given[nth(method, key) - 1];
+    return value === undefined ? undefined : { status: 429, headers: { "retry-after": value } };
+  } });
+  await publish(plan, s3.store);
+  // Each wait is the jitter (drawn as 0.5) of 1 s, 2 s, 4 s ...; never 0, and the far-future non-IMF dates are not taken.
+  assert.deepEqual(s3.waits, [500, 1000, 2000, 4000, 8000, 16_000]);
+});
+
+test("a latest.json If-Match PUT that landed but answered 503 ends right, on a bucket that already had latest.json", async () => {
+  const { dir, plan } = await retryPlan();
+  const newerId = "2026-11-26T041700Z";
+  const newer = planScan({ ...(await scanInputFromFolder(dir)), id: newerId });
+  let armed = false;
+  const s3 = await fakeS3({ fault: (method, key) => {
+    if (!armed || method !== "PUT" || key !== "latest.json") return undefined;
+    armed = false;
+    return { status: 503, landed: true };
+  } });
+  await publish(plan, s3.store, { now: () => new Date("2026-11-25T15:00:00Z") });
+  const before = s3.objects.get("latest.json")?.headers.etag;
+  s3.requests.length = 0;
+  armed = true;
+  const report = await publish(newer, s3.store, { now: () => new Date("2026-11-26T05:00:00Z") });
+  const pointer = JSON.parse(s3.objects.get("latest.json")?.body.toString("utf8") as string);
+  assert.deepEqual(pointer, { layout: 1, scan: newerId, record: `scans/${newerId}/scan.json`, scans: [newerId, scanId], withdrawn: [], updatedAt: "2026-11-26T05:00:00.000Z" });
+  assert.deepEqual(report.pointer, pointer);
+  // The If-Match write landed; its retry, with the old ETag, met 412; latest.json was read again and replaced under the new one.
+  const pointerRequests = s3.requests.filter((request) => request.key === "latest.json");
+  assert.deepEqual(pointerRequests.map((request) => request.method), ["GET", "GET", "PUT", "PUT", "GET", "PUT"]);
+  const puts = pointerRequests.filter((request) => request.method === "PUT");
+  assert.deepEqual(puts.slice(0, 2).map((request) => request.ifMatch), [before, before]);
+  assert.notEqual(puts[2]?.ifMatch, before);
+  assert.equal(puts[2]?.ifMatch, s3.objects.get("latest.json")?.headers.etag);
+});
+
+test("each attempt is signed again, with its own x-amz-date", async () => {
+  const { listed } = await retryPlan();
+  const nth = counter();
+  const s3 = await fakeS3({ fault: (method, key) => method === "HEAD" && key === listed && nth(method, key) <= 2 ? { status: 503 } : undefined });
+  let tick = 0;
+  // A clock that moves a second each time it is read.
+  const store = s3Store({ endpoint: s3.endpoint, bucket: "radar", credentials: s3.credentials, retry: s3.retry, now: () => new Date(Date.UTC(2026, 10, 27, 10, 0, tick++)) });
+  assert.equal(await store.head(listed), null);
+  const dates = s3.requests.filter((request) => request.key === listed).map((request) => request.amzDate);
+  assert.equal(dates.length, 3);
+  assert.equal(new Set(dates).size, 3, dates.join(", "));
+  // The fake store checked each signature against the date it carried, so each attempt was signed with its own.
+  assert.ok(dates.every((date) => /^20261127T1000\d{2}Z$/.test(date ?? "")), dates.join(", "));
 });
