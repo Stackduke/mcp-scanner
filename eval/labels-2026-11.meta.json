@@ -1,0 +1,30 @@
+{
+  "seed": 20261101,
+  "perCell": 18,
+  "dataDate": "2026-11-01",
+  "pool": 14886,
+  "scanned": 588,
+  "listed": 580,
+  "failed": 8,
+  "toolsSeenByCell": {
+    "read/server": 6971,
+    "read/words": 989,
+    "write/server": 3448,
+    "write/words": 705,
+    "destructive/server": 1885,
+    "destructive/words": 108,
+    "money/server": 1042,
+    "money/words": 273,
+    "send/server": 351,
+    "send/words": 128,
+    "unclear": 1915
+  },
+  "kindCountsInTracker": {
+    "send": 3254,
+    "write": 36641,
+    "read": 112141,
+    "unclear": 19343,
+    "money": 11355,
+    "destructive": 11795
+  }
+}
