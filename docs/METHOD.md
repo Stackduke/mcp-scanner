@@ -31,7 +31,7 @@ What counts as a change, and how a check's outcome is reached, changed. How tool
 
 The first numbered version. It is the method as it stood when numbering began. Nothing about how tools are read changed with it.
 
-- **Kinds.** Each tool is counted under the most serious thing its name, its own annotations or its description suggest it can do (`src/risk.ts`, `src/authority.ts`). That includes the label rules up to and including the false-alarm fixes of 26 November 2026.
+- **Kinds.** Each tool is counted under the most serious thing its name, its own annotations or its description suggest it can do (`src/risk.ts`, `src/authority.ts`). That includes the label rules up to and including the false-alarm fixes of 2 November 2026.
 - **Outcomes.** Each check is recorded as listed (`L`), sign-in required (`S`), not usable (`N`), unreachable (`U`) or no token (`T`).
 - **Changes.** A change is a change in what the server sent: tool names, and a hash of each field (title, description, input schema, output schema, annotations). A change in the scanner's own reading of an unchanged list is not recorded as a change.
 - **Manifests.** Each scan checks the folder it starts from against the previous signed manifest. It then writes `manifest.json` with a digest of the whole folder, the full sha256 of each file it wrote, and the result of that check, and the workflow signs it. See [verify-a-scan.md](verify-a-scan.md).
