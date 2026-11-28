@@ -3,6 +3,7 @@ import type { AuthorityKind } from "./authority.ts";
 import { diffSnapshots } from "./diff.ts";
 import type { ChangedField } from "./diff.ts";
 import { findInTool } from "./findings.ts";
+import { methodVersion } from "./method.ts";
 import { descriptionSuggests, nameSuggests } from "./risk.ts";
 import { toolKey } from "./snapshot.ts";
 import type { CapabilityClass, Snapshot, SnapshotTool } from "./types.ts";
@@ -17,7 +18,8 @@ import type { CapabilityClass, Snapshot, SnapshotTool } from "./types.ts";
  *
  * The JSON form (`reachJson`) holds only the fields the collector may send: server address,
  * tool name, kind, label source, fingerprint, the yes/no findings flag, scan time and collector
- * version, plus the agent's label and each server's status. Changes and suggested rules are
+ * version, plus the method version that produced the kinds (see method.ts), the agent's label
+ * and each server's status. Changes and suggested rules are
  * worked out from two reports, so they are left out of it.
  */
 
@@ -180,6 +182,7 @@ export function reachJson(agents: AgentReach[], meta: { collectorVersion: string
   return {
     format: "stackduke.reach.v1",
     collectorVersion: meta.collectorVersion,
+    methodVersion,
     scannedAt: meta.scannedAt,
     agents: agents.map((agent) => ({
       agent: agent.label,

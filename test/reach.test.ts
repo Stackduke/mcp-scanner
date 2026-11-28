@@ -6,6 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { addressOf, readAgentConfig } from "../src/agent-config.ts";
 import { latestSnapshot, save } from "../src/files.ts";
+import { methodVersion } from "../src/method.ts";
 import { describeReach, reachJson, reachOf, suggestRules } from "../src/reach.ts";
 import type { AgentLook, ServerLook } from "../src/reach.ts";
 import { takeSnapshot } from "../src/snapshot.ts";
@@ -113,7 +114,8 @@ test("the JSON report holds only the fields the collector may send", () => {
     { name: "github", address: "local: github", outcome: { status: "not-run" } },
   );
   const json = reachJson([reachOf(look)], { collectorVersion: "0.4.0", scannedAt: at });
-  assert.deepEqual(Object.keys(json), ["format", "collectorVersion", "scannedAt", "agents"]);
+  assert.deepEqual(Object.keys(json), ["format", "collectorVersion", "methodVersion", "scannedAt", "agents"]);
+  assert.equal(json.methodVersion, methodVersion, "the label rules that produced each kind");
   const [first] = json.agents;
   assert.deepEqual(Object.keys(first ?? {}), ["agent", "servers"]);
   assert.deepEqual(first?.servers.map((server) => [server.server, server.status, Object.keys(server)]), [
@@ -250,6 +252,7 @@ test("reach end to end on an agent config: local programs only with --run-local,
   const report = JSON.parse(poisoned.stdout) as ReturnType<typeof reachJson>;
   assert.equal(report.format, "stackduke.reach.v1");
   assert.match(report.collectorVersion, /^\d+\.\d+\.\d+/);
+  assert.equal(report.methodVersion, methodVersion);
   const tools = report.agents[0]?.servers[0]?.tools ?? [];
   assert.deepEqual(tools.map((tool) => [tool.name, tool.kind, tool.findings.hiddenInstructions]), [["create_note", "write", false], ["delete_note", "destructive", false], ["search_notes", "read", true]]);
   assert.doesNotMatch(poisoned.stdout, /Ignore all previous|id_rsa/);

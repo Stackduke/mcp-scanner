@@ -51,14 +51,16 @@ inputs:
     default: ""
   reach-run-local:
     description: >-
-      "true" to start the config's local programs to list their tools. They run with this step's
-      environment, so give it only a config whose programs you would run anyway.
+      "true" to start the config's local programs to list their tools. This runs the commands the
+      config names, with this step's environment, on the runner, so give it only a config whose
+      programs you would run anyway. Never set it in a pull_request_target workflow or for a config
+      from a fork: whoever wrote the config would run their own code inside your job.
     required: false
     default: "false"
 
 outputs:
   result:
-    description: '"passed", "failed" (the tools differ from the lockfile, or a check fired) or "error" (the server could not be listed, or the inputs were wrong).'
+    description: '"passed", "failed" (the tools differ from the lockfile, or a check fired) or "error" (the server could not be listed, or the inputs were wrong). Empty when only reach-config is given, because the lockfile check does not run.'
     value: ${{ steps.check.outputs.result }}
 
 runs:
