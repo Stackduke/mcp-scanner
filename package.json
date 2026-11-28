@@ -19,10 +19,11 @@
     "scan": "node src/cli.ts",
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm test",
+    "check": "npm run typecheck && npm test && npm run check:connector",
     "track": "node src/cli.ts track",
     "build": "tsc -p tsconfig.build.json",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "check:connector": "tsc -p connector/tsconfig.json && node --test connector/test/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",

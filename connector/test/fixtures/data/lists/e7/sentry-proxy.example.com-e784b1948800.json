@@ -1,0 +1,1 @@
+{"source": "https://sentry-proxy.example.com/mcp", "takenAt": "2026-11-01T10:00:00.000Z", "server": {"name": "x", "version": "1"}, "tools": [{"name": "search_issues", "kind": "read", "fields": {"description": "0123456789abcdef"}}]}

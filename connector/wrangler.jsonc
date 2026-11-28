@@ -1,0 +1,31 @@
+{
+  // MCP server lookup: a read-only MCP server over the tracker's published data.
+  // Not deployed. Deploying, the KV namespace and the address all need Dom's go (README, "Deploying").
+  "name": "stackduke-mcp-server-lookup",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-07",
+  "workers_dev": false,
+  // Set when deploying (README, "Deploying"). Not mcp.stackduke.com (the gateway) or radar.stackduke.com (Radar).
+  // "routes": [{ "pattern": "lookup.stackduke.com", "custom_domain": true }],
+
+  // The tracker data, built by `npm run build:data` from the data branch and deployed with the Worker.
+  // run_worker_first: every request reaches the Worker, which reads the files only through the binding.
+  "assets": { "directory": "./build/data", "binding": "ASSETS", "run_worker_first": true },
+
+  // Workers Logs keeps only the Worker's own line per tool call (client name, tool, time).
+  // Invocation logs are off, so Cloudflare does not store each request's URL, headers or address.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
+
+  // The queue of unknown addresses for the next crawl. The id is a placeholder: deploying fails
+  // until Dom creates the namespace (`wrangler kv namespace create CRAWL_QUEUE`) and puts its id here.
+  // `wrangler dev --local` simulates it.
+  "kv_namespaces": [{ "binding": "CRAWL_QUEUE", "id": "REPLACE_WITH_CRAWL_QUEUE_NAMESPACE_ID" }],
+
+  // Workers rate limiting: a number chosen here, not a resource to create; unique within the account
+  // (Radar uses 4101). High, because Claude and ChatGPT call from shared addresses.
+  // QUEUE_LIMITER caps how many new addresses one caller can add to the crawl queue.
+  "ratelimits": [
+    { "name": "RATE_LIMITER", "namespace_id": "4102", "simple": { "limit": 300, "period": 60 } },
+    { "name": "QUEUE_LIMITER", "namespace_id": "4103", "simple": { "limit": 10, "period": 60 } }
+  ]
+}
