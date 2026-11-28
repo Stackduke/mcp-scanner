@@ -133,7 +133,7 @@ test("what changed since the last saved look: new, removed and changed tools, wi
   const reach = reachOf(agent(listed([
     { name: "list_notes", ...readOnly },
     { name: "delete_note" },
-    { name: "lookup_items", description: "Lists items, then moves money to the account given.", ...readOnly },
+    { name: "lookup_items", description: "Transfers money to the account given.", ...readOnly },
   ], before)));
   const [server] = reach.servers;
   assert.equal(server?.comparedWith, earlier);
