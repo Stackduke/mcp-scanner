@@ -1,7 +1,10 @@
 /**
  * How often the scanner's labels agree with a reader's, over a labelled set of tools.
  *
- *   node eval/score.ts [eval/labels-2026-11.jsonl] [--unweighted]
+ *   node eval/score.ts [eval/holdout-2026-11.jsonl] [--unweighted]
+ *
+ * The output names the method version of the rules it ran (`methodVersion`, src/method.ts), so a
+ * figure can be tied to the rules that gave it.
  *
  * Reads no network. Each line of the set holds a tool's definition as its server listed it, the
  * label a reader gave it from its name, description and arguments, and why. The script labels each
@@ -19,6 +22,7 @@
  */
 import { readFileSync } from "node:fs";
 import { assessTool, type AuthorityBasis, type AuthorityKind } from "../src/authority.ts";
+import { methodVersion } from "../src/method.ts";
 import { fingerprint } from "../src/snapshot.ts";
 import type { CapabilityClass, ToolDefinition } from "../src/types.ts";
 
@@ -86,6 +90,13 @@ export interface Score {
   /** Tools expected to be risky, missing that risky label. */
   riskyMissed: Row[];
   wrong: Row[];
+  /**
+   * The disagreements by direction, as shares of all tools (weighted when weights are given): no label
+   * ("unclear"); a more serious label than expected (over-warning); a less serious one (under-warning);
+   * or one as serious but different (`send` for `money`). Read is less serious than write, and write than
+   * destructive, money and send, which rank alike.
+   */
+  direction: { noLabel: number; over: number; under: number; sideways: number };
 }
 
 /** A 95% Wilson interval for a share, which stays sensible near 0 and 1 and for small sets. */
@@ -187,6 +198,9 @@ function simulatedRecall(rows: Row[], label: Label, shares: Map<Cell, number>, d
   return { low: at(0.025), middle: at(0.5), high: at(0.975) };
 }
 
+const seriousness: Record<Label, number> = { unclear: -1, read: 0, write: 1, destructive: 2, money: 2, send: 2 };
+const mostSerious = (set: Label[]) => Math.max(...set.map((label) => seriousness[label]));
+
 export function score(entries: SetEntry[], weights?: Weights): Score {
   const shares = weights ? cellShares(weights) : null;
   const inCell = new Map<Cell, number>();
@@ -236,6 +250,17 @@ export function score(entries: SetEntry[], weights?: Weights): Score {
     actingShownAsRead: rows.filter((row) => acts(row.expected) && row.predicted.includes("read")),
     riskyMissed: rows.filter((row) => row.expected.some((label) => risky.includes(label) && !row.predicted.includes(label))),
     wrong: rows.filter((row) => !row.right),
+    direction: (() => {
+      const total = rows.reduce((sum, row) => sum + row.weight, 0) || 1;
+      const shareWhere = (test: (row: Row) => boolean) => rows.filter((row) => !row.right && test(row)).reduce((sum, row) => sum + row.weight, 0) / total;
+      const labelled = (row: Row) => !row.predicted.includes("unclear");
+      return {
+        noLabel: shareWhere((row) => !labelled(row)),
+        over: shareWhere((row) => labelled(row) && mostSerious(row.predicted) > mostSerious(row.expected)),
+        under: shareWhere((row) => labelled(row) && mostSerious(row.predicted) < mostSerious(row.expected)),
+        sideways: shareWhere((row) => labelled(row) && mostSerious(row.predicted) === mostSerious(row.expected)),
+      };
+    })(),
   };
 }
 
@@ -269,12 +294,15 @@ const withRange = (share: Share) => (share.value === null ? "-" : `${percent(sha
 export function describe(result: Score, check?: ReturnType<typeof sensitivity>): string {
   const lines: string[] = [];
   const how = result.weighted ? "weighted to how common each label and source is in the tracker" : "every tool counted once";
+  lines.push(`Label rules: methodVersion ${methodVersion} (src/method.ts).`);
   lines.push(`Tools: ${result.size}. Shares are ${how}; 95% intervals in brackets.`);
   lines.push("");
   lines.push(`Scanner agrees with the expected label:    ${withRange(result.agreement)}`);
   lines.push(`Scanner gives a label (not "unclear"):     ${withRange(result.labelled)}`);
   lines.push(`Agrees, where it gives a label:            ${withRange(result.agreementWhenLabelled)}`);
   if (result.weighted) lines.push(`In this set, every tool counted once:      ${result.right} of ${result.size} agree, ${withRange(result.inThisSet)}`);
+  const { noLabel, over, under, sideways } = result.direction;
+  lines.push(`Where it disagrees: no label ${percent(noLabel)}, over-warns ${percent(over)}, under-warns ${percent(under)}, another label as serious ${percent(sideways)}`);
   const header = "Label         Precision          Recall             Counts in this set: right / scanner says / expected";
   const row = (score: LabelScore) => `${score.label.padEnd(13)} ${withRange(score.precision).padEnd(18)} ${withRange(score.recall).padEnd(18)} ${score.truePositives} / ${score.truePositives + score.falsePositives} / ${score.truePositives + score.falseNegatives}`;
   lines.push("", header);
@@ -298,7 +326,7 @@ export function describe(result: Score, check?: ReturnType<typeof sensitivity>):
 }
 
 if (import.meta.main) {
-  const path = process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? new URL("labels-2026-11.jsonl", import.meta.url).pathname;
+  const path = process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? new URL("holdout-2026-11.jsonl", import.meta.url).pathname;
   const entries = readSet(readFileSync(path, "utf8"));
   // Without its weights the set describes only itself, so that is asked for, never fallen back to.
   const weights = process.argv.includes("--unweighted") ? undefined : JSON.parse(readFileSync(path.replace(/\.jsonl$/, ".meta.json"), "utf8")) as Weights;

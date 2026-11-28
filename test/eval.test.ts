@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { methodVersion } from "../src/method.ts";
 import { cellOf, cells, leading, readSet, score, sensitivity, wilson, type SetEntry, type Weights } from "../eval/score.ts";
 
 const entry = (id: string, name: string, expected: SetEntry["expected"], extra: Partial<SetEntry["tool"]> = {}): SetEntry => ({
@@ -32,6 +33,9 @@ test("precision and recall are counted per label", () => {
   assert.equal(write?.precision.value, null);
   assert.deepEqual(result.actingShownAsRead.map((row) => row.entry.id), ["d"]);
   assert.deepEqual(result.riskyMissed, []);
+  // The one disagreement, d, a writer labelled read, under-warns.
+  assert.equal(result.direction.under, 1 / 5);
+  assert.equal(result.direction.over + result.direction.noLabel + result.direction.sideways, 0);
 });
 
 test("weights count each tool by how common its cell is", () => {
@@ -101,24 +105,38 @@ test("an entry without an expected label or reason is refused", () => {
   assert.throws(() => readSet(JSON.stringify({ ...entry("a", "x", ["maybe" as never]) })), /expected/);
 });
 
-test("the committed set is complete: every tool labelled, with a reason, from a known cell", () => {
-  const set = readSet(readFileSync(new URL("../eval/labels-2026-11.jsonl", import.meta.url), "utf8"));
-  assert.ok(set.length >= 190, `only ${set.length} tools`);
-  assert.equal(new Set(set.map((item) => item.id)).size, set.length);
-  for (const item of set) assert.ok((cells as readonly string[]).includes(item.sampledAs), item.id);
-  for (const label of ["read", "write", "destructive", "money", "send"] as const) assert.ok(set.some((item) => item.expected.includes(label)), `no tool expected to be ${label}`);
-  assert.equal(score(set).size, set.length);
+test("the committed sets are complete: every tool labelled, with a reason, from a known cell", () => {
+  const read = (name: string) => readSet(readFileSync(new URL(`../eval/${name}.jsonl`, import.meta.url), "utf8"));
+  for (const set of [read("labels-2026-11"), read("holdout-2026-11")]) {
+    assert.ok(set.length >= 190, `only ${set.length} tools`);
+    assert.equal(new Set(set.map((item) => item.id)).size, set.length);
+    for (const item of set) assert.ok((cells as readonly string[]).includes(item.sampledAs), item.id);
+    for (const label of ["read", "write", "destructive", "money", "send"] as const) assert.ok(set.some((item) => item.expected.includes(label)), `no tool expected to be ${label}`);
+    assert.equal(score(set).size, set.length);
+  }
+  // The held-out set shares no server with the set the rules were tuned on.
+  const tuned = new Set(read("labels-2026-11").map((item) => item.server));
+  assert.deepEqual(read("holdout-2026-11").filter((item) => tuned.has(item.server)).map((item) => item.id), []);
 });
 
-test("the README states what the committed set measures today", () => {
-  // When the rules change, these move: run node eval/score.ts and update the README's "What it does not do" with them.
-  const set = readSet(readFileSync(new URL("../eval/labels-2026-11.jsonl", import.meta.url), "utf8"));
-  const weights = JSON.parse(readFileSync(new URL("../eval/labels-2026-11.meta.json", import.meta.url), "utf8")) as Weights;
-  const result = score(set, weights);
-  const rounded = (value: number | null) => Math.round((value ?? 0) * 100);
-  const precision = (label: string) => rounded(result.byLabel.find((item) => item.label === label)?.precision.value ?? null);
-  assert.deepEqual(
-    { overall: rounded(result.agreement.value), labelled: rounded(result.labelled.value), destructive: precision("destructive"), money: precision("money"), send: precision("send") },
-    { overall: 71, labelled: 90, destructive: 34, money: 17, send: 46 },
-  );
+test("the README states what the committed sets measure today", () => {
+  // When the label rules change, these move: run node eval/score.ts on each set, then update these pins,
+  // eval/README.md (figures and the methodVersion they were measured under) and the README's "What it does
+  // not do" (the held-out set's figures).
+  const rescore = `Re-score both sets with node eval/score.ts under the current rules (methodVersion ${methodVersion}, src/method.ts), then update these pins, eval/README.md and the README's "What it does not do".`;
+  const headline = (name: string) => {
+    const set = readSet(readFileSync(new URL(`../eval/${name}.jsonl`, import.meta.url), "utf8"));
+    const weights = JSON.parse(readFileSync(new URL(`../eval/${name}.meta.json`, import.meta.url), "utf8")) as Weights;
+    const result = score(set, weights);
+    const rounded = (value: number | null) => Math.round((value ?? 0) * 100);
+    const precision = (label: string) => rounded(result.byLabel.find((item) => item.label === label)?.precision.value ?? null);
+    return { overall: rounded(result.agreement.value), labelled: rounded(result.labelled.value), destructive: precision("destructive"), money: precision("money"), send: precision("send"), actingShownAsRead: result.actingShownAsRead.length };
+  };
+  // The figures are tied to a method version: when it changes, they must be measured again, even if they turn out the same.
+  const stated = readFileSync(new URL("../eval/README.md", import.meta.url), "utf8").match(/measured under methodVersion (\d+\.\d+\.\d+)/)?.[1];
+  assert.equal(stated, methodVersion, `eval/README.md gives figures measured under methodVersion ${stated ?? "(none stated)"}, but the rules are now ${methodVersion}. ${rescore}`);
+  // The held-out set: the figures to quote.
+  assert.deepEqual(headline("holdout-2026-11"), { overall: 79, labelled: 90, destructive: 43, money: 32, send: 47, actingShownAsRead: 0 }, `The held-out set's figures moved. ${rescore}`);
+  // The set the rules were tuned on (the false-alarm fixes of 2 November 2026, #22 and #23), so flattering.
+  assert.deepEqual(headline("labels-2026-11"), { overall: 81, labelled: 90, destructive: 85, money: 43, send: 58, actingShownAsRead: 1 }, `The tuning set's figures moved. ${rescore}`);
 });
