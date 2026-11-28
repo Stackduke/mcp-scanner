@@ -1,0 +1,1 @@
+{"source":"https://x402-arb-api.predictiongod.workers.dev/mcp","takenAt":"2026-11-28T13:33:08.094Z","methodVersion":"1.1.0","server":{"name":"prectiongod-arb-mcp","version":"1.3.2"},"tools":[{"name":"get_cross_market_ev_signals","kind":"read","fields":{"title":"2b099c246d178651","description":"e3eda380a61b78c4","inputSchema":"f2f63c6b5977c335","annotations":"c8402371974d0d87"}}]}

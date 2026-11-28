@@ -1,0 +1,1 @@
+{"source":"https://api.zrazu.com/v1/mcp","takenAt":"2026-11-28T13:37:25.041Z","methodVersion":"1.1.0","server":{"name":"zrazu-account","version":"v1"},"tools":[{"name":"whoami","kind":"read","fields":{"description":"29e70f1d6028c075","inputSchema":"d746974fa9afd5e9","annotations":"ae78503371695cf7"}}]}
