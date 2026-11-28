@@ -160,6 +160,7 @@ runs:
         set -e
         if [ -f "$STACKDUKE_REACH_SUMMARY" ]; then cat "$STACKDUKE_REACH_SUMMARY" >> "$GITHUB_STEP_SUMMARY"; fi
         if [ "$code" = "2" ]; then echo "::error title=Agent reach::The agent config could not be read. See the log."; exit 1; fi
+        if [ "$code" != "0" ]; then echo "::warning title=Agent reach::Reach did not finish (exit $code). See the log."; fi
         exit 0
 
     - name: Fail the job when the check did not pass
