@@ -65,12 +65,14 @@ export type TrackerEntry =
   /**
    * Not published. The reason says why. `forbidden` means the vendor's terms forbid publishing
    * about the service, so no address on its sites is checked or kept, wherever the registry lists
-   * one. Without it, the registry's addresses are treated as any other.
+   * one. Without it, the registry's addresses are treated as any other. `sites` names other sites the
+   * vendor itself owns (an older or second domain), kept off the same way; only the vendor's own, never a
+   * third party's.
    *
    * A browser sign-in may be kept for a server that is not published yet, so it is ready the day
    * its terms are read: the daily run renews it and checks it works, and keeps nothing it lists.
    */
-  | { publish: false; reason: string; forbidden?: boolean; access?: TrackerOAuth }
+  | { publish: false; reason: string; forbidden?: boolean; sites?: string[]; access?: TrackerOAuth }
   /**
    * Tracked privately: watched with the tracker's own account every day, like a published server,
    * but nothing it lists reaches the public data. Its files go to a private folder that the daily
@@ -151,6 +153,10 @@ export function catalogProblems(value: unknown): string[] {
       if (!isText(tracker.reason, 300)) problem("a server the tracker does not publish needs a reason");
       if (tracker.forbidden !== undefined && typeof tracker.forbidden !== "boolean") problem("forbidden must be true or false");
       if (tracker.forbidden === true && server.termsCheckedOn === null) problem("is marked forbidden, but nobody has read its terms");
+      if (tracker.sites !== undefined) {
+        if (tracker.forbidden !== true) problem("sites are kept off only for a vendor marked forbidden");
+        if (!Array.isArray(tracker.sites) || tracker.sites.length > 10 || !tracker.sites.every(isPlainHttps)) problem("sites must be a list of up to 10 plain https addresses");
+      }
       if (tracker.private !== undefined && tracker.private !== true) problem("private can only be true");
       if (tracker.private === true) {
         // A vendor whose terms forbid publishing may still be tracked privately; one marked forbidden is not touched at all.
