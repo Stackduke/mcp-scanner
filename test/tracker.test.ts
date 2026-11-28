@@ -23,6 +23,8 @@ test("only plain https addresses on public hosts are scanned", () => {
   for (const bad of ["http://mcp.example.com/mcp", "https://{host}/mcp", "https://user:pass@example.com/mcp", "https://localhost/mcp", "https://169.254.169.254/latest", "https://[::1]/mcp", "https://printer.local/mcp", "https://intranet/mcp", "https://x.internal/mcp", "not a url", 42, `https://example.com/${"a".repeat(600)}`]) {
     assert.equal(scannableAddress(bad), null, String(bad));
   }
+  // A name ending in a dot is the same host to DNS under another spelling, so it is not scanned either.
+  for (const dotted of ["https://mcp.sentry.dev./mcp", "https://MCP.AIRTABLE.COM.:443/mcp", "https://mcp.example.com%2E/mcp", "https://mcp.example.com../mcp"]) assert.equal(scannableAddress(dotted), null, dotted);
 });
 
 test("a registry entry keeps its Streamable HTTP endpoints only", () => {
@@ -105,11 +107,11 @@ test("a change is recorded between the two scans that listed tools, and a failed
 });
 
 test("a tool that keeps its name but is now counted as doing more is called out", () => {
-  const before = printOf(takeSnapshot("s", [{ name: "manage_account", ...readOnly }], undefined, hoursBefore(24)));
-  const after = printOf(takeSnapshot("s", [{ name: "manage_account", annotations: { readOnlyHint: false, destructiveHint: true } }], undefined, now));
+  const before = printOf(takeSnapshot("s", [{ name: "account_admin", ...readOnly }], undefined, hoursBefore(24)));
+  const after = printOf(takeSnapshot("s", [{ name: "account_admin", annotations: { readOnlyHint: false, destructiveHint: true } }], undefined, now));
   const change = changeBetween(before, after, hoursBefore(24));
-  assert.deepEqual(change.moreSerious, [{ name: "manage_account", kind: "destructive" }]);
-  assert.match(change.summary, /The server's own labels changed on manage_account\. Counted as able to do more: manage_account \(make changes that cannot be undone\)\./);
+  assert.deepEqual(change.moreSerious, [{ name: "account_admin", kind: "destructive" }]);
+  assert.match(change.summary, /The server's own labels changed on account_admin\. Counted as able to do more: account_admin \(make changes that cannot be undone\)\./);
 });
 
 test("a server's own words reach the summary only as tool-name identifiers", () => {
@@ -287,6 +289,9 @@ test("a server that renames thousands of tools gets a short record with full cou
 test("subdomains of one site share a looser cap, and on shared hosting each host is its own site", () => {
   assert.equal(siteOf("https://a.evil.com/mcp"), "evil.com");
   assert.equal(siteOf("https://deep.b.evil.com/mcp"), "evil.com");
+  // A trailing dot is the same host to DNS, so the same site.
+  assert.equal(siteOf("https://mcp.sentry.dev./mcp"), "sentry.dev");
+  assert.equal(siteOf("https://MCP.AIRTABLE.COM..:443/mcp"), "airtable.com");
   assert.equal(siteOf("https://mcp.example.co.uk/mcp"), "example.co.uk");
   assert.equal(siteOf("https://x.abc.io/mcp"), "abc.io");
   for (const host of ["one.workers.dev", "svc-123.a.run.app", "app.up.railway.app", "abc.execute-api.us-east-1.amazonaws.com"]) assert.equal(siteOf(`https://${host}/mcp`), host);
@@ -333,7 +338,7 @@ test("a run whose checks stall still finishes and writes its files", async () =>
     // A reply that never comes, cancelled only by the request's own abort signal, as a stalled server behaves.
     return new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
   }) as typeof fetch;
-  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], checkTimeoutMs: 50, environment: {}, fetchImpl });
+  const summary = await track({ dataDir, readRegistry: true, maxChecks: 10, perHost: 5, perSite: 50, concurrency: 2, hostGapMs: 0, budgetMinutes: 5, publicServers: [], attemptTimeoutMs: 50, environment: {}, fetchImpl });
   assert.equal(summary.checked, 1);
   const [line] = (await readFile(path.join(dataDir, "endpoints.jsonl"), "utf8")).trim().split("\n");
   assert.equal((JSON.parse(line ?? "{}") as Endpoint).outcome, "unreachable");
@@ -452,18 +457,20 @@ test("a watched server that fails both looks is recorded as one missed check", a
   assert.deepEqual(lines.filter((line) => line.startsWith("flaky: not-usable") && !line.endsWith("after the crawl")), ["flaky: not-usable (initialize answered 424)"], "one missed check in the log");
 });
 
-test("a watched server that times out or answers 429 or 5xx to initialize is looked at again too", async () => {
-  for (const [name, failure, said] of [
-    ["a timeout", timingOut, "unreachable (TimeoutError)"],
-    ["429", answering(429), "not-usable (initialize answered 429)"],
-    ["500", answering(500), "not-usable (initialize answered 500)"],
-    ["503", answering(503), "not-usable (initialize answered 503)"],
-  ] as const) {
+test("a watched server that answers 429 to initialize is looked at again too; a timeout or 5xx is tried again at once", async () => {
+  const { lines, grafanaLooks, grafana } = await runWithFlakyServer(answering(429), 2);
+  assert.equal(grafanaLooks, 2);
+  assert.equal(grafana?.outcome, "listed");
+  assert.equal(grafana?.checks.length, 1);
+  assert.ok(lines.includes("flaky: not-usable (initialize answered 429), so it will be checked again after the crawl"));
+  assert.equal(grafana?.lastCheck?.retries, 1, "the look after the crawl counts as a retry");
+  for (const [name, failure] of [["a timeout", timingOut], ["500", answering(500)], ["503", answering(503)]] as const) {
     const { lines, grafanaLooks, grafana } = await runWithFlakyServer(failure, 2);
     assert.equal(grafanaLooks, 2, name);
     assert.equal(grafana?.outcome, "listed", name);
     assert.equal(grafana?.checks.length, 1, name);
-    assert.ok(lines.includes(`flaky: ${said}, so it will be checked again after the crawl`), name);
+    assert.equal(grafana?.lastCheck?.retries, 1, name);
+    assert.ok(!lines.some((line) => line.endsWith("after the crawl")), `${name}: the second attempt came at once`);
   }
 });
 

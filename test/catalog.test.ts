@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { catalog, catalogProblems, publicList, publicListProblems, readCatalog } from "../src/catalog.ts";
 import { oauthServers, oauthServersOf, signedInServers, signedInServersOf } from "../src/signed-in.ts";
+import { keptOffSites } from "../src/track.ts";
 
 const server = (changes: Record<string, unknown> = {}) => ({
   id: "demo", name: "Demo", url: "https://mcp.demo.example/mcp", site: "https://demo.example", category: "Developer tools",
@@ -42,6 +43,11 @@ test("a server neither published nor tracked privately is never given a token", 
 test("Sentry and Intercom are in the catalog, never published, and marked as forbidden by their terms", () => {
   for (const id of ["sentry", "intercom"]) assert.deepEqual(catalog.servers.find((entry) => entry.id === id)?.tracker, { ...catalog.servers.find((entry) => entry.id === id)?.tracker, publish: false, forbidden: true });
   assert.deepEqual(problemsOf(server({ termsCheckedOn: null, tracker: { publish: false, reason: "Forbidden.", forbidden: true } })), ["demo: is marked forbidden, but nobody has read its terms"]);
+  // A forbidden vendor's other domains are kept off too: only for a vendor marked forbidden, and only plain addresses.
+  assert.deepEqual(problemsOf(server({ tracker: { publish: false, reason: "Forbidden.", forbidden: true, sites: ["https://other.example.com"] } })), []);
+  assert.deepEqual(problemsOf(server({ tracker: { publish: false, reason: "Not yet.", sites: ["https://other.example.com"] } })), ["demo: sites are kept off only for a vendor marked forbidden"]);
+  assert.deepEqual(problemsOf(server({ tracker: { publish: false, reason: "Forbidden.", forbidden: true, sites: ["http://other.example.com"] } })), ["demo: sites must be a list of up to 10 plain https addresses"]);
+  for (const site of ["intercom.io", "getsentry.com"]) assert.ok(keptOffSites().has(site), site);
 });
 
 test("a well-formed server has no problems", () => {

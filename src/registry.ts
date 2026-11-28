@@ -51,7 +51,8 @@ export function scannableAddress(value: unknown): string | null {
   if (typeof value !== "string" || value.length > 500 || /[{}\s]/.test(value)) return null;
   let url: URL;
   try { url = new URL(value); } catch { return null; }
-  if (url.protocol !== "https:" || url.username || url.password || url.hash || privateHost(url.hostname)) return null;
+  // A host name ending in a dot is the same host to DNS, under another spelling: it would slip past checks by site.
+  if (url.protocol !== "https:" || url.username || url.password || url.hash || privateHost(url.hostname) || url.hostname.endsWith(".")) return null;
   return url.href;
 }
 
