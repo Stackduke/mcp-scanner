@@ -18,7 +18,7 @@ import type { CheckReport, RenewReport } from "./renew.ts";
 import { files, ghIssues, handOver, isAccess, isReports, maskCommand, readStep, saveSecret, writePrivate } from "./sign-in-io.ts";
 import { createInterface } from "node:readline/promises";
 import { latestSnapshot, readSnapshot, save, writeWhole } from "./files.ts";
-import { addressOf, readAgentConfig, usableAddress } from "./agent-config.ts";
+import { addressOf, historyKeyOf, readAgentConfig, usableAddress } from "./agent-config.ts";
 import type { AgentConfig } from "./agent-config.ts";
 import { describeReach, reachJson, reachOf } from "./reach.ts";
 import type { AgentLook, ServerLook } from "./reach.ts";
@@ -63,7 +63,7 @@ const usage = `Usage:
                                                     server, every tool and its kind, how the kind was reached, text-check
                                                     flags, what changed since the last saved look, and up to three suggested
                                                     rules. Addresses given directly count as one agent.
-                                                    --json (the report the collector would send) --save --snapshots=data/snapshots
+                                                    --json (the JSON report) --save --snapshots=data/snapshots
                                                     --run-local (start the config's local programs) --timeout=<seconds> --summary=<file>
   npm run scan -- digest <snapshot-folder>...       The week's changes on the servers saved there, as an email's text.
                                                     --days=7 and --until=YYYY-MM-DD set the period, in UTC.
@@ -379,6 +379,8 @@ async function reach(rest: string[]): Promise<number> {
         continue;
       }
       const address = server.kind === "remote" ? addressOf(new URL(server.url)) : `local: ${server.name}`;
+      // Saved looks are kept under a name that tells apart two addresses that shorten alike.
+      const history = server.kind === "remote" ? historyKeyOf(new URL(server.url)) : address;
       if (server.kind === "local" && !options.has("run-local")) { servers.push({ name: server.name, address, outcome: { status: "not-run" } }); continue; }
       const result = server.kind === "remote"
         ? await listTools(server.url, timeoutMs ? { timeoutMs } : {})
@@ -386,9 +388,9 @@ async function reach(rest: string[]): Promise<number> {
       if (result.outcome === "sign-in-required") { servers.push({ name: server.name, address, outcome: { status: "sign-in-required", httpStatus: result.status } }); continue; }
       if (result.outcome !== "listed") { servers.push({ name: server.name, address, outcome: { status: result.outcome, detail: result.detail } }); continue; }
       let snapshot: Snapshot;
-      try { snapshot = takeSnapshot(address, result.tools, result.server); } catch { servers.push({ name: server.name, address, outcome: { status: "not-usable", detail: "a tool definition is nested too deeply to read" } }); continue; }
-      if (!previousLooks.has(address)) previousLooks.set(address, latestSnapshot(address, snapshots));
-      const previous = await previousLooks.get(address)!;
+      try { snapshot = takeSnapshot(history, result.tools, result.server); } catch { servers.push({ name: server.name, address, outcome: { status: "not-usable", detail: "a tool definition is nested too deeply to read" } }); continue; }
+      if (!previousLooks.has(history)) previousLooks.set(history, latestSnapshot(history, snapshots));
+      const previous = await previousLooks.get(history)!;
       if (options.has("save")) await save(snapshot, snapshots);
       servers.push({ name: server.name, address, outcome: { status: "listed", snapshot, previous, saved: options.has("save") } });
     }
@@ -404,7 +406,8 @@ async function reach(rest: string[]): Promise<number> {
     console.log(text);
   }
   const summaryPath = options.get("summary");
-  if (summaryPath) await writeWhole(summaryPath, `## Agent reach\n\n\`\`\`text\n${text}\n\`\`\`\n`);
+  // The summary is for a CI job, where the Action has no --save, so it does not suggest one.
+  if (summaryPath) await writeWhole(summaryPath, `## Agent reach\n\n\`\`\`text\n${describeReach(reaches, { saveHint: false })}\n\`\`\`\n`);
   // A report was made unless nothing at all could be looked at.
   const anyListed = agents.some((agent) => agent.servers.some((server) => server.outcome.status === "listed"));
   return anyListed ? 0 : 4;

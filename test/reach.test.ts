@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { addressOf, readAgentConfig } from "../src/agent-config.ts";
+import { addressOf, historyKeyOf, readAgentConfig } from "../src/agent-config.ts";
 import { latestSnapshot, save } from "../src/files.ts";
 import { methodVersion } from "../src/method.ts";
 import { describeReach, reachJson, reachOf, suggestRules } from "../src/reach.ts";
@@ -48,6 +50,25 @@ test("agent configs: Claude and Cursor's mcpServers, VS Code's servers, with hea
   assert.deepEqual(vscode.config.servers.map((server) => server.kind), ["local", "remote"]);
   assert.deepEqual(readAgentConfig("{}", "x"), { ok: false, reason: "it has no \"mcpServers\" or \"servers\" list" });
   assert.equal(readAgentConfig("not json", "x").ok, false);
+});
+
+test("two addresses that shorten alike keep separate saved looks, and neither key is stored", async () => {
+  const one = new URL("https://mcp.example.test/s/AbCdEfGhIjKlMnOpQrStUvWx/mcp"), two = new URL("https://mcp.example.test/s/ZyXwVuTsRqPoNmLkJiHgFeDc/mcp");
+  assert.equal(addressOf(one), addressOf(two));
+  const [keyOne, keyTwo] = [historyKeyOf(one), historyKeyOf(two)];
+  assert.notEqual(keyOne, keyTwo);
+  assert.match(keyOne, /^https:\/\/mcp\.example\.test\/s\/…\/mcp #[0-9a-f]{12}$/);
+  assert.doesNotMatch(keyOne + keyTwo, /AbCdEf|ZyXwVu/);
+  assert.equal(historyKeyOf(one), keyOne, "the same address always gets the same history");
+  assert.notEqual(historyKeyOf(new URL("https://mcp.example.test/v1/mcp?key=a")), historyKeyOf(new URL("https://mcp.example.test/v1/mcp?key=b")));
+  // An address with nothing left out keeps its plain name, and a fragment changes nothing.
+  assert.equal(historyKeyOf(new URL("https://mcp.stripe.com/")), "https://mcp.stripe.com");
+  assert.equal(historyKeyOf(new URL(`${one.href}#x`)), keyOne);
+
+  const folder = await mkdtemp(path.join(tmpdir(), "reach-history-"));
+  await save(takeSnapshot(keyOne, [{ name: "list_notes", ...readOnly }]), folder);
+  assert.equal(await latestSnapshot(keyTwo, folder), null);
+  assert.equal((await latestSnapshot(keyOne, folder))?.source, keyOne);
 });
 
 test("an address is shown and stored without its query, login or anything in the path that looks like a key", () => {
@@ -139,12 +160,13 @@ test("what changed since the last saved look: new, removed and changed tools, wi
   ], before)));
   const [server] = reach.servers;
   assert.equal(server?.comparedWith, earlier);
-  const tools = Object.fromEntries((server?.tools ?? []).map((tool) => [tool.name, [tool.change, tool.changedFields, tool.wasKind]]));
-  assert.deepEqual(tools.list_notes, [undefined, undefined, undefined]);
-  assert.deepEqual(tools.delete_note, ["new", undefined, undefined]);
+  const tools = Object.fromEntries((server?.tools ?? []).map((tool) => [tool.name, [tool.change, tool.changedFields, tool.wasKind, tool.kind]]));
+  assert.deepEqual(tools.list_notes?.slice(0, 3), [undefined, undefined, undefined]);
+  assert.deepEqual(tools.delete_note?.slice(0, 3), ["new", undefined, undefined]);
   assert.equal(tools.lookup_items?.[0], "changed");
   assert.deepEqual(tools.lookup_items?.[1], ["description"]);
   assert.equal(tools.lookup_items?.[2], "read");
+  assert.equal(tools.lookup_items?.[3], "money", "the kind moved from read to money");
   assert.deepEqual(server?.removed, [{ shown: "export_all", kind: "read" }]);
   const text = describeReach([reach]);
   assert.match(text, /compared with 24 October 2026: 1 new \(delete_note\); 1 removed \(export_all\); 1 changed \(lookup_items\)\./);
@@ -156,6 +178,10 @@ test("a first look says there was nothing to compare with, and never reports cha
   assert.equal(reach.servers[0]?.comparedWith, null);
   assert.ok(reach.servers[0]?.tools.every((tool) => tool.change === undefined));
   assert.match(describeReach([reach]), /first look, nothing saved to compare with\. Run with --save/);
+  // A job summary does not suggest --save, which the Action does not have.
+  const summary = describeReach([reach], { saveHint: false });
+  assert.match(summary, /first look, nothing saved to compare with\.$/m);
+  assert.doesNotMatch(summary, /--save/);
 });
 
 test("suggested rules: at most three, most serious first, each from something the report found", () => {
@@ -279,4 +305,34 @@ test("reach refuses what it cannot read, before looking at anything", async () =
   assert.doesNotMatch(withLogin.stderr, /hunter2|someone/);
   assert.equal((await run(["reach", "mcp.json", "--nope"], folder)).code, 2);
   assert.equal((await run(["reach", "mcp.json", "--timeout=0"], folder)).code, 2);
+});
+
+test("reach end to end on two servers whose keys shorten alike: each is compared with its own last look", async () => {
+  const folder = await mkdtemp(path.join(tmpdir(), "reach-keys-"));
+  const keys = ["AbCdEfGhIjKlMnOpQrStUvWx", "ZyXwVuTsRqPoNmLkJiHgFeDc"];
+  const toolsAt: Record<string, ToolDefinition[]> = { [`/s/${keys[0]}/mcp`]: [{ name: "list_notes", ...readOnly }], [`/s/${keys[1]}/mcp`]: [{ name: "send_email" }] };
+  const http = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const message = JSON.parse(body) as { id?: number; method: string };
+      if (message.id === undefined) { response.writeHead(202).end(); return; }
+      const result = message.method === "initialize" ? { serverInfo: { name: "keyed" } } : { tools: toolsAt[request.url ?? ""] ?? [] };
+      response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+    });
+  });
+  await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+  try {
+    const { port } = http.address() as AddressInfo;
+    const addresses = keys.map((key) => `http://127.0.0.1:${port}/s/${key}/mcp`);
+    const saved = await run(["reach", ...addresses, "--save"], folder);
+    assert.equal(saved.code, 0, saved.stdout + saved.stderr);
+    const again = await run(["reach", ...addresses], folder);
+    assert.equal(again.code, 0, again.stdout + again.stderr);
+    assert.equal(again.stdout.match(/no tool added, removed or changed/g)?.length, 2, again.stdout);
+    const stored = (await readdir(path.join(folder, "data", "snapshots"), { recursive: true })).join("\n");
+    for (const text of [saved.stdout, again.stdout, stored]) assert.doesNotMatch(text, /AbCdEf|ZyXwVu/);
+  } finally {
+    http.close();
+  }
 });

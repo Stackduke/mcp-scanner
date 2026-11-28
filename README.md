@@ -226,13 +226,13 @@ Inputs: `watchfile` (default `stackduke.watch.json`), `working-directory`, `time
 
 ## Agent reach
 
-Added on 2026-10-31. `reach` answers "what can this agent touch, and did that change?" for an agent's MCP config, on the machine it runs on. Nothing is sent anywhere.
+Added on 2026-10-31. `reach` answers "what can this agent touch, and did that change?" for an agent's MCP config, on the machine it runs on. Nothing is uploaded: reach asks each server at a web address in the config for its tool list, sending no credentials, and writes the report locally.
 
 ```sh
 stackduke-mcp-scanner reach ~/.cursor/mcp.json                       # servers at a web address only
 stackduke-mcp-scanner reach .mcp.json --run-local --save             # also start the local programs; keep this look
 stackduke-mcp-scanner reach https://radar.stackduke.com/mcp          # one or more addresses, as one agent
-stackduke-mcp-scanner reach .mcp.json --json                         # the report the collector would send
+stackduke-mcp-scanner reach .mcp.json --json                         # the JSON report
 ```
 
 It reads `mcpServers` (Claude Desktop, Claude Code's `.mcp.json`, Cursor, Windsurf, Cline) or `servers` (VS Code's `mcp.json`), and gives one page per config:
@@ -244,9 +244,9 @@ It reads `mcpServers` (Claude Desktop, Claude Code's `.mcp.json`, Cursor, Windsu
 - **Up to three suggested rules**, most serious first, such as "Require a person's approval before any money tool runs" or "Hold destructive tools until a person approves each call". They are suggestions; nothing enforces them. Fewer are given when fewer apply.
 - **What was not looked at**, and why: a server that wants a sign-in, one that did not answer, a local program not started, or an entry switched off.
 
-**No credential is added.** Headers in the config are ignored, so a server that needs a sign-in is listed as not looked at. An address that carries a key in its path or query is still sent to its own server as written, because that is the address; reports show and store it with the query dropped and key-like path parts replaced by "…". A local program is started only with `--run-local`, with this environment plus the `env` the config gives it, because starting it runs its code: use it for programs you would run anyway, ideally in a container or CI job rather than on a laptop holding production keys. In CI, only for a config you trust: not one from a fork or a `pull_request_target` run.
+**No credential is added.** Headers in the config are ignored, so a server that needs a sign-in is listed as not looked at. An address that carries a key in its path or query is still sent to its own server as written, because that is the address; reports show and store it with the query dropped and key-like path parts replaced by "…". Saved looks for such an address are kept under that shortened form plus a short hash of the full address, so two servers on one host that differ only in their keys keep separate histories. A local program is started only with `--run-local`, with this environment plus the `env` the config gives it, because starting it runs its code: use it for programs you would run anyway, ideally in a container or CI job rather than on a laptop holding production keys. In CI, only for a config you trust: not one from a fork or a `pull_request_target` run.
 
-**The JSON** (`--json`) holds only what the future collector may send: the agent's config file name, each server's address (a web address without its query, and with any path part that looks like a key replaced by `…`; or `local: <name>`) and status, and for each tool its name, kind, label source, fingerprint and a yes/no `hiddenInstructions` flag, with the scan time, the scanner's version and the `methodVersion` of the label rules that produced the kinds (see [METHOD.md](docs/METHOD.md)). No description, schema, token or environment variable is in it. Changes and suggested rules are left out, because they are worked out from two reports.
+**The JSON report** (`--json`) holds only these fields: the agent's config file name, each server's address (a web address without its query, and with any path part that looks like a key replaced by `…`; or `local: <name>`) and status, and for each tool its name, kind, label source, fingerprint and a yes/no `hiddenInstructions` flag, with the scan time, the scanner's version and the `methodVersion` of the label rules that produced the kinds (see [METHOD.md](docs/METHOD.md)). No description, schema, token or environment variable is in it. Changes and suggested rules are left out, because they are worked out from two reports.
 
 **Exit codes.** 0: a report was made. 4: no server could be looked at. 2: the options or a config could not be read.
 
@@ -255,6 +255,7 @@ It reads `mcpServers` (Claude Desktop, Claude Code's `.mcp.json`, Cursor, Windsu
 - Labels are guesses from what servers say about themselves, and the page says so. It is not a safety rating, and a missing label proves nothing.
 - It sees only the servers in the config, as an anonymous visitor. A signed-in account may be shown other tools, and an agent may reach servers its config does not list.
 - A server that still speaks only the older SSE transport is reported as not usable.
+- Local programs start in the folder reach is run from, not the config file's folder, so relative paths in a config kept elsewhere may not be found. Placeholders such as `${VAR}` or `${input:...}` in a config are passed to the program as written, not filled in.
 
 ## The tracker
 
@@ -356,7 +357,7 @@ To add a vendor: it must sign in with automatic registration (`oauth-dcr`). Give
 - `src/snapshot.ts`, `src/diff.ts`, `src/files.ts`: fingerprints, snapshots, comparisons, and reading and writing them.
 - `src/risk.ts`: capability labels. `src/findings.ts`: the text checks. `src/text.ts`: making untrusted text safe to print.
 - `src/authority.ts`, `src/digest.ts`, `src/report.ts`: the plain-language report, the weekly digest and the technical report.
-- `src/agent-config.ts`, `src/reach.ts`: reading an agent's MCP config, and the agent reach report and its suggested rules. `examples/reach/`: a config to try it on.
+- `src/agent-config.ts`, `src/reach.ts`: reading an agent's MCP config, and the agent reach report and its suggested rules. `examples/reach/`: configs to try it on (`local-only.json`, used by CI, starts only the sample server).
 - `src/registry.ts`, `src/tracker.ts`, `src/crawl.ts`, `src/track.ts`: the tracker: reading the registry, planning and recording checks, running them politely, and one run end to end.
 - `catalog/servers.json`, `src/catalog.ts`: the servers supported officially, and checking the file.
 - `src/oauth.ts`, `src/try-sign-in.ts`: signing in the standard way, and a test sign-in.

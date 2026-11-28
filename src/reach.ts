@@ -16,11 +16,11 @@ import type { CapabilityClass, Snapshot, SnapshotTool } from "./types.ts";
  * It keeps the scanner's rules. Every kind is read the more serious way (see authority.ts), the
  * server's descriptions are never quoted, and nothing here says a tool or a server is safe.
  *
- * The JSON form (`reachJson`) holds only the fields the collector may send: server address,
- * tool name, kind, label source, fingerprint, the yes/no findings flag, scan time and collector
- * version, plus the method version that produced the kinds (see method.ts), the agent's label
- * and each server's status. Changes and suggested rules are
- * worked out from two reports, so they are left out of it.
+ * The JSON report (`reachJson`) holds only these fields: server address, tool name, kind, label
+ * source, fingerprint, the yes/no findings flag, scan time, the scanner's version
+ * (`collectorVersion`) and the method version that produced the kinds (see method.ts), plus the
+ * agent's label and each server's status. Changes and suggested rules are worked out from two
+ * reports, so they are left out of it.
  */
 
 /** How a tool's kind was reached. "annotation" is the server's own hint, taken as given unless something says more. */
@@ -177,7 +177,7 @@ export function reachOf(agent: AgentLook): AgentReach {
   return { label: agent.label, servers, rules: suggestRules(servers) };
 }
 
-/** The report the collector may send, and nothing more. See the note at the top of this file. */
+/** The JSON report, and nothing more. See the note at the top of this file. */
 export function reachJson(agents: AgentReach[], meta: { collectorVersion: string; scannedAt: string }) {
   return {
     format: "stackduke.reach.v1",
@@ -214,7 +214,7 @@ const serverHeading = (server: { name: string; address: string }) => {
   return `${server.name} (${where})`;
 };
 
-function describeAgent(agent: AgentReach): string[] {
+function describeAgent(agent: AgentReach, saveHint: boolean): string[] {
   const looked = agent.servers.filter((server) => server.outcome.status === "listed");
   const notLooked = agent.servers.filter((server) => server.outcome.status !== "listed");
   const tools = looked.flatMap((server) => server.tools);
@@ -257,7 +257,7 @@ function describeAgent(agent: AgentReach): string[] {
     lines.push("", "Since the last saved look:");
     for (const server of looked) {
       const saved = (server.outcome as { saved?: boolean }).saved;
-      if (!server.comparedWith) { lines.push(`  - ${server.name}: first look, nothing saved to compare with. ${saved ? "This look is saved for next time." : "Run with --save to keep this look for next time."}`); continue; }
+      if (!server.comparedWith) { lines.push(`  - ${server.name}: first look, nothing saved to compare with. ${saved ? "This look is saved for next time." : saveHint ? "Run with --save to keep this look for next time." : ""}`.trimEnd()); continue; }
       const added = server.tools.filter((tool) => tool.change === "new"), changed = server.tools.filter((tool) => tool.change === "changed");
       const parts = [
         ...(added.length ? [`${added.length} new (${listed(added.map((tool) => tool.shown), 8)})`] : []),
@@ -287,9 +287,10 @@ const limits = [
   "  - The servers' descriptions are not quoted. Only tool names appear, and a server chooses those.",
 ];
 
-export function describeReach(agents: AgentReach[]): string {
+/** `saveHint: false` leaves out the hint to run with --save, for a job summary, where the Action has no such option. */
+export function describeReach(agents: AgentReach[], { saveHint = true }: { saveHint?: boolean } = {}): string {
   const lines: string[] = [];
-  agents.forEach((agent, index) => { if (index) lines.push("", "-".repeat(60), ""); lines.push(...describeAgent(agent)); });
+  agents.forEach((agent, index) => { if (index) lines.push("", "-".repeat(60), ""); lines.push(...describeAgent(agent, saveHint)); });
   lines.push("", ...limits);
   return lines.join("\n");
 }

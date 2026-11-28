@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { confined } from "./authority.ts";
 
 /**
@@ -68,6 +69,21 @@ export function addressOf(url: URL): string {
   });
   const pathname = parts.join("/").replace(/\/+$/, "");
   return `${url.protocol}//${url.host}${pathname}`;
+}
+
+/**
+ * The name a server's saved looks are kept under. It is the shown address, unless something was
+ * left out of that (a query, a login or a key-like path part): then two servers could shorten
+ * alike, as `/s/AAA` and `/s/BBB` both become `/s/…`, and share one history. So a short hash of
+ * the full address (without its fragment, which is never sent) is added to tell them apart. The
+ * full address itself is still never stored.
+ */
+export function historyKeyOf(url: URL): string {
+  const shown = addressOf(url);
+  if (!shown.includes("…") && !url.search && !url.username && !url.password) return shown;
+  const whole = new URL(url);
+  whole.hash = "";
+  return `${shown} #${createHash("sha256").update(whole.href).digest("hex").slice(0, 12)}`;
 }
 
 export function readAgentConfig(text: string, label: string): { ok: true; config: AgentConfig } | { ok: false; reason: string } {
