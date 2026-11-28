@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "notes": { "command": "node", "args": ["examples/sample-server/server.ts"] }
+  }
+}

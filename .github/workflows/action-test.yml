@@ -42,6 +42,22 @@ jobs:
           RESULT: ${{ steps.changed.outputs.result }}
         run: test "$RESULT" = failed
 
+      # A config with only the local sample server, so this reaches no network.
+      - name: The reach report alone, on an agent config with the sample server
+        uses: ./
+        with:
+          reach-config: examples/reach/local-only.json
+          reach-run-local: "true"
+
+      # The reach step fails only when the config cannot be read, so check its report here: a crash,
+      # or a sample server that never starts, leaves this line out. The file is the one action.yml writes.
+      - name: The reach report listed the sample server's tools
+        shell: bash
+        run: |
+          cat "$RUNNER_TEMP/stackduke-reach.md"
+          grep -F "notes (local program): 3 tools" "$RUNNER_TEMP/stackduke-reach.md"
+          if grep -F -- "--save" "$RUNNER_TEMP/stackduke-reach.md"; then echo "The summary suggests --save, which the Action does not have."; exit 1; fi
+
   # Runs the watch action against a copy of the tracker's files made here, dated now, so it reaches
   # no server: once as approved, where it must pass, and once with a tool added, where it must fail.
   watch:

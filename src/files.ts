@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { readTool } from "./client.ts";
 import { takeSnapshot } from "./snapshot.ts";
@@ -14,9 +14,27 @@ export async function writeWhole(file: string, text: string): Promise<void> {
 
 export const snapshotText = (snapshot: Snapshot) => `${JSON.stringify(snapshot, null, 2)}\n`;
 
-export async function save(snapshot: Snapshot): Promise<string> {
-  const name = snapshot.source.replace(/^https?:\/\//, "").replace(/[^a-zA-Z0-9.@-]+/g, "_").slice(0, 120);
-  const directory = path.join("data", "snapshots", name);
+/** The folder a source's snapshots are saved in, under `base`. */
+export function snapshotFolder(source: string, base = path.join("data", "snapshots")): string {
+  const name = source.replace(/^https?:\/\//, "").replace(/[^a-zA-Z0-9.@-]+/g, "_").slice(0, 120);
+  return path.join(base, name);
+}
+
+/** The most recent snapshot saved for a source, or null when none was saved or it cannot be read. */
+export async function latestSnapshot(source: string, base?: string): Promise<Snapshot | null> {
+  const directory = snapshotFolder(source, base);
+  let names: string[];
+  try { names = (await readdir(directory)).filter((file) => file.endsWith(".json")).sort(); } catch { return null; }
+  // File names are the time each was taken, so the last in order is the latest.
+  for (const name of names.reverse()) {
+    const snapshot = await readSnapshot(path.join(directory, name));
+    if (snapshot && snapshot.source === source) return snapshot;
+  }
+  return null;
+}
+
+export async function save(snapshot: Snapshot, base?: string): Promise<string> {
+  const directory = snapshotFolder(snapshot.source, base);
   await mkdir(directory, { recursive: true });
   const file = path.join(directory, `${snapshot.takenAt.replace(/[:.]/g, "-")}.json`);
   await writeFile(file, `${JSON.stringify(snapshot, null, 2)}\n`);

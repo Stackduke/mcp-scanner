@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "radar": { "type": "http", "url": "https://radar.stackduke.com/mcp" },
+    "notes": { "command": "node", "args": ["examples/sample-server/server.ts"] }
+  }
+}
